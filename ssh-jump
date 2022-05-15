@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -e
+
+positional=()
+profile=""
+
+while [[ $# -gt 0 ]]; do
+  key="${1}"
+
+  case ${key} in
+    -h | --help)
+      echo "Usage: ssh-jump.sh [options] hostname"
+      echo "Options:"
+      echo "  -h, --help                 Print this help message"
+      echo "  -p, --profile <profile>    Specify the aws cli profile to use"
+      exit 0
+      ;;
+    -p | --profile)
+      profile="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    *)                     # unknown option
+      positional+=("${1}") # save it in an array for later
+      shift                # past argument
+      ;;
+  esac
+done
+
+set -- "${positional[@]}" # restore positional parameters
+
+if [ -z "${profile}" ]; then
+  echo "No profile specified!"
+  exit 1
+fi
+
+if [ -z "${1}" ]; then
+  echo "No hostname specified!"
+  exit 1
+fi
+
+instances=$(aws --profile "${profile}" ec2 describe-instances --filters 'Name=instance-state-name,Values=running' --output=json | jq '.Reservations[].Instances[] | ( (.Tags[] | select(.Key=="Name") | .Value) + " " + .PrivateIpAddress)' | sed 's/"//g' | grep "^${1} ")
+
+if [ "$(echo "${instances}" | grep -o "${1} " | wc -l | tr -d ' ')" = "1" ]; then
+  instance_ip=$(echo "${instances}" | awk '{ print $2 }')
+else
+  max_lines=0
+
+  while IFS= read -r line; do
+    max_lines=$((max_lines + 1))
+    echo "${max_lines}    ${line}"
+  done <<< "${instances}"
+
+  input=0
+
+  while [ ${input} -lt 1 ] || [ ${input} -gt "${max_lines}" ]; do
+    echo -n "Connect to what line ? "
+    read -r input
+  done
+
+  max_lines=0
+
+  while IFS= read -r line; do
+    max_lines=$((max_lines + 1))
+
+    if [ "${max_lines}" -eq "${input}" ]; then
+      instance_ip=$(echo "${line}" | awk '{ print $2 }')
+    fi
+  done <<< "${instances}"
+fi
+
+echo "ssh -i ~/.ssh/${profile}.pem ubuntu@${instance_ip}"
+ssh -i "${HOME}/.ssh/${profile}.pem" "ubuntu@${instance_ip}"

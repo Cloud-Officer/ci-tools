@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -e
+shopt -s globstar
+
+if [ -d .github/workflows ]; then
+  echo "Checking GitHub Actions workflow files..."
+
+  if ! type -P actionlint &>/dev/null; then
+    brew install actionlint
+  fi
+
+  actionlint
+fi
+
+if [ -f .markdownlint.yml ]; then
+  echo "Checking Markdown..."
+
+  if ! type -P markdownlint &>/dev/null; then
+    brew install markdownlint-cli
+  fi
+
+  markdownlint . --ignore '{**/vendor/**,**/node_modules/**}'
+fi
+
+if [ -f .yamllint.yml ]; then
+  echo "Checking YAML..."
+
+  if ! type -P yamllint &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install yamllint
+    else
+      sudo apt-get --yes install --no-install-recommends yamllint
+    fi
+  fi
+
+  yamllint --strict .
+fi
+
+if [ -f .shellcheckrc ]; then
+  echo "Checking shell scripts..."
+
+  if ! type -P shellcheck &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install shellcheck
+    else
+      sudo apt-get --yes install --no-install-recommends shellcheck
+    fi
+  fi
+
+  shellcheck --external-sources ./**/*.sh
+fi
+
+if [ -f .hadolint.yaml ]; then
+  echo "Checking Dockerfiles..."
+
+  if ! type -P hadolint &>/dev/null; then
+    brew install hadolint
+  fi
+
+  # shellcheck disable=SC2046
+  hadolint $(find . -name Dockerfile)
+fi
+
+if [ -f .golangci.yml ]; then
+  echo "Checking Go..."
+
+  if ! type -P golangci-lint &>/dev/null; then
+    brew install golangci-lint
+  fi
+
+  golangci-lint run
+fi
+
+if [ -f .pmd.xml ]; then
+  echo "Checking Java/JS/SQL with pmd..."
+
+  if ! type -P pmd &>/dev/null; then
+    brew install pmd
+  fi
+
+  pmd pmd --dir . --format textcolor --rulesets ".pmd.xml"
+  echo
+fi
+
+if [ -f .eslintrc.json ]; then
+  echo "Checking JS with eslint..."
+
+  if ! type -P eslint &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      npm install -g eslint
+    else
+      if ! type -P npm &>/dev/null; then
+        sudo apt-get --yes install --no-install-recommends npm
+      fi
+
+      if type -P npm | grep "${HOME}" &>/dev/null; then
+        SUDO=""
+      else
+        SUDO="sudo"
+      fi
+
+      ${SUDO} npm install -g eslint
+    fi
+  fi
+
+  eslint --ext .js
+fi
+
+if [ -f .editorconfig ]; then
+  echo "Checking Kotlin with ktlint..."
+
+  if ! type -P ktlint &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install ktlint
+    else
+      sudo apt-get --yes install --no-install-recommends ktlint
+    fi
+  fi
+
+  ktlint --verbose
+fi
+
+if [ -f .php-cs-fixer.dist.php ]; then
+  echo "Checking PHP with phpcs..."
+
+  if ! type -P php-cs-fixer &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install php-cs-fixer
+    else
+      composer install
+    fi
+  fi
+
+  php-cs-fixer fix --dry-run --diff --verbose
+  rm .php-cs-fixer.cache
+fi
+
+if [ -f .bandit ]; then
+  echo "Checking Python with bandit..."
+
+  if ! type -P bandit &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install bandit
+    else
+      sudo apt-get --yes install --no-install-recommends python3-bandit
+    fi
+  fi
+
+  bandit -ll --ini .bandit --silent .
+  echo
+fi
+
+if [ -f .flake8 ]; then
+  echo "Checking Python with flake8..."
+
+  if ! type -P flake8 &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install flake8
+    else
+      sudo apt-get --yes install --no-install-recommends flake8
+    fi
+  fi
+
+  flake8 .
+fi
+
+if [ -f .rubocop.yml ]; then
+  echo "Checking Ruby..."
+
+  if uname -s | grep Darwin &>/dev/null; then
+    RUBOCOP_PATH=$(gem env | grep -A1 'GEM PATHS' | grep -v 'GEM PATHS' | awk '{ print $2 }')
+    if [ ! -f "${RUBOCOP_PATH}/bin/rubocop" ]; then
+      gem install rubocop
+    fi
+
+    "${RUBOCOP_PATH}/bin/rubocop"
+  else
+    if ! type -P rubocop &>/dev/null; then
+      if type -P gem | grep "${HOME}" &>/dev/null; then
+        SUDO=""
+      else
+        SUDO="sudo"
+      fi
+
+      ${SUDO} gem install rubocop
+    fi
+
+    rubocop
+  fi
+
+  echo
+fi
+
+if [ -f .swiftlint.yml ]; then
+  echo "Checking Swift..."
+
+  if ! type -P swiftlint &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install swiftlint
+    else
+      echo "Error: only supported on MacOS!"
+      exit 1
+    fi
+  fi
+
+  swiftlint lint --strict
+fi
+
+echo "All checks passed."
