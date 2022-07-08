@@ -1241,6 +1241,7 @@ GEM
       aws-eventstream (~> 1, >= 1.0.2)
     jmespath (1.6.1)
     optparse (0.2.0)
+    rexml (3.2.5)
 
 PLATFORMS
   arm64-darwin-21
@@ -1250,6 +1251,7 @@ PLATFORMS
 DEPENDENCIES
   aws-sdk (>= 3.1.0)
   optparse (>= 0.2.0)
+  rexml (>= 3.2.5)
 
 BUNDLED WITH
    2.3.11
