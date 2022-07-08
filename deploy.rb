@@ -46,7 +46,7 @@ begin
     opts.on('--skip_scale_down')
     opts.on('-h', '--help') do
       puts(opts)
-      exit(1)
+      exit(0)
     end
   end.parse!(into: options)
 
