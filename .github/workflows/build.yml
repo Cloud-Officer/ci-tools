@@ -123,6 +123,8 @@ jobs:
       shell: bash
       if: "${{(needs.variables.outputs.SKIP_TESTS != '1')}}"
       run: |
-        bundle exec ./deploy.rb -h 
+        bundle exec ./deploy.rb -h
+
         ./linters
+
         ./ssh-jump -h
