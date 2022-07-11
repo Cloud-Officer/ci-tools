@@ -161,6 +161,10 @@ if [ -f .flake8 ]; then
     fi
   fi
 
+  if ! pip3 list | grep flake8-docstrings &>/dev/null; then
+    pip3 install --upgrade flake8-docstrings
+  fi
+
   flake8 .
 fi
 
