@@ -168,6 +168,21 @@ if [ -f .flake8 ]; then
   flake8 .
 fi
 
+if [ -f .protolint.yaml ]; then
+  echo "Checking Protocol Buffer with protolint..."
+
+  if ! type -P protolint &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew tap yoheimuta/protolint
+      brew install protolint
+    else
+      go install github.com/yoheimuta/protolint/cmd/protolint@latest
+    fi
+  fi
+
+  protolint .
+fi
+
 if [ -f .rubocop.yml ]; then
   echo "Checking Ruby..."
 
