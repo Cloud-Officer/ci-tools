@@ -125,6 +125,8 @@ begin
     puts("Searching for #{options[:instance]} standalone instance...")
 
     ec2.instances.each do |instance|
+      next unless instance.data.state.name == 'running' or instance.data.state.name == 'stopped'
+
       instance.tags.each do |tag|
         next unless tag.key == 'Name'
 
