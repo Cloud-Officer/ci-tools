@@ -153,7 +153,11 @@ begin
     waiter = Aws::EC2::Waiters::ImageAvailable.new(
       {
         client: ec2.client,
-        max_attempts: 256,
+        max_attempts: if options[:instance] == 'worker'
+                        1024
+                      else
+                        256
+                      end,
         delay: 30
       }
     )
@@ -186,8 +190,6 @@ begin
 
   asg_resources = Aws::AutoScaling::Resource.new
   auto_scaling_group_name = ''
-  launch_configuration_name = ''
-  launch_configuration = nil
   desired_capacity = 1
   puts('Checking auto scaling groups...')
 
@@ -196,13 +198,12 @@ begin
 
     puts("Auto scaling group #{group.auto_scaling_group_name} found with desired capacity at #{group.desired_capacity}.")
     auto_scaling_group_name = group.auto_scaling_group_name
-    launch_configuration_name = group.launch_configuration_name
     desired_capacity = group.desired_capacity
     asg_max_size = group.max_size
     break
   end
 
-  raise('Unable to find auto scaling group') if auto_scaling_group_name.empty? || launch_configuration_name.empty?
+  raise('Unable to find auto scaling group') if auto_scaling_group_name.empty?
 
   if (options[:instance] == 'api') || (options[:instance] == 'grpc')
     # find load balancer target group
@@ -221,63 +222,111 @@ begin
     end
 
     raise('Unable to find load balancer target group') if target_group_arn.nil?
-
-    puts("Load balancer target group #{target_group_arn} found.")
   end
 
-  # find last launch configuration
+  # check cloudformation stacks...
 
-  puts('Checking launch configurations...')
-
-  asg_resources.launch_configurations.each do |lc|
-    next unless lc.launch_configuration_name == launch_configuration_name
-
-    puts("Launch configuration #{lc.launch_configuration_name} found.")
-    launch_configuration_name = lc.data.launch_configuration_name.sub(
-      "-rev#{lc.data.launch_configuration_name.scan(/\d+/).last}", "-rev#{Integer(lc.data.launch_configuration_name.scan(/\d+/).last, 10) + 1}"
-    )
-    launch_configuration = lc
-    break
-  end
-
-  raise('Unable to find launch configuration') if launch_configuration.nil?
-
-  # create new launch configuration
-
-  puts("Creating new launch configuration #{launch_configuration_name}...")
-
-  asg_resources.client.create_launch_configuration(
+  puts('Checking cloudformation stacks...')
+  cf = Aws::CloudFormation::Client.new
+  stacks = cf.list_stacks(
     {
-      launch_configuration_name: launch_configuration_name,
-      image_id: ami_id,
-      key_name: launch_configuration.key_name,
-      security_groups: launch_configuration.security_groups,
-      classic_link_vpc_id: launch_configuration.classic_link_vpc_id,
-      classic_link_vpc_security_groups: launch_configuration.classic_link_vpc_security_groups,
-      user_data: launch_configuration.user_data,
-      instance_type: options[:type] || launch_configuration.instance_type,
-      instance_monitoring: launch_configuration.instance_monitoring,
-      spot_price: launch_configuration.spot_price,
-      iam_instance_profile: launch_configuration.iam_instance_profile,
-      ebs_optimized: launch_configuration.ebs_optimized,
-      associate_public_ip_address: launch_configuration.associate_public_ip_address,
-      placement_tenancy: launch_configuration.placement_tenancy,
-      metadata_options: launch_configuration.metadata_options
+      stack_status_filter: %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE]
     }
   )
 
-  puts("Create completed successfully for launch configuration #{launch_configuration_name}.")
+  stack_name = nil
+
+  stacks.stack_summaries.each do |stack|
+    next unless stack.stack_name[/#{options[:environment]}.*-StackInstances.*/]
+
+    puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
+    stack_name = stack.stack_name
+    break
+  end
+
+  raise('Unable to find cloudformation stack') if stack_name.nil?
+
+  parameters = cf.describe_stacks(
+    {
+      stack_name: stack_name
+    }
+  ).stacks[0].parameters
+  environment = stack_name.split('-').first.tr('0-9', '')
+  subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
+
+  # set ami parameter properly
+
+  parameter_prefix =
+    case options[:instance]
+    when 'api', 'grpc'
+      options[:instance].upcase
+    else
+      options[:instance].capitalize
+    end
+
+  parameters.each do |parameter|
+    if parameter.parameter_key == "#{parameter_prefix}ImageId"
+      puts("Updating SSM parameter '/#{environment}/#{subnet}/#{parameter_prefix}ImageId' with value = '#{ami_id}'...")
+      ssm = Aws::SSM::Client.new
+      ssm.put_parameter(
+        {
+          name: "/#{environment}/#{subnet}/#{parameter_prefix}ImageId",
+          value: ami_id,
+          type: 'String',
+          overwrite: true
+        }
+      )
+    end
+
+    next unless parameter.parameter_key == 'DbPassword' || parameter.parameter_key == 'SendGridApiKey'
+
+    parameter.parameter_value = nil
+    parameter.use_previous_value = true
+  end
+
+  puts("Updating cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}...")
+
+  begin
+    cf.update_stack(
+      {
+        stack_name: stack_name,
+        use_previous_template: true,
+        parameters: parameters,
+        capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND],
+        disable_rollback: false
+      }
+    )
+  rescue Aws::CloudFormation::Errors::ValidationError => e
+    puts("Stopping here: #{e.message}")
+    exit
+  end
+
+  # No updates are to be performed.
+
+  loop do
+    sleep(15)
+    stack_event = cf.describe_stack_events(
+      {
+        stack_name: stack_name
+      }
+    ).stack_events[0]
+    puts("Stack #{stack_name} in status #{stack_event.resource_status}...")
+    break if stack_event.resource_status == 'UPDATE_COMPLETE'
+
+    raise('Stack update failed') if %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED].include?(stack_event.resource_status)
+  end
+
+  puts("Update completed successfully for cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}.")
 
   # set new launch configuration and increase desired capacity
 
-  puts("Setting new launch configuration #{launch_configuration_name} and increasing desired capacity from #{desired_capacity} to #{(desired_capacity * asg_multiplier) + asg_increase}...")
+  puts("Increasing desired capacity from #{desired_capacity} to #{(desired_capacity * asg_multiplier) + asg_increase}...")
 
   if options[:environment].start_with?('prod')
     asg_resources.client.update_auto_scaling_group(
       {
         auto_scaling_group_name: auto_scaling_group_name,
-        desired_capacity: (desired_capacity * asg_multiplier) + asg_increase,
-        launch_configuration_name: launch_configuration_name
+        desired_capacity: (desired_capacity * asg_multiplier) + asg_increase
       }
     )
   else
@@ -285,8 +334,7 @@ begin
       {
         auto_scaling_group_name: auto_scaling_group_name,
         desired_capacity: (desired_capacity * asg_multiplier) + asg_increase,
-        max_size: (asg_max_size * asg_multiplier) + asg_increase,
-        launch_configuration_name: launch_configuration_name
+        max_size: (asg_max_size * asg_multiplier) + asg_increase
       }
     )
   end
@@ -355,89 +403,6 @@ begin
   end
 
   puts("Update completed successfully for Auto scaling group #{auto_scaling_group_name}.")
-
-  if options[:instance] == 'worker'
-    puts('Checking cloudformation stacks...')
-    cf = Aws::CloudFormation::Client.new
-    stacks = cf.list_stacks(
-      {
-        stack_status_filter: %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE]
-      }
-    )
-
-    stack_name = nil
-
-    stacks.stack_summaries.each do |stack|
-      next unless stack.stack_name[/#{options[:environment]}.*-StackInstances.*/]
-
-      puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
-      stack_name = stack.stack_name
-      break
-    end
-
-    raise('Unable to find cloudformation stack') if stack_name.nil?
-
-    parameters = cf.describe_stacks(
-      {
-        stack_name: stack_name
-      }
-    ).stacks[0].parameters
-    spot = false
-    environment = stack_name.split('-').first.tr('0-9', '')
-    subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
-
-    parameters.each do |parameter|
-      if parameter.parameter_key == 'SpotAMIID'
-        spot = true
-        puts("Updating SSM parameter '/#{environment}/#{subnet}/SpotAMIID' with value = '#{ami_id}'...")
-        ssm = Aws::SSM::Client.new
-        ssm.put_parameter(
-          {
-            name: "/#{environment}/#{subnet}/SpotAMIID",
-            value: ami_id,
-            type: 'String',
-            overwrite: true
-          }
-        )
-      end
-
-      if parameter.parameter_key == 'DbPassword' || parameter.parameter_key == 'SendGridApiKey'
-        parameter.parameter_value = nil
-        parameter.use_previous_value = true
-      end
-    end
-
-    if spot
-      puts("Updating spot fleet in cloudformation stack #{stack_name} with SpotAMIID #{ami_id}...")
-
-      cf.update_stack(
-        {
-          stack_name: stack_name,
-          use_previous_template: true,
-          parameters: parameters,
-          capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND],
-          disable_rollback: false
-        }
-      )
-
-      loop do
-        sleep(15)
-        stack_event = cf.describe_stack_events(
-          {
-            stack_name: stack_name
-          }
-        ).stack_events[0]
-        puts("Stack #{stack_name} in status #{stack_event.resource_status}...")
-        break if stack_event.resource_status == 'UPDATE_COMPLETE'
-
-        raise('Stack update failed') if %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED].include?(stack_event.resource_status)
-      end
-
-      puts("Update completed successfully for cloudformation stack #{stack_name} with SpotAMIID #{ami_id}.")
-    else
-      puts("No spot fleet update required in cloudformation stack #{stack_name}.")
-    end
-  end
 
   puts('Deployment completed successfully.')
 rescue StandardError => e
