@@ -30,6 +30,7 @@ begin
   asg_increase = 1
   asg_multiplier = 2
   asg_max_size = 1
+  asg_min_size = 1
 
   OptionParser.new do |opts|
     opts.banner = 'Usage: deploy.rb options'
@@ -199,6 +200,7 @@ begin
     puts("Auto scaling group #{group.auto_scaling_group_name} found with desired capacity at #{group.desired_capacity}.")
     auto_scaling_group_name = group.auto_scaling_group_name
     desired_capacity = group.desired_capacity
+    asg_min_size = group.min_size
     asg_max_size = group.max_size
     break
   end
@@ -254,7 +256,7 @@ begin
   environment = stack_name.split('-').first.tr('0-9', '')
   subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
 
-  # set ami parameter properly
+  # set ssm parameters: ami, min_size, max_size, desired_capacity
 
   parameter_prefix =
     case options[:instance]
@@ -265,13 +267,25 @@ begin
     end
 
   parameters.each do |parameter|
-    if parameter.parameter_key == "#{parameter_prefix}ImageId"
-      puts("Updating SSM parameter '/#{environment}/#{subnet}/#{parameter_prefix}ImageId' with value = '#{ami_id}'...")
+    replace_with =
+      case parameter.parameter_key
+      when "#{parameter_prefix}ImageId"
+        ami_id
+      when "#{parameter_prefix}MinSize"
+        asg_min_size.to_s
+      when "#{parameter_prefix}MaxSize"
+        asg_max_size.to_s
+      when "#{parameter_prefix}DesiredCapacity"
+        desired_capacity.to_s
+      end
+
+    unless replace_with.nil?
+      puts("Updating SSM parameter '/#{environment}/#{subnet}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
       ssm = Aws::SSM::Client.new
       ssm.put_parameter(
         {
-          name: "/#{environment}/#{subnet}/#{parameter_prefix}ImageId",
-          value: ami_id,
+          name: "/#{environment}/#{subnet}/#{parameter.parameter_key}",
+          value: replace_with,
           type: 'String',
           overwrite: true
         }
@@ -301,7 +315,7 @@ begin
     exit
   end
 
-  # No updates are to be performed.
+  # Wait until stack has updated
 
   loop do
     sleep(15)
