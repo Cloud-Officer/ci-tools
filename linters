@@ -6,6 +6,10 @@ if [ -d .github/workflows ]; then
   echo "Checking GitHub Actions workflow files..."
 
   if ! type -P actionlint &>/dev/null; then
+    if [ "${RUNNER_OS}" == "Linux" ]; then
+      eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    fi
+
     brew install actionlint
   fi
 
