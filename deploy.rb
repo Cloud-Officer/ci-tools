@@ -277,6 +277,8 @@ begin
         asg_max_size.to_s
       when "#{parameter_prefix}DesiredCapacity"
         desired_capacity.to_s
+      when "#{parameter_prefix}InstanceType"
+        options[:type] # nil if not specifid
       end
 
     unless replace_with.nil?
