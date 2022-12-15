@@ -19,7 +19,7 @@ if [ -f .markdownlint.yml ]; then
     brew install markdownlint-cli
   fi
 
-  markdownlint . --ignore '{**/vendor/**,**/node_modules/**}'
+  markdownlint . --ignore '{**/vendor/**,**/node_modules/**,**/Libraries/**}'
 fi
 
 if [ -f .yamllint.yml ]; then
