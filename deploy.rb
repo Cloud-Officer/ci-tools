@@ -45,6 +45,7 @@ begin
     opts.on('--profile profile', String)
     opts.on('--preserve_desired_capacity')
     opts.on('--skip_scale_down')
+    opts.on('--spot_target_capacity spot_target_capacity', Integer)
     opts.on('-h', '--help') do
       puts(opts)
       exit(0)
@@ -279,6 +280,8 @@ begin
         desired_capacity.to_s
       when "#{parameter_prefix}InstanceType"
         options[:type] # nil if not specifid
+      when 'SpotTargetCapacity'
+        options[:spot_target_capacity]&.to_s # nil if not specifid
       end
 
     unless replace_with.nil?
