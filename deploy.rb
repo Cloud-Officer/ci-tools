@@ -279,9 +279,9 @@ begin
       when "#{parameter_prefix}DesiredCapacity"
         desired_capacity.to_s
       when "#{parameter_prefix}InstanceType"
-        options[:type] # nil if not specifid
+        options[:type] # nil if not specified
       when 'SpotTargetCapacity'
-        options[:spot_target_capacity]&.to_s # nil if not specifid
+        options[:spot_target_capacity]&.to_s # nil if not specified
       end
 
     unless replace_with.nil?
