@@ -13,7 +13,7 @@ name: Build
     - created
 env:
   RUBY-BUNDLER-CACHE: 'true'
-  RUBY-VERSION: '3.1'
+  RUBY-VERSION: '3.2'
 jobs:
   variables:
     name: Prepare Variables
