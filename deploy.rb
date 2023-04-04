@@ -339,7 +339,7 @@ begin
 
   puts("Increasing desired capacity from #{desired_capacity} to #{(desired_capacity * asg_multiplier) + asg_increase}...")
 
-  if options[:environment].start_with?('prod')
+  if asg_max_size >= (desired_capacity * asg_multiplier) + asg_increase
     asg_resources.client.update_auto_scaling_group(
       {
         auto_scaling_group_name: auto_scaling_group_name,
