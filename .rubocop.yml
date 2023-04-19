@@ -57,3 +57,5 @@ Style/TopLevelMethodDefinition:
   Enabled: false
 Style/YodaExpression:
   Enabled: false
+Style/HashSyntax:
+  EnforcedShorthandSyntax: never
