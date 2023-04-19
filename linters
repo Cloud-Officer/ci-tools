@@ -186,15 +186,10 @@ fi
 if [ -f .rubocop.yml ]; then
   echo "Checking Ruby..."
 
-  if uname -s | grep Darwin &>/dev/null; then
-    RUBOCOP_PATH=$(gem env | grep -A1 'GEM PATHS' | grep -v 'GEM PATHS' | awk '{ print $2 }')
-    if [ ! -f "${RUBOCOP_PATH}/bin/rubocop" ]; then
+  if ! type -P rubocop &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
       gem install rubocop
-    fi
-
-    "${RUBOCOP_PATH}/bin/rubocop"
-  else
-    if ! type -P rubocop &>/dev/null; then
+    else
       if type -P gem | grep "${HOME}" &>/dev/null; then
         SUDO=""
       else
@@ -203,10 +198,9 @@ if [ -f .rubocop.yml ]; then
 
       ${SUDO} gem install rubocop
     fi
-
-    rubocop
   fi
 
+  rubocop
   echo
 fi
 
