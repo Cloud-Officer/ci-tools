@@ -297,7 +297,7 @@ begin
       )
     end
 
-    next unless parameter.parameter_key == 'DbPassword' || parameter.parameter_key == 'SendGridApiKey'
+    next unless parameter.parameter_key == 'DbPassword' || parameter.parameter_key == 'MqPassword' || parameter.parameter_key == 'SendGridApiKey'
 
     parameter.parameter_value = nil
     parameter.use_previous_value = true
