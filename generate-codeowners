@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -e
+
+CODEOWNERS="CODEOWNERS"
+
+function check_file()
+{
+  if [ -z "${1}" ]; then
+    echo "ERROR: extension cannot be empty!"
+    return 1
+  fi
+
+  if find . -name "${1}" -not -path "./*-scripts/*" -not -path "./codedeploy/*" -not -path "./bin/*" -not -path "./sbin/*" | grep -E '.*' &> /dev/null; then
+    printf "%-24s %s\n" "${1}" "${BUILD_OWNERS}" >> "./${CODEOWNERS}"
+  fi
+}
+
+if [ -z "${1}" ]; then
+  echo "ERROR: build files owners cannot be empty!"
+  exit 1
+fi
+
+if [ -z "${2}" ]; then
+  echo "ERROR: default owners cannot be empty!"
+  exit 1
+fi
+
+printf "%s\n\n" "# https://help.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners" > "./${CODEOWNERS}"
+printf "%-24s %s\n\n" "*" "${2}" >> "./${CODEOWNERS}"
+printf "%s\n\n" "# build/deploy related files" >> "./${CODEOWNERS}"
+
+for file in .aws .bandit .ci .editorconfig .eslintrc.json .flake8 .gitattributes .github .gitignore .gitmodules .golangci.yml .hadolint.yaml .markdownlint.yml .pmd.xml .protolint.yaml .rubocop.yml .ruby-version .shellcheckrc .soup.json .swiftlint.yml .yamllint.yml CODEOWNERS README.md appspec.yml bin codedeploy docs etc lib sbin; do
+  if [ -d "${file}" ]; then
+    printf "%-24s %s\n" "${file}/*" "${1}" >> "./${CODEOWNERS}"
+  elif [ -f "${file}" ]; then
+    printf "%-24s %s\n" "${file}" "${1}" >> "./${CODEOWNERS}"
+  fi
+done
+
+check_file '*.sh'
+check_file 'Dockerfile'

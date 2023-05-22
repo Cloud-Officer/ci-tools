@@ -4,7 +4,14 @@
 
 # frozen_string_literal: true
 
-require 'aws-sdk'
+require 'aws-sdk-autoscaling'
+require 'aws-sdk-cloudformation'
+require 'aws-sdk-cloudfront'
+require 'aws-sdk-core'
+require 'aws-sdk-ec2'
+require 'aws-sdk-elasticloadbalancingv2'
+require 'aws-sdk-lambda'
+require 'aws-sdk-ssm'
 require 'optparse'
 
 def wait_for_healthy_instances(elb, target_group_arn)
