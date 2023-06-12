@@ -114,6 +114,11 @@ jobs:
     needs:
     - variables
     if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
+    strategy:
+      matrix:
+        os:
+          - macos-12
+          - ubuntu-22.04
     steps:
     - name: Setup
       id: setup
