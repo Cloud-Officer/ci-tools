@@ -136,6 +136,7 @@ jobs:
       run: |
         if [ "${RUNNER_OS}" == "Linux" ]; then
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew update
         fi
 
         bundle exec ./brew-resources.rb
