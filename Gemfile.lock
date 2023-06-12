@@ -41,8 +41,13 @@ GEM
     aws-sigv4 (1.5.2)
       aws-eventstream (~> 1, >= 1.0.2)
     date (3.3.3)
+    httparty (0.21.0)
+      mini_mime (>= 1.0.0)
+      multi_xml (>= 0.5.2)
     inifile (3.0.0)
     jmespath (1.6.2)
+    mini_mime (1.1.2)
+    multi_xml (0.6.0)
     optparse (0.3.1)
 
 PLATFORMS
@@ -63,6 +68,7 @@ DEPENDENCIES
   aws-sdk-lambda (>= 1.96.0)
   aws-sdk-ssm (>= 1.150.0)
   date (>= 3.3.3)
+  httparty (>= 0.21.0)
   inifile (>= 3.0.0)
   optparse (>= 0.3.1)
 

@@ -17,6 +17,9 @@
 | Ruby | aws-sdk-ssm | 1.151.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sigv4 | 1.5.2 | Apache-2.0 | Amazon Web Services Signature Version 4 signing library | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | date | 3.3.3 | Ruby | A subclass of Object includes Comparable module for handling dates. | <https://github.com/ruby/date> | 2023-06-12 | Low | Handle date | Most popular gem on rubygems |
+| Ruby | httparty | 0.21.0 | MIT | Makes http fun! Also, makes consuming restful web services dead easy. | <https://github.com/jnunemaker/httparty> | 2023-06-12 | Low | Access URL | Most popular gem on rubygems |
 | Ruby | inifile | 3.0.0 |  | Although made popular by Windows, INI files can be used on any system thanks | <http://rubygems.org/gems/inifile> | 2023-06-12 | Low | Access ini files | Most popular gem on rubygems |
 | Ruby | jmespath | 1.6.2 | Apache-2.0 | Implements JMESPath for Ruby | <http://github.com/trevorrowe/jmespath.rb> | 2023-06-12 | Low | Dependency | Dependency |
+| Ruby | mini_mime | 1.1.2 | MIT | A lightweight mime type lookup toy | <https://github.com/discourse/mini_mime> | 2023-06-12 | Low | Dependency | Dependency |
+| Ruby | multi_xml | 0.6.0 | MIT | Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML. | <https://github.com/sferik/multi_xml> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | optparse | 0.3.1 | Ruby | OptionParser is a class for command-line option analysis. | <https://github.com/ruby/optparse> | 2023-06-12 | Low | Parse command line options | Most popular gem on rubygems |
