@@ -179,6 +179,18 @@
     "requirements": "Handle date",
     "verification_reasoning": "Most popular gem on rubygems"
   },
+  "httparty": {
+    "language": "Ruby",
+    "package": "httparty",
+    "version": "0.21.0",
+    "license": "MIT",
+    "description": "Makes http fun! Also, makes consuming restful web services dead easy.",
+    "website": "https://github.com/jnunemaker/httparty",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Access URL",
+    "verification_reasoning": "Most popular gem on rubygems"
+  },
   "inifile": {
     "language": "Ruby",
     "package": "inifile",
@@ -203,6 +215,42 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "mini_mime": {
+    "language": "Ruby",
+    "package": "mini_mime",
+    "version": "1.1.2",
+    "license": "MIT",
+    "description": "A lightweight mime type lookup toy",
+    "website": "https://github.com/discourse/mini_mime",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "multi_xml": {
+    "language": "Ruby",
+    "package": "multi_xml",
+    "version": "0.6.0",
+    "license": "MIT",
+    "description": "Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML.",
+    "website": "https://github.com/sferik/multi_xml",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "nokogiri": {
+    "language": "Ruby",
+    "package": "nokogiri",
+    "version": "1.15.2",
+    "license": "MIT",
+    "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
+    "website": "https://nokogiri.org",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "XML parser",
+    "verification_reasoning": "Most popular gem on rubygems"
+  },
   "optparse": {
     "language": "Ruby",
     "package": "optparse",
@@ -214,5 +262,17 @@
     "risk_level": "Low",
     "requirements": "Parse command line options",
     "verification_reasoning": "Most popular gem on rubygems"
+  },
+  "racc": {
+    "language": "Ruby",
+    "package": "racc",
+    "version": "1.7.0",
+    "license": "Ruby",
+    "description": "Racc is a LALR(1) parser generator.",
+    "website": "https://github.com/ruby/racc",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
   }
 }

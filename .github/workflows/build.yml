@@ -114,6 +114,11 @@ jobs:
     needs:
     - variables
     if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
+    strategy:
+      matrix:
+        os:
+        - macos-12
+        - ubuntu-22.04
     steps:
     - name: Setup
       id: setup
@@ -136,8 +141,11 @@ jobs:
       run: |
         if [ "${RUNNER_OS}" == "Linux" ]; then
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew update
         fi
 
+        bundle exec ./brew-resources.rb
         bundle exec ./deploy.rb -h
+        ./generate-codeowners @ydesgagn @ydesgagn
         ./linters
         ./ssh-jump -h

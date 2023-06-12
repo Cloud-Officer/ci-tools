@@ -41,9 +41,21 @@ GEM
     aws-sigv4 (1.5.2)
       aws-eventstream (~> 1, >= 1.0.2)
     date (3.3.3)
+    httparty (0.21.0)
+      mini_mime (>= 1.0.0)
+      multi_xml (>= 0.5.2)
     inifile (3.0.0)
     jmespath (1.6.2)
+    mini_mime (1.1.2)
+    multi_xml (0.6.0)
+    nokogiri (1.15.2-arm64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.15.2-x86_64-darwin)
+      racc (~> 1.4)
+    nokogiri (1.15.2-x86_64-linux)
+      racc (~> 1.4)
     optparse (0.3.1)
+    racc (1.7.0)
 
 PLATFORMS
   arm64-darwin-22
@@ -63,7 +75,9 @@ DEPENDENCIES
   aws-sdk-lambda (>= 1.96.0)
   aws-sdk-ssm (>= 1.150.0)
   date (>= 3.3.3)
+  httparty (>= 0.21.0)
   inifile (>= 3.0.0)
+  nokogiri (>= 1.15.2)
   optparse (>= 0.3.1)
 
 BUNDLED WITH
