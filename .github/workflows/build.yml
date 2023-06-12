@@ -138,6 +138,8 @@ jobs:
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         fi
 
+        bundle exec ./brew-resources.rb
         bundle exec ./deploy.rb -h
+        ./generate-codeowners @ydesgagn @ydesgagn
         ./linters
         ./ssh-jump -h
