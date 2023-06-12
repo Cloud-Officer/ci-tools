@@ -239,6 +239,18 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "nokogiri": {
+    "language": "Ruby",
+    "package": "nokogiri",
+    "version": "1.15.2",
+    "license": "MIT",
+    "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
+    "website": "https://nokogiri.org",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "XML parser",
+    "verification_reasoning": "Most popular gem on rubygems"
+  },
   "optparse": {
     "language": "Ruby",
     "package": "optparse",
@@ -250,5 +262,17 @@
     "risk_level": "Low",
     "requirements": "Parse command line options",
     "verification_reasoning": "Most popular gem on rubygems"
+  },
+  "racc": {
+    "language": "Ruby",
+    "package": "racc",
+    "version": "1.7.0",
+    "license": "Ruby",
+    "description": "Racc is a LALR(1) parser generator.",
+    "website": "https://github.com/ruby/racc",
+    "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
   }
 }
