@@ -10,8 +10,13 @@ function check_file()
     return 1
   fi
 
+  if [ -z "${2}" ]; then
+    echo "ERROR: default owners cannot be empty!"
+    exit 1
+  fi
+
   if find . -name "${1}" -not -path "./*-scripts/*" -not -path "./codedeploy/*" -not -path "./bin/*" -not -path "./sbin/*" | grep -E '.*' &> /dev/null; then
-    printf "%-24s %s\n" "${1}" "${BUILD_OWNERS}" >> "./${CODEOWNERS}"
+    printf "%-24s %s\n" "${1}" "${2}" >> "./${CODEOWNERS}"
   fi
 }
 
@@ -37,5 +42,5 @@ for file in .aws .bandit .ci .editorconfig .eslintrc.json .flake8 .gitattributes
   fi
 done
 
-check_file '*.sh'
-check_file 'Dockerfile'
+check_file '*.sh' "${1}"
+check_file 'Dockerfile' "${1}"
