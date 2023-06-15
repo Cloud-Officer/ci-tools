@@ -2,7 +2,10 @@
 set -e
 shopt -s globstar
 
-if [ -d .github/workflows ]; then
+yml_files=(.github/workflows/*.yml)
+yaml_files=(.github/workflows/*.yaml)
+
+if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
   echo "Checking GitHub Actions workflow files..."
 
   if ! type -P actionlint &>/dev/null; then
