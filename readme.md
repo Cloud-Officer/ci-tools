@@ -1,6 +1,42 @@
-# ci-tools
+# ci-tools [![Build](https://github.com/Cloud-Officer/ci-tools/actions/workflows/build.yml/badge.svg)](https://github.com/Cloud-Officer/ci-tools/actions/workflows/build.yml)
 
 This is a collection of tools to run locally or on a CI pipeline.
+
+### codeowners
+
+This script generates the `codeowners` file. It must be executed from the root of a repository.
+
+Examples:
+
+```bash
+codeowners '@default_owner_GitHub****_id'
+```
+
+All the build files are by default assigned to `@tlacroix` and `@ydesgagn`.
+
+### cycle-keys
+
+This script reads your `~/.aws/credentials` file, creates a new key if the current one is too old, saves it in
+your `credentials` file, and disables and deletes the other one.
+
+Options:
+
+```bash
+Usage: cycle-keys options
+
+options
+        --profile profile
+        --username username
+        --force
+    -h, --help
+```
+
+Examples:
+
+```bash
+cycle-keys --profile in --username tommy.lacroix@innodemneurosciences.com
+cycle-keys --profile in --username tommy.lacroix@innodemneurosciences.com --force
+```
 
 ## deploy
 
@@ -9,7 +45,7 @@ Automate the ASG, spot fleet and Lambda deployments on AWS.
 ### Usage
 
 ```bash
-Usage: deploy.rb options
+Usage: deploy options
 
 options
         --ami ami
