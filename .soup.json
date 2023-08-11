@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.798.0",
+    "version": "1.802.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -74,7 +74,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.180.1",
+    "version": "3.180.3",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.89.0",
+    "version": "1.90.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -218,9 +218,9 @@
   "mini_mime": {
     "language": "Ruby",
     "package": "mini_mime",
-    "version": "1.1.2",
+    "version": "1.1.5",
     "license": "MIT",
-    "description": "A lightweight mime type lookup toy",
+    "description": "A minimal mime type library",
     "website": "https://github.com/discourse/mini_mime",
     "last_verified_at": "2023-06-12",
     "risk_level": "Low",
