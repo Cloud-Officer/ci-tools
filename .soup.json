@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.840.0",
+    "version": "1.841.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.414.0",
+    "version": "1.415.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -110,7 +110,7 @@
   "aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.87.0",
+    "version": "1.88.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
