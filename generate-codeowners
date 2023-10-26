@@ -30,6 +30,12 @@ if [ -z "${2}" ]; then
   exit 1
 fi
 
+CUSTOM_LINES=""
+
+if [ -f "${CODEOWNERS}" ]; then
+  CUSTOM_LINES=$(awk '/# custom start/{flag=1;next}/# custom end/{flag=0}flag' "${CODEOWNERS}")
+fi
+
 printf "%s\n\n" "# https://help.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners" > "./${CODEOWNERS}"
 printf "%-24s %s\n\n" "*" "${2}" >> "./${CODEOWNERS}"
 printf "%s\n\n" "# build/deploy related files" >> "./${CODEOWNERS}"
@@ -44,3 +50,7 @@ done
 
 check_file '*.sh' "${1}"
 check_file 'Dockerfile' "${1}"
+
+if [ -n "${CUSTOM_LINES}" ]; then
+  printf "\n# custom start\n%s\n# custom end\n" "${CUSTOM_LINES}" >> "./${CODEOWNERS}"
+fi
