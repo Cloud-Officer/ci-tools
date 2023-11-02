@@ -8,8 +8,8 @@
 | Ruby | aws-sdk-cloudformation | 1.91.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.83.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudwatchlogs | 1.71.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-core | 3.185.1 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-ec2 | 1.416.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-core | 3.185.2 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-ec2 | 1.417.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.93.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.89.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-kms | 1.72.0 | Apache-2.0 | Official AWS Ruby gem for AWS Key Management Service (KMS) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
@@ -24,4 +24,4 @@
 | Ruby | multi_xml | 0.6.0 | MIT | Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML. | <https://github.com/sferik/multi_xml> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | nokogiri | 1.15.4 | MIT | Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby | <https://nokogiri.org> | 2023-06-12 | Low | XML parser | Most popular gem on rubygems |
 | Ruby | optparse | 0.3.1 | Ruby | OptionParser is a class for command-line option analysis. | <https://github.com/ruby/optparse> | 2023-06-12 | Low | Parse command line options | Most popular gem on rubygems |
-| Ruby | racc | 1.7.1 | Ruby | Racc is a LALR(1) parser generator. | <https://github.com/ruby/racc> | 2023-06-12 | Low | Dependency | Dependency |
+| Ruby | racc | 1.7.2 | Ruby | Racc is a LALR(1) parser generator. | <https://github.com/ruby/racc> | 2023-06-12 | Low | Dependency | Dependency |
