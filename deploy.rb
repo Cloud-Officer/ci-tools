@@ -260,7 +260,7 @@ begin
     {
       stack_name: stack_name
     }
-  ).stacks[0].parameters
+  ).stacks.first.parameters
   environment = stack_name.split('-').first.tr('0-9', '')
   subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
 
@@ -335,7 +335,7 @@ begin
       {
         stack_name: stack_name
       }
-    ).stacks[0]
+    ).stacks.first
     break if stack.stack_status == 'UPDATE_COMPLETE'
     raise('Stack update failed') if %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED].include?(stack.stack_status)
   end
@@ -370,7 +370,7 @@ begin
 
     loop do
       sleep(15)
-      instances = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups[0].instances.count
+      instances = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups.first.instances.count
       puts("Waiting on instances #{instances}/#{(desired_capacity * asg_multiplier) + asg_increase}...")
       break if instances == (desired_capacity * asg_multiplier) + asg_increase
     end
@@ -420,7 +420,7 @@ begin
 
     loop do
       sleep(15)
-      instances = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups[0].instances.count
+      instances = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups.first.instances.count
       puts("Waiting on instances #{instances}/#{desired_capacity}...")
       break if instances == desired_capacity
     end
