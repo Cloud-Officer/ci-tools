@@ -19,7 +19,7 @@ All the build files are by default assigned to `@tlacroix` and `@ydesgagn`.
 This script reads your `~/.aws/credentials` file, creates a new key if the current one is too old, saves it in
 your `credentials` file, and disables and deletes the other one.
 
-### Usage
+### Usage cycle-keys
 
 ```bash
 Usage: cycle-keys options
@@ -31,7 +31,7 @@ options
     -h, --help
 ```
 
-### Examples
+### Examples cycle-keys
 
 ```bash
 cycle-keys --profile in --username tommy.lacroix@innodemneurosciences.com
@@ -42,7 +42,7 @@ cycle-keys --profile in --username tommy.lacroix@innodemneurosciences.com --forc
 
 Automate the ASG, spot fleet and Lambda deployments on AWS.
 
-### Usage
+### Usage deploy
 
 ```bash
 Usage: deploy options
@@ -59,7 +59,7 @@ options
     -h, --help
 ```
 
-### Examples
+### Examples deploy
 
 ```bash
 # perform an ami of the betaX-api-standalone instance, create a launch config and update the auto scaling group
@@ -73,7 +73,7 @@ deploy --profile ugm --environment prod3 --instance worker --ami ami-09d6e0e85d7
 
 Detect file types and run the appropriate linter. The linters are installed if not available on the system. The script will stop at the first linter reporting error to ease error fixing.
 
-### Examples
+### Examples linters
 
 ```bash
 Checking GitHub Actions workflow files...
@@ -92,7 +92,7 @@ All checks passed.
 
 Ssh to a host by name via when connected to an AWS VPN. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
 
-### Usage
+### Usage ssh-jump
 
 ```bash
 Usage: ssh-jump.sh [options] hostname
@@ -101,7 +101,7 @@ Options:
   -p, --profile <profile>    Specify the aws cli profile to use
 ```
 
-### Examples
+### Examples ssh-jump
 
 ```bash
 ssh-jump --profile ugm worker-prod3-spot                                              ✔  10:28:30  
