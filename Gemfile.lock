@@ -2,25 +2,25 @@ GEM
   remote: https://rubygems.org/
   specs:
     aws-eventstream (1.3.0)
-    aws-partitions (1.877.0)
+    aws-partitions (1.880.0)
     aws-sdk-autoscaling (1.102.0)
       aws-sdk-core (~> 3, >= 3.188.0)
       aws-sigv4 (~> 1.1)
     aws-sdk-cloudformation (1.97.0)
       aws-sdk-core (~> 3, >= 3.188.0)
       aws-sigv4 (~> 1.1)
-    aws-sdk-cloudfront (1.86.0)
+    aws-sdk-cloudfront (1.86.1)
       aws-sdk-core (~> 3, >= 3.188.0)
       aws-sigv4 (~> 1.1)
-    aws-sdk-cloudwatchlogs (1.76.0)
+    aws-sdk-cloudwatchlogs (1.77.0)
       aws-sdk-core (~> 3, >= 3.188.0)
       aws-sigv4 (~> 1.1)
-    aws-sdk-core (3.190.1)
+    aws-sdk-core (3.190.2)
       aws-eventstream (~> 1, >= 1.3.0)
       aws-partitions (~> 1, >= 1.651.0)
       aws-sigv4 (~> 1.8)
       jmespath (~> 1, >= 1.6.1)
-    aws-sdk-ec2 (1.432.0)
+    aws-sdk-ec2 (1.433.0)
       aws-sdk-core (~> 3, >= 3.188.0)
       aws-sigv4 (~> 1.1)
     aws-sdk-elasticloadbalancingv2 (1.96.0)
@@ -82,4 +82,4 @@ DEPENDENCIES
   optparse (>= 0.3.1)
 
 BUNDLED WITH
-   2.4.10
+   2.5.4
