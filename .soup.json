@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.892.0",
+    "version": "1.894.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.114.0",
+    "version": "1.115.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
