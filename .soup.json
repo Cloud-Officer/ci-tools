@@ -74,7 +74,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.191.2",
+    "version": "3.191.3",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.115.0",
+    "version": "1.116.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -146,7 +146,7 @@
   "aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.164.0",
+    "version": "1.165.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -163,18 +163,6 @@
     "description": "Amazon Web Services Signature Version 4 signing library",
     "website": "https://github.com/aws/aws-sdk-ruby",
     "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
-    "requirements": "Dependency",
-    "verification_reasoning": "Dependency"
-  },
-  "base64": {
-    "language": "Ruby",
-    "package": "base64",
-    "version": "0.2.0",
-    "license": "Ruby",
-    "description": "Support for encoding and decoding binary data using a Base64 representation.",
-    "website": "https://github.com/ruby/base64",
-    "last_verified_at": "2024-02-15",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
