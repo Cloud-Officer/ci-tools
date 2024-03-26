@@ -81,7 +81,7 @@ if [ -f .pmd.xml ]; then
     brew install pmd
   fi
 
-  pmd pmd --dir . --format textcolor --rulesets ".pmd.xml"
+  pmd check --dir . --format textcolor --rulesets ".pmd.xml"
   echo
 fi
 
