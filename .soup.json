@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.905.0",
+    "version": "1.907.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -38,7 +38,7 @@
   "aws-sdk-cloudformation": {
     "language": "Ruby",
     "package": "aws-sdk-cloudformation",
-    "version": "1.103.0",
+    "version": "1.104.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -74,7 +74,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.191.5",
+    "version": "3.191.6",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.117.0",
+    "version": "1.118.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
