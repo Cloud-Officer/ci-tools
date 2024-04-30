@@ -74,7 +74,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.193.0",
+    "version": "3.194.0",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -167,6 +167,18 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "bigdecimal": {
+    "language": "Ruby",
+    "package": "bigdecimal",
+    "version": "3.1.7",
+    "license": "Ruby",
+    "description": "This library provides arbitrary-precision decimal floating-point number class.",
+    "website": "https://github.com/ruby/bigdecimal",
+    "last_verified_at": "2024-04-30",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "csv": {
     "language": "Ruby",
     "package": "csv",
@@ -242,7 +254,7 @@
   "multi_xml": {
     "language": "Ruby",
     "package": "multi_xml",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "license": "MIT",
     "description": "Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML.",
     "website": "https://github.com/sferik/multi_xml",
