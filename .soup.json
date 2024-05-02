@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.922.0",
+    "version": "1.923.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.453.0",
+    "version": "1.454.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -254,7 +254,7 @@
   "multi_xml": {
     "language": "Ruby",
     "package": "multi_xml",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "license": "MIT",
     "description": "Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML.",
     "website": "https://github.com/sferik/multi_xml",
