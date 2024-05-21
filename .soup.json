@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.929.0",
+    "version": "1.931.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.102.0",
+    "version": "1.103.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -290,7 +290,7 @@
   "racc": {
     "language": "Ruby",
     "package": "racc",
-    "version": "1.7.3",
+    "version": "1.8.0",
     "license": "Ruby",
     "description": "Racc is a LALR(1) parser generator.",
     "website": "https://github.com/ruby/racc",
