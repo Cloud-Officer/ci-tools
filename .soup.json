@@ -14,7 +14,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.932.0",
+    "version": "1.933.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -38,7 +38,7 @@
   "aws-sdk-cloudformation": {
     "language": "Ruby",
     "package": "aws-sdk-cloudformation",
-    "version": "1.108.0",
+    "version": "1.109.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -122,7 +122,7 @@
   "aws-sdk-kms": {
     "language": "Ruby",
     "package": "aws-sdk-kms",
-    "version": "1.81.0",
+    "version": "1.82.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
