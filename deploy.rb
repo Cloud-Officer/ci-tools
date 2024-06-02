@@ -329,6 +329,8 @@ begin
 
   # wait until stack has updated
 
+  stack_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
+
   loop do
     sleep(15)
     stack = cf.describe_stacks(
@@ -337,7 +339,7 @@ begin
       }
     ).stacks.first
     break if stack.stack_status == 'UPDATE_COMPLETE'
-    raise('Stack update failed') if %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED].include?(stack.stack_status)
+    raise('Stack update failed') if stack_states.include?(stack.stack_status)
   end
 
   puts("Update completed successfully for cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}.")
