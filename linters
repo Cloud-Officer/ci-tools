@@ -199,7 +199,7 @@ if [ -f .rubocop.yml ]; then
         SUDO="sudo"
       fi
 
-      ${SUDO} gem install rubocop
+      ${SUDO} gem install rubocop rubocop-performance rubocop-rspec
     fi
   fi
 
