@@ -1,4 +1,16 @@
 {
+  "ast": {
+    "language": "Ruby",
+    "package": "ast",
+    "version": "2.4.2",
+    "license": "MIT",
+    "description": "A library for working with Abstract Syntax Trees.",
+    "website": "https://whitequark.github.io/ast/",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "aws-eventstream": {
     "language": "Ruby",
     "package": "aws-eventstream",
@@ -14,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.934.0",
+    "version": "1.937.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.457.1",
+    "version": "1.458.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -191,18 +203,6 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
-  "date": {
-    "language": "Ruby",
-    "package": "date",
-    "version": "3.3.4",
-    "license": "Ruby",
-    "description": "A subclass of Object includes Comparable module for handling dates.",
-    "website": "https://github.com/ruby/date",
-    "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
-    "requirements": "Handle date",
-    "verification_reasoning": "Most popular gem on rubygems"
-  },
   "httparty": {
     "language": "Ruby",
     "package": "httparty",
@@ -235,6 +235,30 @@
     "description": "Implements JMESPath for Ruby",
     "website": "http://github.com/trevorrowe/jmespath.rb",
     "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "json": {
+    "language": "Ruby",
+    "package": "json",
+    "version": "2.7.2",
+    "license": "Ruby",
+    "description": "A JSON implementation as a JRuby extension.",
+    "website": "https://flori.github.io/json",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "language_server-protocol": {
+    "language": "Ruby",
+    "package": "language_server-protocol",
+    "version": "3.17.0.3",
+    "license": "MIT",
+    "description": "A Language Server Protocol SDK",
+    "website": "https://github.com/mtsmfm/language_server-protocol-ruby",
+    "last_verified_at": "2024-06-02",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -287,6 +311,30 @@
     "requirements": "Parse command line options",
     "verification_reasoning": "Most popular gem on rubygems"
   },
+  "parallel": {
+    "language": "Ruby",
+    "package": "parallel",
+    "version": "1.24.0",
+    "license": "MIT",
+    "description": "Run any kind of code in parallel processes",
+    "website": "https://github.com/grosser/parallel",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "parser": {
+    "language": "Ruby",
+    "package": "parser",
+    "version": "3.3.2.0",
+    "license": "MIT",
+    "description": "A Ruby parser written in pure Ruby.",
+    "website": "https://github.com/whitequark/parser",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "racc": {
     "language": "Ruby",
     "package": "racc",
@@ -295,6 +343,162 @@
     "description": "Racc is a LALR(1) parser generator.",
     "website": "https://github.com/ruby/racc",
     "last_verified_at": "2023-06-12",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rainbow": {
+    "language": "Ruby",
+    "package": "rainbow",
+    "version": "3.1.1",
+    "license": "MIT",
+    "description": "Colorize printed text on ANSI terminals",
+    "website": "https://github.com/sickill/rainbow",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "regexp_parser": {
+    "language": "Ruby",
+    "package": "regexp_parser",
+    "version": "2.9.2",
+    "license": "MIT",
+    "description": "A library for tokenizing, lexing, and parsing Ruby regular expressions.",
+    "website": "https://github.com/ammar/regexp_parser",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rexml": {
+    "language": "Ruby",
+    "package": "rexml",
+    "version": "3.2.8",
+    "license": "BSD-2-Clause",
+    "description": "An XML toolkit for Ruby",
+    "website": "https://github.com/ruby/rexml",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rubocop": {
+    "language": "Ruby",
+    "package": "rubocop",
+    "version": "1.64.1",
+    "license": "MIT",
+    "description": "RuboCop is a Ruby code style checking and code formatting tool.",
+    "website": "https://rubocop.org/",
+    "last_verified_at": "2023-06-11",
+    "risk_level": "Low",
+    "requirements": "Ruby linter",
+    "verification_reasoning": "Most popular gem on rubygems"
+  },
+  "rubocop-ast": {
+    "language": "Ruby",
+    "package": "rubocop-ast",
+    "version": "1.31.3",
+    "license": "MIT",
+    "description": "  RuboCop's Node and NodePattern classes.",
+    "website": "https://www.rubocop.org/",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rubocop-capybara": {
+    "language": "Ruby",
+    "package": "rubocop-capybara",
+    "version": "2.20.0",
+    "license": "MIT",
+    "description": "  Code style checking for Capybara test files (RSpec, Cucumber, Minitest).",
+    "website": "https://github.com/rubocop/rubocop-capybara",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rubocop-factory_bot": {
+    "language": "Ruby",
+    "package": "rubocop-factory_bot",
+    "version": "2.25.1",
+    "license": "MIT",
+    "description": "Code style checking for factory_bot files.",
+    "website": "https://github.com/rubocop/rubocop-factory_bot",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rubocop-performance": {
+    "language": "Ruby",
+    "package": "rubocop-performance",
+    "version": "1.21.0",
+    "license": "MIT",
+    "description": "A collection of RuboCop cops to check for performance optimizations",
+    "website": "https://docs.rubocop.org/rubocop-performance/",
+    "last_verified_at": "2024-05-30",
+    "risk_level": "Low",
+    "requirements": "A collection of RuboCop cops to check for performance optimizations in Ruby code",
+    "verification_reasoning": "Most popular gem"
+  },
+  "rubocop-rspec": {
+    "language": "Ruby",
+    "package": "rubocop-rspec",
+    "version": "2.29.2",
+    "license": "MIT",
+    "description": "Code style checking for RSpec files.",
+    "website": "https://github.com/rubocop/rubocop-rspec",
+    "last_verified_at": "2024-05-30",
+    "risk_level": "Low",
+    "requirements": "Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool",
+    "verification_reasoning": "Most popular gem"
+  },
+  "rubocop-rspec_rails": {
+    "language": "Ruby",
+    "package": "rubocop-rspec_rails",
+    "version": "2.28.3",
+    "license": "MIT",
+    "description": "Code style checking for RSpec Rails files.",
+    "website": null,
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "ruby-progressbar": {
+    "language": "Ruby",
+    "package": "ruby-progressbar",
+    "version": "1.13.0",
+    "license": "MIT",
+    "description": "Ruby/ProgressBar is an extremely flexible text progress bar library for Ruby",
+    "website": "https://github.com/jfelchner/ruby-progressbar",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "strscan": {
+    "language": "Ruby",
+    "package": "strscan",
+    "version": "3.1.0",
+    "license": "Ruby",
+    "description": "Provides lexical scanning operations on a String.",
+    "website": "https://github.com/ruby/strscan",
+    "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "unicode-display_width": {
+    "language": "Ruby",
+    "package": "unicode-display_width",
+    "version": "2.5.0",
+    "license": "MIT",
+    "description": "[Unicode 15.1.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, and other data.",
+    "website": "https://github.com/janlelis/unicode-display_width",
+    "last_verified_at": "2024-06-02",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
