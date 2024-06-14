@@ -13,18 +13,18 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" scope="PROVIDED" name="ast (v2.4.2, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="aws-eventstream (v1.3.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-partitions (v1.937.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-autoscaling (v1.108.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-cloudformation (v1.109.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-cloudfront (v1.91.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-cloudwatchlogs (v1.82.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-core (v3.196.1, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-ec2 (v1.458.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-elasticloadbalancingv2 (v1.103.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-iam (v1.98.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-kms (v1.82.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-lambda (v1.120.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-ssm (v1.169.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-partitions (v1.940.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-autoscaling (v1.109.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-cloudformation (v1.110.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-cloudfront (v1.92.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-cloudwatchlogs (v1.83.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-core (v3.197.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-ec2 (v1.460.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-elasticloadbalancingv2 (v1.104.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-iam (v1.99.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-kms (v1.83.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-lambda (v1.121.0, ruby-3.3.1-p55) [gem]" level="application" />
+    <orderEntry type="library" scope="PROVIDED" name="aws-sdk-ssm (v1.170.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="aws-sigv4 (v1.8.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="bigdecimal (v3.1.8, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="csv (v3.3.0, ruby-3.3.1-p55) [gem]" level="application" />
@@ -37,19 +37,13 @@
     <orderEntry type="library" scope="PROVIDED" name="multi_xml (v0.7.1, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="nokogiri (v1.16.5, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="optparse (v0.5.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="parallel (v1.24.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="parser (v3.3.2.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="racc (v1.8.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="rainbow (v3.1.1, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="regexp_parser (v2.9.2, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="rexml (v3.2.8, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="rubocop (v1.64.1, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="rubocop-ast (v1.31.3, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="rubocop-capybara (v2.20.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="rubocop-factory_bot (v2.25.1, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="rubocop-performance (v1.21.0, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="rubocop-rspec (v2.29.2, ruby-3.3.1-p55) [gem]" level="application" />
-    <orderEntry type="library" scope="PROVIDED" name="rubocop-rspec_rails (v2.28.3, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="ruby-progressbar (v1.13.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="strscan (v3.1.0, ruby-3.3.1-p55) [gem]" level="application" />
     <orderEntry type="library" scope="PROVIDED" name="unicode-display_width (v2.5.0, ruby-3.3.1-p55) [gem]" level="application" />
