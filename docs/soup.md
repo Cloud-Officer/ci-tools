@@ -36,11 +36,8 @@
 | Ruby | rexml | 3.3.0 | BSD-2-Clause | An XML toolkit for Ruby | <https://github.com/ruby/rexml> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | rubocop | 1.64.1 | MIT | RuboCop is a Ruby code style checking and code formatting tool. | <https://rubocop.org/> | 2023-06-11 | Low | Ruby linter | Most popular gem on rubygems |
 | Ruby | rubocop-ast | 1.31.3 | MIT |   RuboCop's Node and NodePattern classes. | <https://www.rubocop.org/> | 2024-06-02 | Low | Dependency | Dependency |
-| Ruby | rubocop-capybara | 2.21.0 | MIT | Code style checking for Capybara test files (RSpec, Cucumber, Minitest). | <https://github.com/rubocop/rubocop-capybara> | 2024-06-02 | Low | Dependency | Dependency |
-| Ruby | rubocop-factory_bot | 2.26.0 | MIT | Code style checking for factory_bot files. | <https://github.com/rubocop/rubocop-factory_bot> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | rubocop-performance | 1.21.1 | MIT | A collection of RuboCop cops to check for performance optimizations | <https://docs.rubocop.org/rubocop-performance/> | 2024-05-30 | Low | A collection of RuboCop cops to check for performance optimizations in Ruby code | Most popular gem |
-| Ruby | rubocop-rspec | 2.31.0 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2024-05-30 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
-| Ruby | rubocop-rspec_rails | 2.29.0 | MIT | Code style checking for RSpec Rails files. | <> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | rubocop-rspec | 3.0.1 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2024-05-30 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
 | Ruby | ruby-progressbar | 1.13.0 | MIT | Ruby/ProgressBar is an extremely flexible text progress bar library for Ruby | <https://github.com/jfelchner/ruby-progressbar> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | strscan | 3.1.0 | Ruby | Provides lexical scanning operations on a String. | <https://github.com/ruby/strscan> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | unicode-display_width | 2.5.0 | MIT | [Unicode 15.1.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, and other data. | <https://github.com/janlelis/unicode-display_width> | 2024-06-02 | Low | Dependency | Dependency |
