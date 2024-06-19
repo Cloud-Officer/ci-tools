@@ -30,7 +30,7 @@ GEM
     aws-sdk-iam (1.99.0)
       aws-sdk-core (~> 3, >= 3.197.0)
       aws-sigv4 (~> 1.1)
-    aws-sdk-kms (1.84.0)
+    aws-sdk-kms (1.85.0)
       aws-sdk-core (~> 3, >= 3.197.0)
       aws-sigv4 (~> 1.1)
     aws-sdk-lambda (1.121.0)
