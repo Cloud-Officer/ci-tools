@@ -134,7 +134,7 @@
   "aws-sdk-kms": {
     "language": "Ruby",
     "package": "aws-sdk-kms",
-    "version": "1.87.0",
+    "version": "1.88.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
