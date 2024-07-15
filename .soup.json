@@ -38,7 +38,7 @@
   "aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.112.0",
+    "version": "1.113.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
