@@ -74,7 +74,7 @@
   "aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.85.0",
+    "version": "1.87.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.463.0",
+    "version": "1.465.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -374,7 +374,7 @@
   "rexml": {
     "language": "Ruby",
     "package": "rexml",
-    "version": "3.3.1",
+    "version": "3.3.2",
     "license": "BSD-2-Clause",
     "description": "An XML toolkit for Ruby",
     "website": "https://github.com/ruby/rexml",
@@ -422,7 +422,7 @@
   "rubocop-rspec": {
     "language": "Ruby",
     "package": "rubocop-rspec",
-    "version": "3.0.1",
+    "version": "3.0.3",
     "license": "MIT",
     "description": "Code style checking for RSpec files.",
     "website": "https://github.com/rubocop/rubocop-rspec",

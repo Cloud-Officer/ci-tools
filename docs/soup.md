@@ -8,9 +8,9 @@
 | Ruby | aws-sdk-autoscaling | 1.113.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudformation | 1.114.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.96.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-cloudwatchlogs | 1.85.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-cloudwatchlogs | 1.87.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.201.1 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-ec2 | 1.463.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-ec2 | 1.465.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.108.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.103.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-kms | 1.88.0 | Apache-2.0 | Official AWS Ruby gem for AWS Key Management Service (KMS) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
@@ -33,11 +33,11 @@
 | Ruby | racc | 1.8.0 | Ruby | Racc is a LALR(1) parser generator. | <https://github.com/ruby/racc> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | rainbow | 3.1.1 | MIT | Colorize printed text on ANSI terminals | <https://github.com/sickill/rainbow> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | regexp_parser | 2.9.2 | MIT | A library for tokenizing, lexing, and parsing Ruby regular expressions. | <https://github.com/ammar/regexp_parser> | 2024-06-02 | Low | Dependency | Dependency |
-| Ruby | rexml | 3.3.1 | BSD-2-Clause | An XML toolkit for Ruby | <https://github.com/ruby/rexml> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | rexml | 3.3.2 | BSD-2-Clause | An XML toolkit for Ruby | <https://github.com/ruby/rexml> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | rubocop | 1.65.0 | MIT | RuboCop is a Ruby code style checking and code formatting tool. | <https://rubocop.org/> | 2023-06-11 | Low | Ruby linter | Most popular gem on rubygems |
 | Ruby | rubocop-ast | 1.31.3 | MIT |   RuboCop's Node and NodePattern classes. | <https://www.rubocop.org/> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | rubocop-performance | 1.21.1 | MIT | A collection of RuboCop cops to check for performance optimizations | <https://docs.rubocop.org/rubocop-performance/> | 2024-05-30 | Low | A collection of RuboCop cops to check for performance optimizations in Ruby code | Most popular gem |
-| Ruby | rubocop-rspec | 3.0.1 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2024-05-30 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
+| Ruby | rubocop-rspec | 3.0.3 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2024-05-30 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
 | Ruby | ruby-progressbar | 1.13.0 | MIT | Ruby/ProgressBar is an extremely flexible text progress bar library for Ruby | <https://github.com/jfelchner/ruby-progressbar> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | strscan | 3.1.0 | Ruby | Provides lexical scanning operations on a String. | <https://github.com/ruby/strscan> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | unicode-display_width | 2.5.0 | MIT | [Unicode 15.1.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, and other data. | <https://github.com/janlelis/unicode-display_width> | 2024-06-02 | Low | Dependency | Dependency |
