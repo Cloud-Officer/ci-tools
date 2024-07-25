@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.957.0",
+    "version": "1.958.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.201.2",
+    "version": "3.201.3",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -170,7 +170,7 @@
   "aws-sigv4": {
     "language": "Ruby",
     "package": "aws-sigv4",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "license": "Apache-2.0",
     "description": "Amazon Web Services Signature Version 4 signing library",
     "website": "https://github.com/aws/aws-sdk-ruby",
