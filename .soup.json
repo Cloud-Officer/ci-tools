@@ -110,7 +110,7 @@
   "aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.108.0",
+    "version": "1.109.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
