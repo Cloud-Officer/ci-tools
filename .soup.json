@@ -374,7 +374,7 @@
   "rexml": {
     "language": "Ruby",
     "package": "rexml",
-    "version": "3.3.2",
+    "version": "3.3.3",
     "license": "BSD-2-Clause",
     "description": "An XML toolkit for Ruby",
     "website": "https://github.com/ruby/rexml",
