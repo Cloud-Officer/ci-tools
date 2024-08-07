@@ -29,7 +29,7 @@
 | Ruby | nokogiri | 1.16.7 | MIT | Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby | <https://nokogiri.org> | 2023-06-12 | Low | XML parser | Most popular gem on rubygems |
 | Ruby | optparse | 0.5.0 | Ruby | OptionParser is a class for command-line option analysis. | <https://github.com/ruby/optparse> | 2023-06-12 | Low | Parse command line options | Most popular gem on rubygems |
 | Ruby | parallel | 1.25.1 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2024-06-02 | Low | Dependency | Dependency |
-| Ruby | parser | 3.3.4.0 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | parser | 3.3.4.1 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | racc | 1.8.1 | Ruby | Racc is an LALR(1) parser generator. | <https://github.com/ruby/racc> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | rainbow | 3.1.1 | MIT | Colorize printed text on ANSI terminals | <https://github.com/sickill/rainbow> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | regexp_parser | 2.9.2 | MIT | A library for tokenizing, lexing, and parsing Ruby regular expressions. | <https://github.com/ammar/regexp_parser> | 2024-06-02 | Low | Dependency | Dependency |
