@@ -158,7 +158,7 @@
   "aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.176.0",
+    "version": "1.178.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
