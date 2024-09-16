@@ -398,7 +398,7 @@
   "rubocop-performance": {
     "language": "Ruby",
     "package": "rubocop-performance",
-    "version": "1.21.1",
+    "version": "1.22.0",
     "license": "MIT",
     "description": "A collection of RuboCop cops to check for performance optimizations",
     "website": "https://docs.rubocop.org/rubocop-performance/",
@@ -434,9 +434,9 @@
   "unicode-display_width": {
     "language": "Ruby",
     "package": "unicode-display_width",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "license": "MIT",
-    "description": "[Unicode 15.1.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, and other data.",
+    "description": "[Unicode 16.0.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, and other data.",
     "website": "https://github.com/janlelis/unicode-display_width",
     "last_verified_at": "2024-06-02",
     "risk_level": "Low",
