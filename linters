@@ -191,7 +191,7 @@ if [ -f .rubocop.yml ]; then
 
   if ! type -P rubocop &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
-      gem install rubocop
+      gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
     else
       if type -P gem | grep "${HOME}" &>/dev/null; then
         SUDO=""
@@ -199,7 +199,7 @@ if [ -f .rubocop.yml ]; then
         SUDO="sudo"
       fi
 
-      ${SUDO} gem install rubocop rubocop-performance rubocop-rspec
+      ${SUDO} gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
     fi
   fi
 
