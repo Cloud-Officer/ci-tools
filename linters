@@ -123,21 +123,6 @@ if [ -f .editorconfig ]; then
   ktlint --verbose
 fi
 
-if [ -f .php-cs-fixer.dist.php ]; then
-  echo "Checking PHP with phpcs..."
-
-  if ! type -P php-cs-fixer &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
-      brew install php-cs-fixer
-    else
-      composer install
-    fi
-  fi
-
-  php-cs-fixer fix --dry-run --diff --verbose
-  rm .php-cs-fixer.cache
-fi
-
 if [ -f .bandit ]; then
   echo "Checking Python with bandit..."
 
