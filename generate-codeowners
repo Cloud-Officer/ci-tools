@@ -40,7 +40,7 @@ printf "%s\n\n" "# https://help.github.com/en/github/creating-cloning-and-archiv
 printf "%-24s %s\n\n" "*" "${2}" >> "./${CODEOWNERS}"
 printf "%s\n\n" "# build/deploy related files" >> "./${CODEOWNERS}"
 
-for file in .aws .bandit .ci .editorconfig .eslintrc.json .flake8 .gitattributes .github .gitignore .gitmodules .golangci.yml .hadolint.yaml .markdownlint.yml .pmd.xml .protolint.yaml .rubocop.yml .ruby-version .shellcheckrc .soup.json .swiftlint.yml .yamllint.yml codeowners readme.md appspec.yml bin codedeploy docs etc lib sbin; do
+for file in .aws .bandit .ci .editorconfig .eslintrc.json .flake8 .gitattributes .github .gitignore .gitmodules .golangci.yml .hadolint.yaml .markdownlint.yml .pmd.xml .protolint.yaml .rubocop.yml .ruby-version .shellcheckrc .swiftlint.yml .yamllint.yml codeowners appspec.yml bin codedeploy etc lib sbin; do
   if [ -d "${file}" ]; then
     printf "%-24s %s\n" "${file}/" "${1}" >> "./${CODEOWNERS}"
   elif [ -f "${file}" ]; then
