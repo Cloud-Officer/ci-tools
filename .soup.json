@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.992.0",
+    "version": "1.996.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -38,7 +38,7 @@
   "aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.122.0",
+    "version": "1.123.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -170,7 +170,7 @@
   "aws-sigv4": {
     "language": "Ruby",
     "package": "aws-sigv4",
-    "version": "1.10.0",
+    "version": "1.10.1",
     "license": "Apache-2.0",
     "description": "Amazon Web Services Signature Version 4 signing library",
     "website": "https://github.com/aws/aws-sdk-ruby",
