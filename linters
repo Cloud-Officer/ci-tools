@@ -88,9 +88,21 @@ fi
 if [ -f .eslintrc.json ]; then
   echo "Checking JS with eslint..."
 
+  INSTALL_ESLINT=0
+
   if ! type -P eslint &>/dev/null; then
+    echo "Installing eslint@8 because not present"
+    INSTALL_ESLINT=1
+  fi
+
+  if ! eslint --version | grep "^v8\." &>/dev/null; then
+    echo "Installing eslint@8 because wrong version"
+    INSTALL_ESLINT=1
+  fi
+
+  if [ ${INSTALL_ESLINT} -eq 1 ]; then
     if uname -s | grep Darwin &>/dev/null; then
-      npm install -g eslint
+      npm install -g eslint@8
     else
       if ! type -P npm &>/dev/null; then
         sudo apt-get --yes install --no-install-recommends npm
@@ -102,7 +114,7 @@ if [ -f .eslintrc.json ]; then
         SUDO="sudo"
       fi
 
-      ${SUDO} npm install -g eslint
+      ${SUDO} npm install -g eslint@8
     fi
   fi
 
