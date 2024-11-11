@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1001.0",
+    "version": "1.1003.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -38,7 +38,7 @@
   "aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.124.0",
+    "version": "1.125.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
