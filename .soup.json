@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1020.0",
+    "version": "1.1023.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -74,7 +74,7 @@
   "aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.104.0",
+    "version": "1.105.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.496.0",
+    "version": "1.497.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -194,7 +194,7 @@
   "csv": {
     "language": "Ruby",
     "package": "csv",
-    "version": "3.3.0",
+    "version": "3.3.1",
     "license": "Ruby",
     "description": "The CSV library provides a complete interface to CSV files and data",
     "website": "https://github.com/ruby/csv",
@@ -290,7 +290,7 @@
   "nokogiri": {
     "language": "Ruby",
     "package": "nokogiri",
-    "version": "1.17.1",
+    "version": "1.17.2",
     "license": "MIT",
     "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
     "website": "https://nokogiri.org",
@@ -374,7 +374,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.69.1",
+    "version": "1.69.2",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
@@ -386,7 +386,7 @@
   "rubocop-ast": {
     "language": "Ruby",
     "package": "rubocop-ast",
-    "version": "1.36.2",
+    "version": "1.37.0",
     "license": "MIT",
     "description": "  RuboCop's Node and NodePattern classes.",
     "website": "https://www.rubocop.org/",
@@ -446,7 +446,7 @@
   "rubocop-rspec": {
     "language": "Ruby",
     "package": "rubocop-rspec",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "license": "MIT",
     "description": "Code style checking for RSpec files.",
     "website": "https://github.com/rubocop/rubocop-rspec",
