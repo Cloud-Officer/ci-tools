@@ -3,7 +3,7 @@ GEM
   specs:
     ast (2.4.2)
     aws-eventstream (1.3.0)
-    aws-partitions (1.1025.0)
+    aws-partitions (1.1029.0)
     aws-sdk-autoscaling (1.128.0)
       aws-sdk-core (~> 3, >= 3.210.0)
       aws-sigv4 (~> 1.5)
@@ -16,7 +16,7 @@ GEM
     aws-sdk-cloudwatchlogs (1.105.0)
       aws-sdk-core (~> 3, >= 3.210.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-core (3.214.0)
+    aws-sdk-core (3.214.1)
       aws-eventstream (~> 1, >= 1.3.0)
       aws-partitions (~> 1, >= 1.992.0)
       aws-sigv4 (~> 1.9)
@@ -41,8 +41,8 @@ GEM
       aws-sigv4 (~> 1.5)
     aws-sigv4 (1.10.1)
       aws-eventstream (~> 1, >= 1.0.2)
-    bigdecimal (3.1.8)
-    csv (3.3.1)
+    bigdecimal (3.1.9)
+    csv (3.3.2)
     httparty (0.22.0)
       csv
       mini_mime (>= 1.0.0)
@@ -54,13 +54,13 @@ GEM
     mini_mime (1.1.5)
     multi_xml (0.7.1)
       bigdecimal (~> 3.1)
-    nokogiri (1.17.2-aarch64-linux)
+    nokogiri (1.18.0-aarch64-linux-gnu)
       racc (~> 1.4)
-    nokogiri (1.17.2-arm64-darwin)
+    nokogiri (1.18.0-arm64-darwin)
       racc (~> 1.4)
-    nokogiri (1.17.2-x86_64-darwin)
+    nokogiri (1.18.0-x86_64-darwin)
       racc (~> 1.4)
-    nokogiri (1.17.2-x86_64-linux)
+    nokogiri (1.18.0-x86_64-linux-gnu)
       racc (~> 1.4)
     optparse (0.6.0)
     parallel (1.26.3)
@@ -69,7 +69,7 @@ GEM
       racc
     racc (1.8.1)
     rainbow (3.1.1)
-    regexp_parser (2.9.3)
+    regexp_parser (2.10.0)
     rubocop (1.69.2)
       json (~> 2.3)
       language_server-protocol (>= 3.17.0)
@@ -97,7 +97,7 @@ GEM
     rubocop-thread_safety (0.6.0)
       rubocop (>= 1.48.1)
     ruby-progressbar (1.13.0)
-    unicode-display_width (3.1.2)
+    unicode-display_width (3.1.3)
       unicode-emoji (~> 4.0, >= 4.0.4)
     unicode-emoji (4.0.4)
 
@@ -132,4 +132,4 @@ DEPENDENCIES
   rubocop-thread_safety (>= 0.5.1)
 
 BUNDLED WITH
-   2.5.23
+   2.6.2
