@@ -132,9 +132,10 @@ begin
     instance_name = ''
     ec2 = Aws::EC2::Resource.new
     puts("Searching for #{options[:instance]} standalone instance...")
+    instance_states = %w[running stopped]
 
     ec2.instances.each do |instance|
-      next unless instance.data.state.name == 'running' or instance.data.state.name == 'stopped'
+      next unless instance_states.include?(instance.data.state.name)
 
       instance.tags.each do |tag|
         next unless tag.key == 'Name'
@@ -273,6 +274,7 @@ begin
     else
       options[:instance].capitalize
     end
+  ignored_parameters = %w[DbPassword MqPassword SendGridApiKey]
 
   parameters.each do |parameter|
     replace_with =
@@ -304,7 +306,7 @@ begin
       )
     end
 
-    next unless parameter.parameter_key == 'DbPassword' || parameter.parameter_key == 'MqPassword' || parameter.parameter_key == 'SendGridApiKey'
+    next unless ignored_parameters.include?(parameter.parameter_key)
 
     parameter.parameter_value = nil
     parameter.use_previous_value = true
