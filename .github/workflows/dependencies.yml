@@ -23,6 +23,9 @@ jobs:
         ruby-version: "${{env.RUBY-VERSION}}"
         ruby-bundler-cache: "${{env.RUBY-BUNDLER-CACHE}}"
         ssh-key: "${{secrets.SSH_KEY}}"
+        aws-access-key-id: "${{secrets.AWS_ACCESS_KEY_ID}}"
+        aws-secret-access-key: "${{secrets.AWS_SECRET_ACCESS_KEY}}"
+        aws-region: "${{secrets.AWS_DEFAULT_REGION}}"
     - name: Update Dependencies
       shell: bash
       run: |
@@ -30,19 +33,7 @@ jobs:
         git config --global --add url."https://${{secrets.SOUP_DEPENDENCIES_UPDATE}}:x-oauth-basic@github.com/".insteadOf https://github.com/
         git config --global --add url."https://${{secrets.SOUP_DEPENDENCIES_UPDATE}}:x-oauth-basic@github.com/".insteadOf git@github.com:
 
-        if [ -f "composer.json" ]; then
-          composer update
-        fi
-
-        if [ -f "Gemfile" ]; then
-          bundle config set frozen false
-          bundle update
-        fi
-
-        if [ -f "requirements.in" ]; then
-          pip install pip-tools
-          pip-compile --resolver=backtracking --upgrade
-        fi
+        bundle config set frozen false ; bundle update
     - name: Licenses
       uses: cloud-officer/ci-actions/soup@master
       with:
