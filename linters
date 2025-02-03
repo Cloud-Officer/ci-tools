@@ -118,7 +118,7 @@ if [ -f .eslintrc.json ]; then
     fi
   fi
 
-  eslint --ext .js
+  eslint .
 fi
 
 if [ -f .editorconfig ]; then
