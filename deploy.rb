@@ -235,30 +235,6 @@ begin
     raise('Unable to find load balancer target group') if target_group_arn.nil?
   end
 
-  # get asg parameters
-
-  ondemand_percent_above = ondemand_base_capacity = nil
-  ssm = Aws::SSM::Client.new
-  asg_parameters = ssm.get_parameters(
-    {
-      names: [
-        "/#{environment}/#{subnet}/OnDemandPercentAbove",
-        "/#{environment}/#{subnet}/OnDemandBaseCapacity"
-      ],
-      with_decryption: true
-    }
-  )
-  asg_parameters.parameters.each do |parameter|
-    case parameter[:name]
-    when "/#{environment}/#{subnet}/OnDemandPercentAbove"
-      ondemand_percent_above = parameter.value.to_s
-    when "/#{environment}/#{subnet}/OnDemandBaseCapacity"
-      ondemand_base_capacity = parameter.value.to_s
-    end
-  end
-  raise('Unable to load ASG mixed parameters: OnDemandPercentAbove') if ondemand_percent_above.nil?
-  raise('Unable to load ASG mixed parameters: OnDemandBaseCapacity') if ondemand_base_capacity.nil?
-
   # check cloudformation stacks...
 
   puts('Checking cloudformation stacks...')
@@ -369,6 +345,30 @@ begin
   end
 
   puts("Update completed successfully for cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}.")
+
+  # get asg parameters
+
+  ondemand_percent_above = ondemand_base_capacity = nil
+  ssm = Aws::SSM::Client.new
+  asg_parameters = ssm.get_parameters(
+    {
+      names: [
+        "/#{environment}/#{subnet}/OnDemandPercentAbove",
+        "/#{environment}/#{subnet}/OnDemandBaseCapacity"
+      ],
+      with_decryption: true
+    }
+  )
+  asg_parameters.parameters.each do |parameter|
+    case parameter[:name]
+    when "/#{environment}/#{subnet}/OnDemandPercentAbove"
+      ondemand_percent_above = parameter.value.to_s
+    when "/#{environment}/#{subnet}/OnDemandBaseCapacity"
+      ondemand_base_capacity = parameter.value.to_s
+    end
+  end
+  raise('Unable to load ASG mixed parameters: OnDemandPercentAbove') if ondemand_percent_above.nil?
+  raise('Unable to load ASG mixed parameters: OnDemandBaseCapacity') if ondemand_base_capacity.nil?
 
   # set new launch configuration and increase desired capacity
 
