@@ -346,6 +346,30 @@ begin
 
   puts("Update completed successfully for cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}.")
 
+  # get asg parameters
+
+  ondemand_percent_above = ondemand_base_capacity = nil
+  ssm = Aws::SSM::Client.new
+  asg_parameters = ssm.get_parameters(
+    {
+      names: [
+        "/#{environment}/#{subnet}/OnDemandPercentAbove",
+        "/#{environment}/#{subnet}/OnDemandBaseCapacity"
+      ],
+      with_decryption: true
+    }
+  )
+  asg_parameters.parameters.each do |parameter|
+    case parameter[:name]
+    when "/#{environment}/#{subnet}/OnDemandPercentAbove"
+      ondemand_percent_above = parameter.value.to_s
+    when "/#{environment}/#{subnet}/OnDemandBaseCapacity"
+      ondemand_base_capacity = parameter.value.to_s
+    end
+  end
+  raise('Unable to load ASG mixed parameters: OnDemandPercentAbove') if ondemand_percent_above.nil?
+  raise('Unable to load ASG mixed parameters: OnDemandBaseCapacity') if ondemand_base_capacity.nil?
+
   # set new launch configuration and increase desired capacity
 
   puts("Increasing desired capacity from #{desired_capacity} to #{(desired_capacity * asg_multiplier) + asg_increase}...")
@@ -354,7 +378,13 @@ begin
     asg_resources.client.update_auto_scaling_group(
       {
         auto_scaling_group_name: auto_scaling_group_name,
-        desired_capacity: (desired_capacity * asg_multiplier) + asg_increase
+        desired_capacity: (desired_capacity * asg_multiplier) + asg_increase,
+        mixed_instances_policy: {
+          instances_distribution: {
+            on_demand_base_capacity: ondemand_base_capacity,
+            on_demand_percentage_above_base_capacity: 100
+          }
+        }
       }
     )
   else
@@ -362,7 +392,13 @@ begin
       {
         auto_scaling_group_name: auto_scaling_group_name,
         desired_capacity: (desired_capacity * asg_multiplier) + asg_increase,
-        max_size: (asg_max_size * asg_multiplier) + asg_increase
+        max_size: (asg_max_size * asg_multiplier) + asg_increase,
+        mixed_instances_policy: {
+          instances_distribution: {
+            on_demand_base_capacity: ondemand_base_capacity,
+            on_demand_percentage_above_base_capacity: 100
+          }
+        }
       }
     )
   end
@@ -400,7 +436,13 @@ begin
     asg_resources.client.update_auto_scaling_group(
       {
         auto_scaling_group_name: auto_scaling_group_name,
-        max_size: asg_max_size
+        max_size: asg_max_size,
+        mixed_instances_policy: {
+          instances_distribution: {
+            on_demand_base_capacity: ondemand_base_capacity,
+            on_demand_percentage_above_base_capacity: ondemand_percent_above
+          }
+        }
       }
     )
   else
@@ -409,7 +451,13 @@ begin
       {
         auto_scaling_group_name: auto_scaling_group_name,
         desired_capacity: desired_capacity,
-        max_size: asg_max_size
+        max_size: asg_max_size,
+        mixed_instances_policy: {
+          instances_distribution: {
+            on_demand_base_capacity: ondemand_base_capacity,
+            on_demand_percentage_above_base_capacity: ondemand_percent_above
+          }
+        }
       }
     )
 
