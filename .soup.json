@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1072.0",
+    "version": "1.1073.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.220.2",
+    "version": "3.221.0",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -158,7 +158,7 @@
   "aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.191.0",
+    "version": "1.192.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -287,6 +287,18 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "logger": {
+    "language": "Ruby",
+    "package": "logger",
+    "version": "1.6.6",
+    "license": "Ruby",
+    "description": "Provides a simple logging utility for outputting messages.",
+    "website": "https://github.com/ruby/logger",
+    "last_verified_at": "2025-03-25",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "mini_mime": {
     "language": "Ruby",
     "package": "mini_mime",
@@ -314,7 +326,7 @@
   "nokogiri": {
     "language": "Ruby",
     "package": "nokogiri",
-    "version": "1.18.5",
+    "version": "1.18.6",
     "license": "MIT",
     "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
     "website": "https://nokogiri.org",
@@ -410,7 +422,7 @@
   "rubocop-ast": {
     "language": "Ruby",
     "package": "rubocop-ast",
-    "version": "1.41.0",
+    "version": "1.42.0",
     "license": "MIT",
     "description": "  RuboCop's Node and NodePattern classes.",
     "website": "https://www.rubocop.org/",
