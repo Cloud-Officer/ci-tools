@@ -4,12 +4,12 @@
 | :---: | :--- | :---: | :---: | :--- | :--- | :---: | :---: | :--- | :--- |
 | Ruby | ast | 2.4.3 | MIT | A library for working with Abstract Syntax Trees. | <https://whitequark.github.io/ast/> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | aws-eventstream | 1.3.2 | Apache-2.0 | Amazon Web Services event stream library | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
-| Ruby | aws-partitions | 1.1086.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
-| Ruby | aws-sdk-autoscaling | 1.132.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-partitions | 1.1090.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
+| Ruby | aws-sdk-autoscaling | 1.133.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudformation | 1.129.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.114.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudwatchlogs | 1.110.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-core | 3.222.1 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-core | 3.222.2 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-ec2 | 1.515.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.130.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.120.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
@@ -31,7 +31,7 @@
 | Ruby | multi_xml | 0.7.1 | MIT | Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML. | <https://github.com/sferik/multi_xml> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | nokogiri | 1.18.7 | MIT | Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby | <https://nokogiri.org> | 2023-06-12 | Low | XML parser | Most popular gem on rubygems |
 | Ruby | optparse | 0.6.0 | Ruby | OptionParser is a class for command-line option analysis. | <https://github.com/ruby/optparse> | 2023-06-12 | Low | Parse command line options | Most popular gem on rubygems |
-| Ruby | parallel | 1.26.3 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | parallel | 1.27.0 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | parser | 3.3.8.0 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | prism | 1.4.0 | MIT | Prism Ruby parser | <https://github.com/ruby/prism> | 2025-03-31 | Low | Dependency | Dependency |
 | Ruby | racc | 1.8.1 | Ruby | Racc is an LALR(1) parser generator. | <https://github.com/ruby/racc> | 2023-06-12 | Low | Dependency | Dependency |
@@ -43,7 +43,7 @@
 | Ruby | rubocop-graphql | 1.5.5 | MIT | A collection of RuboCop cops to improve GraphQL-related code | <https://github.com/DmitryTsepelev/rubocop-graphql> | 2024-09-16 | Low | Ruby linter | Most popular gem |
 | Ruby | rubocop-minitest | 0.38.0 | MIT | Automatic Minitest code style checking tool. | <https://docs.rubocop.org/rubocop-minitest/> | 2024-09-16 | Low | Ruby linter | Most popular gem |
 | Ruby | rubocop-performance | 1.25.0 | MIT | A collection of RuboCop cops to check for performance optimizations | <https://docs.rubocop.org/rubocop-performance/> | 2024-05-30 | Low | A collection of RuboCop cops to check for performance optimizations in Ruby code | Most popular gem |
-| Ruby | rubocop-rspec | 3.5.0 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2024-05-30 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
+| Ruby | rubocop-rspec | 3.6.0 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2024-05-30 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
 | Ruby | rubocop-thread_safety | 0.7.2 | MIT |   Thread-safety checks via static analysis. | <https://github.com/rubocop/rubocop-thread_safety> | 2024-09-16 | Low | Ruby linter | Most popular gem |
 | Ruby | ruby-progressbar | 1.13.0 | MIT | Ruby/ProgressBar is an extremely flexible text progress bar library for Ruby | <https://github.com/jfelchner/ruby-progressbar> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | unicode-display_width | 3.1.4 | MIT | [Unicode 16.0.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, Emoji specification, and other data. | <https://github.com/janlelis/unicode-display_width> | 2024-06-02 | Low | Dependency | Dependency |
