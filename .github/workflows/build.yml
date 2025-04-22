@@ -16,7 +16,7 @@ name: Build
     - "**"
 env:
   RUBY-BUNDLER-CACHE: 'true'
-  RUBY-VERSION: 3.4.2
+  RUBY-VERSION: 3.4.3
 jobs:
   variables:
     name: Prepare Variables
