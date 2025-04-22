@@ -62,7 +62,7 @@ begin
 
     response.access_key_metadata.each do |key_metadata|
       if key_metadata.access_key_id == access_key
-        age = (Integer((Time.now - key_metadata.create_date)) / (24 * 60 * 60))
+        age = (Integer(Time.now - key_metadata.create_date) / (24 * 60 * 60))
         user_name = key_metadata.user_name
       else
         if key_metadata.status == 'Active'
