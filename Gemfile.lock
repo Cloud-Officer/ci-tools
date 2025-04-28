@@ -147,4 +147,4 @@ DEPENDENCIES
   rubocop-thread_safety (>= 0.5.1)
 
 BUNDLED WITH
-   2.6.2
+   2.6.8
