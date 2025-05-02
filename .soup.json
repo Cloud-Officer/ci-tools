@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1092.0",
+    "version": "1.1095.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -62,7 +62,7 @@
   "aws-sdk-cloudfront": {
     "language": "Ruby",
     "package": "aws-sdk-cloudfront",
-    "version": "1.114.0",
+    "version": "1.115.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -74,7 +74,7 @@
   "aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.110.0",
+    "version": "1.112.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.222.2",
+    "version": "3.222.3",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.516.0",
+    "version": "1.517.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -146,7 +146,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.148.0",
+    "version": "1.149.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -158,7 +158,7 @@
   "aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.192.0",
+    "version": "1.193.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -314,7 +314,7 @@
   "multi_xml": {
     "language": "Ruby",
     "package": "multi_xml",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "license": "MIT",
     "description": "Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML.",
     "website": "https://github.com/sferik/multi_xml",
@@ -422,7 +422,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.75.3",
+    "version": "1.75.4",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
