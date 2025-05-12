@@ -23,8 +23,8 @@
 | Ruby | httparty | 0.23.1 | MIT | Makes http fun! Also, makes consuming restful web services dead easy. | <https://github.com/jnunemaker/httparty> | 2023-06-12 | Low | Access URL | Most popular gem on rubygems |
 | Ruby | inifile | 3.0.0 |  | Although made popular by Windows, INI files can be used on any system thanks | <http://rubygems.org/gems/inifile> | 2023-06-12 | Low | Access ini files | Most popular gem on rubygems |
 | Ruby | jmespath | 1.6.2 | Apache-2.0 | Implements JMESPath for Ruby | <http://github.com/trevorrowe/jmespath.rb> | 2023-06-12 | Low | Dependency | Dependency |
-| Ruby | json | 2.11.3 | Ruby | A JSON implementation as a JRuby extension. | <https://github.com/ruby/json> | 2024-06-02 | Low | Dependency | Dependency |
-| Ruby | language_server-protocol | 3.17.0.4 | MIT | A Language Server Protocol SDK | <https://github.com/mtsmfm/language_server-protocol-ruby> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | json | 2.12.0 | Ruby | A JSON implementation as a JRuby extension. | <https://github.com/ruby/json> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | language_server-protocol | 3.17.0.5 | MIT | A Language Server Protocol SDK | <https://github.com/mtsmfm/language_server-protocol-ruby> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | lint_roller | 1.1.0 | MIT | A plugin specification for linter and formatter rulesets | <https://github.com/standardrb/lint_roller> | 2025-02-15 | Low | Dependency | Dependency |
 | Ruby | logger | 1.7.0 | Ruby | Provides a simple logging utility for outputting messages. | <https://github.com/ruby/logger> | 2025-03-25 | Low | Dependency | Dependency |
 | Ruby | mini_mime | 1.1.5 | MIT | A minimal mime type library | <https://github.com/discourse/mini_mime> | 2023-06-12 | Low | Dependency | Dependency |
