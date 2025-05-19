@@ -28,9 +28,9 @@ This is a collection of tools to run locally or on a CI pipeline.
 
 You can run `bundle install` and then run the commands.
 
-You can install via Homebrew [here](https://github.com/Cloud-Officer/homebrew-ci).
+You can install via [Homebrew](https://github.com/Cloud-Officer/homebrew-ci).
 
-Docker images are available [here](https://hub.docker.com/r/ydesgagne/ci-tools).
+You can use the [Docker images](https://hub.docker.com/r/ydesgagne/ci-tools).
 
 ## Usage
 

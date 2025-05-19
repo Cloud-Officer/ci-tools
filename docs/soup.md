@@ -4,13 +4,13 @@
 | :---: | :--- | :---: | :---: | :--- | :--- | :---: | :---: | :--- | :--- |
 | Ruby | ast | 2.4.3 | MIT | A library for working with Abstract Syntax Trees. | <https://whitequark.github.io/ast/> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | aws-eventstream | 1.3.2 | Apache-2.0 | Amazon Web Services event stream library | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
-| Ruby | aws-partitions | 1.1104.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
+| Ruby | aws-partitions | 1.1105.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Dependency | Dependency |
 | Ruby | aws-sdk-autoscaling | 1.135.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudformation | 1.131.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.118.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudwatchlogs | 1.116.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.224.0 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-ec2 | 1.523.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-ec2 | 1.524.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.132.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.122.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-kms | 1.101.0 | Apache-2.0 | Official AWS Ruby gem for AWS Key Management Service (KMS) | <https://github.com/aws/aws-sdk-ruby> | 2023-06-12 | Low | Access AWS services | Official AWS Ruby SDK |
