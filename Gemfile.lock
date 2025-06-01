@@ -45,7 +45,7 @@ GEM
       aws-eventstream (~> 1, >= 1.0.2)
     base64 (0.3.0)
     bigdecimal (3.2.1)
-    csv (3.3.4)
+    csv (3.3.5)
     httparty (0.23.1)
       csv
       mini_mime (>= 1.0.0)
@@ -96,7 +96,7 @@ GEM
     rubocop-graphql (1.5.5)
       lint_roller (~> 1.1)
       rubocop (>= 1.72.1, < 2)
-    rubocop-minitest (0.38.0)
+    rubocop-minitest (0.38.1)
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
       rubocop-ast (>= 1.38.0, < 2.0)
