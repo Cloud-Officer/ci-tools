@@ -58,7 +58,7 @@ begin
       exit(1)
     end
 
-    next unless response.access_key_metadata.count.positive?
+    next if response.access_key_metadata.none?
 
     response.access_key_metadata.each do |key_metadata|
       if key_metadata.access_key_id == access_key
