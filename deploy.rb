@@ -222,13 +222,15 @@ begin
     elb = Aws::ElasticLoadBalancingV2::Client.new
     target_group_arn = nil
 
-    port = '80'
-    port = '8443-HTTP2' if options[:instance] == 'grpc'
+    ports = %w[80 443]
+    ports = ['8443-HTTP2'] if options[:instance] == 'grpc'
     puts('Checking load balancer target groups...')
 
     elb.describe_target_groups.each do |targets|
       targets.target_groups.each do |group|
-        target_group_arn = group.target_group_arn if group.target_group_name[/#{options[:environment]}\d*-#{port}$/]
+        ports.each do |port|
+          target_group_arn = group.target_group_arn if group.target_group_name[/#{options[:environment]}\d*-#{port}$/]
+        end
       end
     end
 
