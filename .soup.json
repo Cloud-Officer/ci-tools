@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1136.0",
+    "version": "1.1138.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -62,7 +62,7 @@
   "aws-sdk-cloudfront": {
     "language": "Ruby",
     "package": "aws-sdk-cloudfront",
-    "version": "1.121.0",
+    "version": "1.122.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.542.0",
+    "version": "1.543.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -422,7 +422,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.79.0",
+    "version": "1.79.1",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
@@ -523,18 +523,6 @@
     "description": "Ruby/ProgressBar is an extremely flexible text progress bar library for Ruby",
     "website": "https://github.com/jfelchner/ruby-progressbar",
     "last_verified_at": "2024-06-02",
-    "risk_level": "Low",
-    "requirements": "Dependency",
-    "verification_reasoning": "Dependency"
-  },
-  "tsort": {
-    "language": "Ruby",
-    "package": "tsort",
-    "version": "0.2.0",
-    "license": "Ruby",
-    "description": "Topological sorting using Tarjan's algorithm",
-    "website": "https://github.com/ruby/tsort",
-    "last_verified_at": "2025-07-28",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
