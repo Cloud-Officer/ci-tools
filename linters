@@ -18,11 +18,11 @@ fi
 if [ -f .markdownlint.yml ]; then
   echo "Checking Markdown..."
 
-  if ! type -P markdownlint &>/dev/null; then
-    brew install markdownlint-cli
+  if ! type -P markdownlint-cli2 &>/dev/null; then
+    brew install markdownlint-cli2
   fi
 
-  markdownlint . --ignore '{**/vendor/**,**/node_modules/**,**/Libraries/**,**/Pods/**}'
+  markdownlint-cli2 "**/*.md" --ignore '{**/vendor/**,**/node_modules/**,**/Libraries/**,**/Pods/**}'
 fi
 
 if [ -f .yamllint.yml ]; then
