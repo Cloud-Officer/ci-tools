@@ -192,6 +192,8 @@ jobs:
       shell: bash
       if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
       run: |
+        pwd
+        ls -al
         if [ "${RUNNER_OS}" == "Linux" ]; then
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           brew update
