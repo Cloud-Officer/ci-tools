@@ -22,7 +22,7 @@ if [ -f .markdownlint.yml ]; then
     brew install markdownlint-cli2
   fi
 
-  markdownlint-cli2 "**/*.md" --ignore '{.*/**,**/vendor/**,**/node_modules/**,**/Libraries/**,**/Pods/**}'
+  markdownlint-cli2 "**/*.md" "#.*" "#**/vendor/**" "#**/node_modules/**" "#**/Libraries/**" "#**/Pods/**"
 fi
 
 if [ -f .yamllint.yml ]; then
