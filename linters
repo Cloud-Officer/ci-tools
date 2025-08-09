@@ -9,7 +9,14 @@ if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
   echo "Checking GitHub Actions workflow files..."
 
   if ! type -P actionlint &>/dev/null; then
-    brew install actionlint
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install actionlint
+    else
+      tarball_url="$(curl -s https://api.github.com/repos/rhysd/actionlint/releases/latest | grep -E "browser_download_url.*linux_amd64" | cut -d\" -f4)"
+      curl -sSL "${tarball_url}" | tar zxf - actionlint
+      chmod 0755 actionlint
+      sudo mv actionlint /usr/local/bin/
+    fi
   fi
 
   actionlint
@@ -19,7 +26,17 @@ if [ -f .markdownlint.yml ]; then
   echo "Checking Markdown..."
 
   if ! type -P markdownlint-cli2 &>/dev/null; then
-    brew install markdownlint-cli2
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install markdownlint-cli2
+    elif type -P npm &>/dev/null; then
+      if type -P npm | grep "${HOME}" &>/dev/null; then
+        SUDO=""
+      else
+        SUDO="sudo"
+      fi
+
+      ${SUDO} npm install -g markdownlint-cli2
+    fi
   fi
 
   markdownlint-cli2 "**/*.md" "#.*" "#**/vendor/**" "#**/node_modules/**" "#**/Libraries/**" "#**/Pods/**"
