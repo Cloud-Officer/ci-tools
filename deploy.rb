@@ -45,6 +45,7 @@ begin
     opts.separator('options')
 
     opts.on('--ami ami', String)
+    opts.on('--create_ami_only')
     opts.on('--environment environment', String)
     opts.on('--instance instance', String)
     opts.on('--type instance_type', String)
@@ -194,6 +195,11 @@ begin
     )
     ami_id = ami.image_id
     puts("Image creation completed for #{ami.image_id}.")
+
+    if options[:create_ami_only]
+      puts('Exiting now as --create_ami_only was supplied.')
+      exit
+    end
   end
 
   # find auto scaling group
