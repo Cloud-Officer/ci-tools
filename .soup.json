@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1156.0",
+    "version": "1.1159.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -38,7 +38,7 @@
   "aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.143.0",
+    "version": "1.144.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -530,9 +530,9 @@
   "unicode-display_width": {
     "language": "Ruby",
     "package": "unicode-display_width",
-    "version": "3.1.5",
+    "version": "3.2.0",
     "license": "MIT",
-    "description": "[Unicode 16.0.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, Emoji specification, and other data.",
+    "description": "[Unicode 17.0.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, Emoji specification, and other data.",
     "website": "https://github.com/janlelis/unicode-display_width",
     "last_verified_at": "2024-06-02",
     "risk_level": "Low",
@@ -542,9 +542,9 @@
   "unicode-emoji": {
     "language": "Ruby",
     "package": "unicode-emoji",
-    "version": "4.0.4",
+    "version": "4.1.0",
     "license": "MIT",
-    "description": "[Emoji 16.0] Provides Unicode Emoji data and regexes, incorporating the latest Unicode and Emoji standards",
+    "description": "[Emoji 17.0] Provides Unicode Emoji data and regexes, incorporating the latest Unicode and Emoji standards",
     "website": "https://github.com/janlelis/unicode-emoji",
     "last_verified_at": "2024-11-27",
     "risk_level": "Low",
