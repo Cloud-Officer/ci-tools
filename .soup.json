@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1161.0",
+    "version": "1.1166.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.232.0",
+    "version": "3.233.0",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.557.0",
+    "version": "1.560.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-kms": {
     "language": "Ruby",
     "package": "aws-sdk-kms",
-    "version": "1.112.0",
+    "version": "1.113.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -158,7 +158,7 @@
   "aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.202.0",
+    "version": "1.203.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -254,7 +254,7 @@
   "json": {
     "language": "Ruby",
     "package": "json",
-    "version": "2.14.0",
+    "version": "2.15.0",
     "license": "Ruby",
     "description": "A JSON implementation as a JRuby extension.",
     "website": "https://github.com/ruby/json",
@@ -422,7 +422,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.80.2",
+    "version": "1.81.1",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
@@ -434,7 +434,7 @@
   "rubocop-ast": {
     "language": "Ruby",
     "package": "rubocop-ast",
-    "version": "1.46.0",
+    "version": "1.47.1",
     "license": "MIT",
     "description": "  RuboCop's Node and NodePattern classes.",
     "website": "https://www.rubocop.org/",
