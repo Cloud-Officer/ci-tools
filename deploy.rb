@@ -14,6 +14,55 @@ require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
 require 'optparse'
 
+# PATCH FOR OPENSSL 3.6.0 CRL CHECKING ISSUE
+# Custom HTTP handler for AWS SDK that doesn't use CRL checking
+class NoCRLHandler < Seahorse::Client::NetHttp::Handler
+  def pool_for(endpoint)
+    Thread.current["#{endpoint.host}:#{endpoint.port}"] ||=
+      begin
+        http = Net::HTTP.new(endpoint.host, endpoint.port)
+
+        if endpoint.scheme == 'https'
+          http.use_ssl = true
+          http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+          http.verify_hostname = true if http.respond_to?(:verify_hostname=)
+
+          # Create custom SSL context without CRL checking
+          context = OpenSSL::SSL::SSLContext.new
+          context.set_params(
+            verify_mode: OpenSSL::SSL::VERIFY_PEER,
+            min_version: OpenSSL::SSL::TLS1_2_VERSION
+          )
+
+          # Set CA file if available
+          ca_file = [
+            '/opt/homebrew/etc/ca-certificates/cert.pem',
+            '/etc/ssl/certs/ca-certificates.crt',
+            OpenSSL::X509::DEFAULT_CERT_FILE
+          ].find { |f| File.exist?(f) }
+
+          context.ca_file = ca_file if ca_file
+          http.cert_store = context.cert_store if context.respond_to?(:cert_store)
+
+          # Don't set CRL checking flags
+          http.ssl_context = context if http.respond_to?(:ssl_context=)
+        end
+
+        http.open_timeout = endpoint.http_open_timeout if endpoint.http_open_timeout
+        http.read_timeout = endpoint.http_read_timeout if endpoint.http_read_timeout
+        http
+      end
+  end
+end
+
+# Apply the custom handler to AWS configuration
+Aws.config.update(
+  {
+    http_handler: NoCRLHandler.new,
+    ssl_verify_peer: true
+  }
+)
+
 def wait_for_healthy_instances(elb, target_group_arn)
   puts('Waiting for all instances to be healthy...')
 
