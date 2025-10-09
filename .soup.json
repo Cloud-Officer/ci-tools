@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1168.0",
+    "version": "1.1170.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -194,7 +194,7 @@
   "bigdecimal": {
     "language": "Ruby",
     "package": "bigdecimal",
-    "version": "3.2.3",
+    "version": "3.3.1",
     "license": "Ruby",
     "description": "This library provides arbitrary-precision decimal floating-point number class.",
     "website": "https://github.com/ruby/bigdecimal",
@@ -218,7 +218,7 @@
   "httparty": {
     "language": "Ruby",
     "package": "httparty",
-    "version": "0.23.1",
+    "version": "0.23.2",
     "license": "MIT",
     "description": "Makes http fun! Also, makes consuming restful web services dead easy.",
     "website": "https://github.com/jnunemaker/httparty",
@@ -254,7 +254,7 @@
   "json": {
     "language": "Ruby",
     "package": "json",
-    "version": "2.15.0",
+    "version": "2.15.1",
     "license": "Ruby",
     "description": "A JSON implementation as a JRuby extension.",
     "website": "https://github.com/ruby/json",
@@ -374,7 +374,7 @@
   "prism": {
     "language": "Ruby",
     "package": "prism",
-    "version": "1.5.1",
+    "version": "1.5.2",
     "license": "MIT",
     "description": "Prism Ruby parser",
     "website": "https://github.com/ruby/prism",
