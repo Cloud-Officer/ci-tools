@@ -8,7 +8,7 @@ yaml_files=(.github/workflows/*.yaml)
 if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
   echo "Checking GitHub Actions workflow files..."
 
-  if ! type -P actionlint &>/dev/null; then
+  if ! command -v actionlint &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install actionlint
     else
@@ -25,11 +25,11 @@ fi
 if [ -f .markdownlint.yml ]; then
   echo "Checking Markdown..."
 
-  if ! type -P markdownlint-cli2 &>/dev/null; then
+  if ! command -v markdownlint-cli2 &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install markdownlint-cli2
-    elif type -P npm &>/dev/null; then
-      if type -P npm | grep "${HOME}" &>/dev/null; then
+    elif command -v npm &>/dev/null; then
+      if command -v npm | grep "${HOME}" &>/dev/null; then
         SUDO=""
       else
         SUDO="sudo"
@@ -45,7 +45,7 @@ fi
 if [ -f .yamllint.yml ]; then
   echo "Checking YAML..."
 
-  if ! type -P yamllint &>/dev/null; then
+  if ! command -v yamllint &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install yamllint
     else
@@ -59,7 +59,7 @@ fi
 if [ -f .shellcheckrc ]; then
   echo "Checking shell scripts..."
 
-  if ! type -P shellcheck &>/dev/null; then
+  if ! command -v shellcheck &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install shellcheck
     else
@@ -73,7 +73,7 @@ fi
 if [ -f .hadolint.yaml ]; then
   echo "Checking Dockerfiles..."
 
-  if ! type -P hadolint &>/dev/null; then
+  if ! command -v hadolint &>/dev/null; then
     brew install hadolint
   fi
 
@@ -84,7 +84,7 @@ fi
 if [ -f .golangci.yml ]; then
   echo "Checking Go..."
 
-  if ! type -P golangci-lint &>/dev/null; then
+  if ! command -v golangci-lint &>/dev/null; then
     brew install golangci-lint
   fi
 
@@ -94,7 +94,7 @@ fi
 if [ -f .pmd.xml ]; then
   echo "Checking Java/JS/SQL with pmd..."
 
-  if ! type -P pmd &>/dev/null; then
+  if ! command -v pmd &>/dev/null; then
     brew install pmd
   fi
 
@@ -107,7 +107,7 @@ if [ -f .eslintrc.json ]; then
 
   INSTALL_ESLINT=0
 
-  if ! type -P eslint &>/dev/null; then
+  if ! command -v eslint &>/dev/null; then
     echo "Installing eslint@8 because not present"
     INSTALL_ESLINT=1
   fi
@@ -121,11 +121,11 @@ if [ -f .eslintrc.json ]; then
     if uname -s | grep Darwin &>/dev/null; then
       npm install -g eslint@8
     else
-      if ! type -P npm &>/dev/null; then
+      if ! command -v npm &>/dev/null; then
         sudo apt-get --yes install --no-install-recommends npm
       fi
 
-      if type -P npm | grep "${HOME}" &>/dev/null; then
+      if command -v npm | grep "${HOME}" &>/dev/null; then
         SUDO=""
       else
         SUDO="sudo"
@@ -141,7 +141,7 @@ fi
 if [ -f .editorconfig ]; then
   echo "Checking Kotlin with ktlint..."
 
-  if ! type -P ktlint &>/dev/null; then
+  if ! command -v ktlint &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install ktlint
     else
@@ -155,7 +155,7 @@ fi
 if [ -f .bandit ]; then
   echo "Checking Python with bandit..."
 
-  if ! type -P bandit &>/dev/null; then
+  if ! command -v bandit &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install bandit
     else
@@ -170,7 +170,7 @@ fi
 if [ -f .flake8 ]; then
   echo "Checking Python with flake8..."
 
-  if ! type -P flake8 &>/dev/null; then
+  if ! command -v flake8 &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install flake8
     else
@@ -188,7 +188,7 @@ fi
 if [ -f .protolint.yaml ]; then
   echo "Checking Protocol Buffer with protolint..."
 
-  if ! type -P protolint &>/dev/null; then
+  if ! command -v protolint &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew tap yoheimuta/protolint
       brew install protolint
@@ -203,11 +203,11 @@ fi
 if [ -f .rubocop.yml ]; then
   echo "Checking Ruby..."
 
-  if ! type -P rubocop &>/dev/null; then
+  if ! rubocop --version &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
     else
-      if type -P gem | grep "${HOME}" &>/dev/null; then
+      if command -v gem | grep "${HOME}" &>/dev/null; then
         SUDO=""
       else
         SUDO="sudo"
@@ -224,7 +224,7 @@ fi
 if [ -f .swiftlint.yml ]; then
   echo "Checking Swift..."
 
-  if ! type -P swiftlint &>/dev/null; then
+  if ! command -v swiftlint &>/dev/null; then
     if uname -s | grep Darwin &>/dev/null; then
       brew install swiftlint
     else
