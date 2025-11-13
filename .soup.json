@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.573.0",
+    "version": "1.575.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -110,7 +110,7 @@
   "aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.141.0",
+    "version": "1.142.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -494,7 +494,7 @@
   "rubocop-rspec": {
     "language": "Ruby",
     "package": "rubocop-rspec",
-    "version": "3.7.0",
+    "version": "3.8.0",
     "license": "MIT",
     "description": "Code style checking for RSpec files.",
     "website": "https://github.com/rubocop/rubocop-rspec",
