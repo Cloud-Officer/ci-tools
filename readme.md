@@ -18,6 +18,9 @@
   * [ssh-jump](#ssh-jump)
     * [Usage ssh-jump](#usage-ssh-jump)
     * [Examples ssh-jump](#examples-ssh-jump)
+  * [sync-jira-release](#sync-jira-release)
+    * [Usage sync-jira-release](#usage-sync-jira-release)
+    * [Examples sync-jira-release](#examples-sync-jira-release)
 * [Contributing](#contributing)
 
 ## Introduction
@@ -140,7 +143,58 @@ ssh-jump --profile ugm worker-prod3-spot                                        
 1    worker-prod3-spot 10.3.106.201
 2    worker-prod3-spot 10.3.105.91
 3    worker-prod3-spot 10.3.100.193
-Connect to what line ? 
+Connect to what line ?
+```
+
+### sync-jira-release
+
+Synchronize Jira releases with GitHub pull requests. This tool automatically identifies all Jira issues mentioned in pull requests between two git tags and updates them with the specified Jira release version.
+
+#### Usage sync-jira-release
+
+```bash
+sync-jira-release <tag1> <tag2> <jira_release>
+
+Arguments:
+  tag1          Git tag marking the start of the release range (older tag)
+  tag2          Git tag marking the end of the release range (newer tag)
+  jira_release  Name of the Jira release to associate with the issues
+
+Required environment variables:
+  JIRA_USER_EMAIL  Email address of the Jira user account
+  JIRA_API_TOKEN   API token for Jira authentication
+  JIRA_BASE_URL    Base URL of your Jira instance (e.g., https://company.atlassian.net)
+  GITHUB_TOKEN     GitHub personal access token for authentication
+```
+
+Prerequisites:
+- Both git tags must exist in the repository
+- The Jira release must already exist in Jira
+- Repository must have a `.github/pull_request_template.md` file containing the Jira project key pattern (e.g., `[DEV-XXXX]`)
+- Pull request descriptions should contain Jira issue keys in the format `PROJECT-NUMBER`
+
+The tool will:
+1. Auto-install the Jira CLI if not present (arm64 macOS/Linux only)
+2. Extract the Jira project key from your PR template
+3. Find all pull requests between the two tags
+4. Extract Jira issue keys from PR descriptions
+5. Update each issue to add the release fix version
+6. Open the Jira release report in your browser
+
+#### Examples sync-jira-release
+
+```bash
+# Set up environment variables
+export JIRA_USER_EMAIL="developer@company.com"
+export JIRA_API_TOKEN="your_api_token_here"
+export JIRA_BASE_URL="https://company.atlassian.net"
+export GITHUB_TOKEN="your_github_token"
+
+# Sync issues from all PRs between v1.0.0 and v1.1.0 to Jira release "Release 1.1.0"
+sync-jira-release v1.0.0 v1.1.0 "Release 1.1.0"
+
+# Sync issues from all PRs between two recent tags
+sync-jira-release v2023.10.01 v2023.11.01 "November 2023 Release"
 ```
 
 ## Contributing
