@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+set -e
+
+# Check if jira CLI is installed, if not install it
+if ! command -v jira &> /dev/null; then
+  echo "jira CLI not found. Installing..."
+
+  # Detect OS and architecture
+  OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+  ARCH=$(uname -m)
+
+  if [ "${ARCH}" = "arm64" ] || [ "${ARCH}" = "aarch64" ]; then
+    ARCH="arm64"
+  else
+    echo "Error: Only arm64/aarch64 architecture is supported for auto-installation"
+    exit 1
+  fi
+
+  if [ "${OS}" != "darwin" ] && [ "${OS}" != "linux" ]; then
+    echo "Error: Only macOS (darwin) and Linux are supported for auto-installation"
+    exit 1
+  fi
+
+  # Get latest version
+  LATEST_VERSION=$(curl -s https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+
+  if [ -z "${LATEST_VERSION}" ]; then
+    echo "Error: Could not determine latest jira CLI version"
+    exit 1
+  fi
+
+  echo "Installing jira CLI version ${LATEST_VERSION} for ${OS}/${ARCH}..."
+
+  # Map OS name for download URL
+  if [ "${OS}" = "darwin" ]; then
+    DOWNLOAD_OS="macOS"
+  else
+    DOWNLOAD_OS="${OS}"
+  fi
+
+  # Download and install
+  TEMP_DIR=$(mktemp -d)
+  DOWNLOAD_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${LATEST_VERSION}/jira_${LATEST_VERSION}_${DOWNLOAD_OS}_${ARCH}.tar.gz"
+
+  curl -sL "${DOWNLOAD_URL}" -o "${TEMP_DIR}/jira.tar.gz"
+  tar -xzf "${TEMP_DIR}/jira.tar.gz" -C "${TEMP_DIR}"
+
+  # Install to /usr/local/bin or ~/.local/bin
+  JIRA_BINARY="${TEMP_DIR}/jira_${LATEST_VERSION}_${DOWNLOAD_OS}_${ARCH}/bin/jira"
+
+  if [ -w /usr/local/bin ]; then
+    mv "${JIRA_BINARY}" /usr/local/bin/
+    echo "jira CLI installed to /usr/local/bin/jira"
+  else
+    mkdir -p "${HOME}/.local/bin"
+    mv "${JIRA_BINARY}" "${HOME}/.local/bin/"
+    echo "jira CLI installed to ${HOME}/.local/bin/jira"
+    echo "Make sure ${HOME}/.local/bin is in your PATH"
+    export PATH="${HOME}/.local/bin:${PATH}"
+  fi
+
+  rm -rf "${TEMP_DIR}"
+  echo "jira CLI installed successfully!"
+fi
+
+# Check if gh CLI is installed
+if ! command -v gh &>/dev/null; then
+  echo "Error: GitHub CLI (gh) is not installed."
+
+  if command -v brew &>/dev/null; then
+    brew install gh
+  else
+    echo "Install it from: https://cli.github.com/"
+    exit 1
+  fi
+fi
+
+if [ "$#" -ne 3 ]; then
+  echo "Usage: ${0} <tag1> <tag2> <jira_release>"
+  exit 1
+fi
+
+if [ -z "${JIRA_USER_EMAIL}" ] || [ -z "${JIRA_API_TOKEN}" ] || [ -z "${JIRA_BASE_URL}" ] || [ -z "${GITHUB_TOKEN}" ]; then
+  echo "Error: Required environment variables \`JIRA_USER_EMAIL\`, \`JIRA_API_TOKEN\`, \`JIRA_BASE_URL\`, and \`GITHUB_TOKEN\` must be set."
+  exit 1
+fi
+
+# Check if jira CLI is configured, if not run jira init
+if [ ! -f "${HOME}/.config/.jira/.config.yml" ]; then
+  echo "jira CLI not configured. Running jira init..."
+  echo ""
+  echo "Use the following values when prompted:"
+  echo "  Installation type: Cloud"
+  echo "  Server URL: ${JIRA_BASE_URL}"
+  echo "  Login email: ${JIRA_USER_EMAIL}"
+  echo ""
+  jira init
+fi
+
+# Verify the release exists in Jira and get its ID
+
+RELEASE_INFO=$(jira release list 2>/dev/null | tail -n +2 | awk -F'\t' -v name="${3}" '$2 == name {print $1}')
+
+if [ -z "${RELEASE_INFO}" ]; then
+  echo "Error: Release '${3}' does not exist in Jira."
+  echo ""
+  echo "Please create the release '${3}' in Jira before running this script."
+  exit 1
+fi
+
+RELEASE_ID=$(echo "${RELEASE_INFO}" | tr -d ' ')
+echo "Release '${3}' found (ID: ${RELEASE_ID})."
+
+# Verify both git tags exist
+
+if ! git rev-parse "${1}" &>/dev/null; then
+  echo "Error: Git tag '${1}' does not exist."
+  exit 1
+fi
+
+if ! git rev-parse "${2}" &>/dev/null; then
+  echo "Error: Git tag '${2}' does not exist."
+  exit 1
+fi
+
+echo "Git tags '${1}' and '${2}' found."
+
+# Extract Jira project key from PR template
+PR_TEMPLATE=".github/pull_request_template.md"
+
+if [ ! -f "${PR_TEMPLATE}" ]; then
+  echo "Error: PR template not found at ${PR_TEMPLATE}"
+  exit 1
+fi
+
+# Extract prefix from pattern like [DEV-XXXX](https://...atlassian.net/browse/DEV-XXXX)
+JIRA_PREFIX=$(grep -oE '\[[A-Z]+-XXXX\]' "${PR_TEMPLATE}" | head -1 | sed 's/\[//' | sed 's/-XXXX\]//')
+
+if [ -z "${JIRA_PREFIX}" ]; then
+  echo "Error: Could not find Jira project key in PR template."
+  exit 1
+fi
+
+echo "Using Jira project prefix: ${JIRA_PREFIX}"
+
+repo=$(git config --get remote.origin.url | cut -d : -f 2 | sed 's/\.git$//')
+temp_file=$(mktemp)
+
+for pr_number in $(git log "${1}..${2}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g'); do
+  pr_description=$(gh pr view "${pr_number}" --repo "${repo}" --json body -q '.body')
+  echo "Checking PR ${pr_number}..."expected
+  echo "${pr_description}" | grep -o "\b${JIRA_PREFIX}-[0-9]\+\b" >> "${temp_file}" || true
+done
+
+sort "${temp_file}" | uniq > "${temp_file}_unique"
+
+# shellcheck disable=SC2013
+for issue_key in $(cat "${temp_file}_unique"); do
+  echo "Updating issue ${issue_key}..."
+  jira issue edit "${issue_key}" --no-input --fix-version "${3}" || true
+done
+
+rm -f "${temp_file}" "${temp_file}_unique"
+
+echo ""
+echo "Done! Opening release report for review..."
+RELEASE_URL="${JIRA_BASE_URL}/projects/${JIRA_PREFIX}/versions/${RELEASE_ID}/tab/release-report-all-issues"
+echo "${RELEASE_URL}"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+  open "${RELEASE_URL}"
+else
+  xdg-open "${RELEASE_URL}"
+fi
