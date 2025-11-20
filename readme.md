@@ -174,7 +174,7 @@ Connect to what line ?
 ```
 
 ```bash
-ssm-jump --profile ugm worker-prod3-standalone -f "api-db-slave-prod3.portablenorthpole.com:6033:6033" 
+ssm-jump --profile ugm worker-prod3-standalone --forward "api-db-slave-prod3.portablenorthpole.com:6033:6033" 
 ```
 
 ### sync-jira-release
