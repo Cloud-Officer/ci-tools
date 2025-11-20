@@ -199,12 +199,14 @@ Required environment variables:
 ```
 
 Prerequisites:
-- Both git tags must exist in the repository
-- The Jira release must already exist in Jira
-- Repository must have a `.github/pull_request_template.md` file containing the Jira project key pattern (e.g., `[DEV-XXXX]`)
-- Pull request descriptions should contain Jira issue keys in the format `PROJECT-NUMBER`
+
+* Both git tags must exist in the repository
+* The Jira release must already exist in Jira
+* Repository must have a `.github/pull_request_template.md` file containing the Jira project key pattern (e.g., `[DEV-XXXX]`)
+* Pull request descriptions should contain Jira issue keys in the format `PROJECT-NUMBER`
 
 The tool will:
+
 1. Auto-install the Jira CLI if not present (arm64 macOS/Linux only)
 2. Extract the Jira project key from your PR template
 3. Find all pull requests between the two tags
