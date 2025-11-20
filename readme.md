@@ -160,7 +160,7 @@ Usage: ssm-jump.sh [options] hostname
 Options:
   -h, --help                                   Print this help message
   -p, --profile <profile>                      Specify the aws cli profile to use
-  -f, --forward <host:remote_port:local_port>  Specify the aws cli profile to use
+  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC
 ```
 
 #### Examples ssm-jump

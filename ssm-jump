@@ -15,7 +15,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  -h, --help                                   Print this help message"
       echo "  -p, --profile <profile>                      Specify the aws cli profile to use"
-      echo "  -f, --forward <host:remote_port:local_port>  Specify the aws cli profile to use"
+      echo "  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC"
       exit 0
       ;;
     -f | --forward)
