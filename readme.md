@@ -18,6 +18,9 @@
   * [ssh-jump](#ssh-jump)
     * [Usage ssh-jump](#usage-ssh-jump)
     * [Examples ssh-jump](#examples-ssh-jump)
+  * [ssm-jump](#ssm-jump)
+    * [Usage ssm-jump](#usage-ssm-jump)
+    * [Examples ssm-jump](#examples-ssm-jump)
   * [sync-jira-release](#sync-jira-release)
     * [Usage sync-jira-release](#usage-sync-jira-release)
     * [Examples sync-jira-release](#examples-sync-jira-release)
@@ -139,11 +142,39 @@ Options:
 #### Examples ssh-jump
 
 ```bash
-ssh-jump --profile ugm worker-prod3-spot                                              ✔  10:28:30  
+ssh-jump --profile ugm worker-prod3-spot
 1    worker-prod3-spot 10.3.106.201
 2    worker-prod3-spot 10.3.105.91
 3    worker-prod3-spot 10.3.100.193
 Connect to what line ?
+```
+
+### ssm-jump
+
+Open an SSM connection to a host by name. A VPN connection is not required. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
+
+#### Usage ssm-jump
+
+```bash
+Usage: ssm-jump.sh [options] hostname
+Options:
+  -h, --help                                   Print this help message
+  -p, --profile <profile>                      Specify the aws cli profile to use
+  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC
+```
+
+#### Examples ssm-jump
+
+```bash
+ssm-jump --profile ugm worker-prod3-spot
+1    worker-prod3-spot i-0b748be1c34a356b8
+2    worker-prod3-spot i-0481934cbedfa34d9
+3    worker-prod3-spot i-05199991cce3c8ace
+Connect to what line ?
+```
+
+```bash
+ssm-jump --profile ugm worker-prod3-standalone --forward "api-db-slave-prod3.portablenorthpole.com:6033:6033" 
 ```
 
 ### sync-jira-release
@@ -168,12 +199,14 @@ Required environment variables:
 ```
 
 Prerequisites:
-- Both git tags must exist in the repository
-- The Jira release must already exist in Jira
-- Repository must have a `.github/pull_request_template.md` file containing the Jira project key pattern (e.g., `[DEV-XXXX]`)
-- Pull request descriptions should contain Jira issue keys in the format `PROJECT-NUMBER`
+
+* Both git tags must exist in the repository
+* The Jira release must already exist in Jira
+* Repository must have a `.github/pull_request_template.md` file containing the Jira project key pattern (e.g., `[DEV-XXXX]`)
+* Pull request descriptions should contain Jira issue keys in the format `PROJECT-NUMBER`
 
 The tool will:
+
 1. Auto-install the Jira CLI if not present (arm64 macOS/Linux only)
 2. Extract the Jira project key from your PR template
 3. Find all pull requests between the two tags

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -e
+
+positional=()
+profile=""
+forward=""
+parameters=""
+
+while [[ $# -gt 0 ]]; do
+  key="${1}"
+
+  case ${key} in
+    -h | --help)
+      echo "Usage: ssh-jump.sh [options] hostname"
+      echo "Options:"
+      echo "  -h, --help                                   Print this help message"
+      echo "  -p, --profile <profile>                      Specify the aws cli profile to use"
+      echo "  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC"
+      exit 0
+      ;;
+    -f | --forward)
+      forward="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -p | --profile)
+      profile="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    *)                     # unknown option
+      positional+=("${1}") # save it in an array for later
+      shift                # past argument
+      ;;
+  esac
+done
+
+set -- "${positional[@]}" # restore positional parameters
+
+if [ -z "${profile}" ]; then
+  echo "No profile specified!"
+  exit 1
+fi
+
+if [ -z "${1}" ]; then
+  echo "No hostname specified!"
+  exit 1
+fi
+
+if [ ! -z "${forward}" ]; then
+  IFS=":" read -a forward_array <<< "${forward}"
+  if [ ${#forward_array[@]} -ne 3 ]; then
+    echo "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
+    exit 1
+  fi
+fi
+
+instances=$(aws --profile "${profile}" ec2 describe-instances --filters 'Name=instance-state-name,Values=running' --output=json | jq '.Reservations[].Instances[] | ( (.Tags[] | select(.Key=="Name") | .Value) + " " + .InstanceId)' | sed 's/"//g' | grep "^${1} ")
+
+if [ "$(echo "${instances}" | grep -o "${1} " | wc -l | tr -d ' ')" = "1" ]; then
+  instance_id=$(echo "${instances}" | awk '{ print $2 }')
+else
+  max_lines=0
+
+  while IFS= read -r line; do
+    max_lines=$((max_lines + 1))
+    echo "${max_lines}    ${line}"
+  done <<< "${instances}"
+
+  input=0
+
+  while [ ${input} -lt 1 ] || [ ${input} -gt "${max_lines}" ]; do
+    echo -n "Connect to what line ? "
+    read -r input
+  done
+
+  max_lines=0
+
+  while IFS= read -r line; do
+    max_lines=$((max_lines + 1))
+
+    if [ "${max_lines}" -eq "${input}" ]; then
+      instance_id=$(echo "${line}" | awk '{ print $2 }')
+    fi
+  done <<< "${instances}"
+fi
+
+if [ -z "${forward}" ]; then
+  echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\""
+  aws --profile "${profile}" ssm start-session --target "${instance_id}"
+else
+  forward_host=${forward_array[0]}
+  forward_remote_port=${forward_array[1]}
+  forward_local_port=${forward_array[2]}
+  parameters="{\"host\":[\"${forward_host}\"],\"portNumber\":[\"${forward_remote_port}\"],\"localPortNumber\":[\"${forward_local_port}\"]}"
+
+  echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '${parameters}'"
+  aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "AWS-StartPortForwardingSessionToRemoteHost" --parameters "${parameters}"
+fi
