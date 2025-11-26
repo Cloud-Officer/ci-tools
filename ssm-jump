@@ -55,9 +55,9 @@ if [ ! -z "${forward}" ]; then
   fi
 fi
 
-instances=$(aws --profile "${profile}" ec2 describe-instances --filters 'Name=instance-state-name,Values=running' --output=json | jq '.Reservations[].Instances[] | ( (.Tags[] | select(.Key=="Name") | .Value) + " " + .InstanceId)' | sed 's/"//g' | grep "^${1} ")
+instances=$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" --filters "Name=tag:Name,Values=${1}" --query "Reservations[*].Instances[*].{a: Tags[?Key=='Name'] | [0].Value, b: InstanceId}" --output text)
 
-if [ "$(echo "${instances}" | grep -o "${1} " | wc -l | tr -d ' ')" = "1" ]; then
+if [ "$(echo "${instances}" | wc -l | tr -d ' ')" = "1" ]; then
   instance_id=$(echo "${instances}" | awk '{ print $2 }')
 else
   max_lines=0
