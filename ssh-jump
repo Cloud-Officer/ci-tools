@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+echo -e "\033[1;31m"
+echo "WARNING: THIS SCRIPT IS DEPRECATED AND WILL BE REMOVED SOON."
+echo ""
+echo "It will be replace by ssm-jump, which has the same syntax. You should run: "
+echo "# ssm-jump ${*}"
+echo -e "\033[0m"
+
 positional=()
 profile=""
 
