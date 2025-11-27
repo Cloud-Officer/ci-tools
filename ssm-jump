@@ -5,6 +5,7 @@ positional=()
 profile=""
 forward=""
 parameters=""
+document="AWS-StartPortForwardingSessionToRemoteHost"
 
 while [[ $# -gt 0 ]]; do
   key="${1}"
@@ -16,6 +17,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -h, --help                                   Print this help message"
       echo "  -p, --profile <profile>                      Specify the aws cli profile to use"
       echo "  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC"
+      echo "  -d, --document <ssm-document-name>           AWS Systems Manager document name (default: ${document})"
       exit 0
       ;;
     -f | --forward)
@@ -25,6 +27,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     -p | --profile)
       profile="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -d | --document)
+      document="${2}"
       shift # past argument
       shift # past value
       ;;
@@ -94,6 +101,6 @@ else
   forward_local_port=${forward_array[2]}
   parameters="{\"host\":[\"${forward_host}\"],\"portNumber\":[\"${forward_remote_port}\"],\"localPortNumber\":[\"${forward_local_port}\"]}"
 
-  echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '${parameters}'"
-  aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "AWS-StartPortForwardingSessionToRemoteHost" --parameters "${parameters}"
+  echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name \"${document}\" --parameters '${parameters}'"
+  aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "${parameters}"
 fi
