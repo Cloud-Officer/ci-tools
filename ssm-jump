@@ -62,7 +62,7 @@ if [ ! -z "${forward}" ]; then
   fi
 fi
 
-instances=$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" --filters "Name=tag:Name,Values=${1}" --query "Reservations[*].Instances[*].{a: Tags[?Key=='Name'] | [0].Value, b: InstanceId}" --output text)
+instances=$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${1}" --query "Reservations[*].Instances[*].{a: Tags[?Key=='Name'] | [0].Value, b: InstanceId}" --output text)
 
 if [ "$(echo "${instances}" | wc -l | tr -d ' ')" = "1" ]; then
   instance_id=$(echo "${instances}" | awk '{ print $2 }')
