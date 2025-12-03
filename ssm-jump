@@ -128,7 +128,8 @@ fi
 
 if [ -z "${forward}" ]; then
   echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\""
-  aws --profile "${profile}" ssm start-session --target "${instance_id}"
+  exec aws --profile "${profile}" ssm start-session --target "${instance_id}"
+
 else
   forward_host=${forward_array[0]}
   forward_remote_port=${forward_array[1]}
@@ -136,5 +137,5 @@ else
   parameters="{\"host\":[\"${forward_host}\"],\"portNumber\":[\"${forward_remote_port}\"],\"localPortNumber\":[\"${forward_local_port}\"]}"
 
   echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name \"${document}\" --parameters '${parameters}'"
-  aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "${parameters}"
+  exec aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "${parameters}"
 fi
