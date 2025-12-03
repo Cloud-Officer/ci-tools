@@ -4,6 +4,7 @@ set -e
 positional=()
 profile=""
 autoselect_first="false"
+filter=""
 forward=""
 proxycommand_port=""
 parameters=""
