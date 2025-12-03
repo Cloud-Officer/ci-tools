@@ -3,25 +3,45 @@ set -e
 
 positional=()
 profile=""
+autoselect_first="false"
+filter=""
 forward=""
+proxycommand_port=""
 parameters=""
 document="AWS-StartPortForwardingSessionToRemoteHost"
+
+# fatal helper
+fatal() {
+  echo "$*" >&2
+  exit 1
+}
 
 while [[ $# -gt 0 ]]; do
   key="${1}"
 
   case ${key} in
     -h | --help)
-      echo "Usage: ssh-jump.sh [options] hostname"
+      echo "Usage: ssh-jump.sh [options] internal-ip|instance-id|instance-name"
       echo "Options:"
       echo "  -h, --help                                   Print this help message"
       echo "  -p, --profile <profile>                      Specify the aws cli profile to use"
+      echo "  -a, --autoselect-first                       Automatically select first matching instance without prompting"
       echo "  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC"
+      echo "  -c, --proxy-command <remote_port>            Establish an SSH session to be used as ProxyCommand"
       echo "  -d, --document <ssm-document-name>           AWS Systems Manager document name (default: ${document})"
       exit 0
       ;;
+    -a | --autoselect-first)
+      autoselect_first="true"
+      shift # past argument
+      ;;
     -f | --forward)
       forward="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -c | --proxy-command)
+      proxycommand_port="${2}"
       shift # past argument
       shift # past value
       ;;
@@ -44,34 +64,56 @@ done
 
 set -- "${positional[@]}" # restore positional parameters
 
+# first positional argument is the target
+target="${1}"
+
 if [ -z "${profile}" ]; then
-  echo "No profile specified!"
-  exit 1
+  fatal "No profile specified !"
 fi
 
-if [ -z "${1}" ]; then
-  echo "No hostname specified!"
-  exit 1
+if [ -z "${target}" ]; then
+  fatal "No target specified !"
 fi
 
 if [ ! -z "${forward}" ]; then
   IFS=":" read -a forward_array <<< "${forward}"
   if [ ${#forward_array[@]} -ne 3 ]; then
-    echo "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
-    exit 1
+    fatal "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
   fi
 fi
 
-instances=$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=tag:Name,Values=${1}" --query "Reservations[*].Instances[*].{a: Tags[?Key=='Name'] | [0].Value, b: InstanceId}" --output text)
+# perform target lookup (AWS SSM target *must* be an EC2 instance ID)
+if echo "${target}" | grep -qE '^i-.*'; then
+  instances="${target} NONE NONE"
+  echo "using instance ID ${target}" >&2
+elif echo "${target}" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+  filter="Name=private-ip-address,Values=${target}"
+elif echo "${target}" | grep -qE '^[a-z0-9\-]+$'; then
+  filter="Name=tag:Name,Values=${target}"
+else
+  fatal "Invalid target '${target}' !"
+fi
+
+if [ -n "${filter}" ]; then
+  instances="$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" "${filter}" --query "Reservations[*].Instances[*].{a: InstanceId, b: PrivateIpAddress, c: Tags[?Key=='Name'] | [0].Value}" --output text | sort -n)"
+
+  if [ -z "${instances}" ]; then
+	fatal "Unable to detect any instance for target ${target}"
+  fi
+fi
+
+if "${autoselect_first}"; then
+  instances=$(echo "${instances}" | head -n1)
+fi
 
 if [ "$(echo "${instances}" | wc -l | tr -d ' ')" = "1" ]; then
-  instance_id=$(echo "${instances}" | awk '{ print $2 }')
+  instance_id=$(echo "${instances}" | awk '{ print $1 }')
 else
   max_lines=0
 
   while IFS= read -r line; do
     max_lines=$((max_lines + 1))
-    echo "${max_lines}    ${line}"
+    printf "%-2d\t%s\n" "${max_lines}" "${line}"
   done <<< "${instances}"
 
   input=0
@@ -87,14 +129,22 @@ else
     max_lines=$((max_lines + 1))
 
     if [ "${max_lines}" -eq "${input}" ]; then
-      instance_id=$(echo "${line}" | awk '{ print $2 }')
+      instance_id=$(echo "${line}" | awk '{ print $1 }')
     fi
   done <<< "${instances}"
 fi
 
-if [ -z "${forward}" ]; then
+if [ -n "${proxycommand_port}" ]; then
+  # for proxycommand, we *must* start an SSH session
+  document="AWS-StartSSHSession"
+
+  echo "aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "portNumber=${proxycommand_port}""
+  exec aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "portNumber=${proxycommand_port}"
+
+elif [ -z "${forward}" ]; then
   echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\""
-  aws --profile "${profile}" ssm start-session --target "${instance_id}"
+  exec aws --profile "${profile}" ssm start-session --target "${instance_id}"
+
 else
   forward_host=${forward_array[0]}
   forward_remote_port=${forward_array[1]}
@@ -102,5 +152,5 @@ else
   parameters="{\"host\":[\"${forward_host}\"],\"portNumber\":[\"${forward_remote_port}\"],\"localPortNumber\":[\"${forward_local_port}\"]}"
 
   echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name \"${document}\" --parameters '${parameters}'"
-  aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "${parameters}"
+  exec aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "${parameters}"
 fi
