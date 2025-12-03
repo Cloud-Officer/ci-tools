@@ -74,7 +74,7 @@ else
 
   while IFS= read -r line; do
     max_lines=$((max_lines + 1))
-    echo "${max_lines}    ${line}"
+    printf "%-2d\t%s\n" "${max_lines}" "${line}"
   done <<< "${instances}"
 
   input=0
