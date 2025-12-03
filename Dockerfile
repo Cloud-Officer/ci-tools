@@ -12,18 +12,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Update and install dependencies
 RUN ssm_arch="$(test "$(uname -m)" = "x86_64" && echo "64bit" || echo "arm64")" && apt-get update && apt-get install --no-install-recommends --yes autoconf autogen automake build-essential ca-certificates clang curl file gcc git git-lfs intltool libtool libtool-bin make pkg-config ruby ruby-all-dev ruby-build ruby-bundler ruby-dev ssh sudo unzip wget zip && rm -rf /var/lib/apt/lists/* && cd /tmp/ && curl "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" && unzip awscliv2.zip && ./aws/install && curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_${ssm_arch}/session-manager-plugin.deb" -o "session-manager-plugin.deb" && dpkg -i session-manager-plugin.deb && rm -rf ./aws/ awscliv2.zip session-manager-plugin.deb
 
-# Add user soup
-RUN useradd -m -s /bin/bash citools && echo 'citools ALL=(ALL) NOPASSWD:ALL' >>/etc/sudoers
+# Add user/group citools and add ubuntu user to that group
+RUN useradd -m -s /bin/bash citools && echo 'citools ALL=(ALL) NOPASSWD:ALL' >>/etc/sudoers && adduser ubuntu citools
 
 # Clone the soup repository
-USER citools
-WORKDIR /home/citools
-RUN git clone https://github.com/Cloud-Officer/ci-tools.git
+ADD https://github.com/Cloud-Officer/ci-tools.git /home/citools/ci-tools
 
 # Install ci-tools dependencies and create a symlink
 USER root
 WORKDIR /home/citools/ci-tools
-RUN bundle install && ln -s "/home/citools/ci-tools/brew-resources.rb" "/usr/local/bin/brew-resources" && ln -s "/home/citools/ci-tools//cycle-keys.rb" "/usr/local/bin/cycle-keys" && ln -s "/home/citools/ci-tools/deploy.rb" "/usr/local/bin/deploy" && ln -s "/home/citools/ci-tools/encrypt-logs.rb" "/usr/local/bin/encrypt-logs" && ln -s "/home/citools/ci-tools/generate-codeowners" "/usr/local/bin/generate-codeowners" && ln -s "/home/citools/ci-tools/linters" "/usr/local/bin/linters" && ln -s "/home/citools/ci-tools/ssh-jump" "/usr/local/bin/ssh-jump" && ln -s "/home/citools/ci-tools/ssm-jump" "/usr/local/bin/ssm-jump"
+RUN chown -R citools:citools . && bundle install && ln -s "/home/citools/ci-tools/brew-resources.rb" "/usr/local/bin/brew-resources" && ln -s "/home/citools/ci-tools//cycle-keys.rb" "/usr/local/bin/cycle-keys" && ln -s "/home/citools/ci-tools/deploy.rb" "/usr/local/bin/deploy" && ln -s "/home/citools/ci-tools/encrypt-logs.rb" "/usr/local/bin/encrypt-logs" && ln -s "/home/citools/ci-tools/generate-codeowners" "/usr/local/bin/generate-codeowners" && ln -s "/home/citools/ci-tools/linters" "/usr/local/bin/linters" && ln -s "/home/citools/ci-tools/ssh-jump" "/usr/local/bin/ssh-jump" && ln -s "/home/citools/ci-tools/ssm-jump" "/usr/local/bin/ssm-jump"
 
 # Entrypoint
 USER citools
