@@ -151,31 +151,70 @@ Connect to what line ?
 
 ### ssm-jump
 
-Open an SSM connection to a host by name. A VPN connection is not required. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
+Open an SSM connection to an EC2 instance, which can be specified by either:
+
+* an EC2 internal IP address
+* an EC2 instance ID
+* an EC2 instance name (defined by the `Name` tag) (if multiple instances matches that name, the first one in the list will be chosen if `--autoselect-first` is set)
+
+A VPN connection is not required. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
 
 #### Usage ssm-jump
 
 ```bash
-Usage: ssm-jump.sh [options] hostname
+Usage: ssh-jump.sh [options] internal-ip|instance-id|instance-name
 Options:
   -h, --help                                   Print this help message
   -p, --profile <profile>                      Specify the aws cli profile to use
+  -a, --autoselect-first                       Automatically select first matching instance without prompting
   -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC
+  -c, --proxy-command <remote_port>            Establish an SSH session to be used as ProxyCommand
+  -d, --document <ssm-document-name>           AWS Systems Manager document name (default: AWS-StartPortForwardingSessionToRemoteHost)
 ```
 
 #### Examples ssm-jump
 
 ```bash
 ssm-jump --profile ugm worker-prod3-spot
-1    worker-prod3-spot i-0b748be1c34a356b8
-2    worker-prod3-spot i-0481934cbedfa34d9
-3    worker-prod3-spot i-05199991cce3c8ace
+1     i-05a1299ac6942915a    10.3.150.60     worker-prod3-spot
+2     i-0767bc8d4f0505ef8    10.3.114.146    worker-prod3-spot
+3     i-08faa37782eb6a279    10.3.126.153    worker-prod3-spot
+4     i-091454d577ed6c632    10.3.127.49     worker-prod3-spot
+5     i-09adac7717d3122f9    10.3.159.203    worker-prod3-spot
+6     i-0a3ed31cc89a39e4d    10.3.114.233    worker-prod3-spot
+7     i-0a9c1e2d785dcc596    10.3.151.75     worker-prod3-spot
+8     i-0c94fdc1b712d263d    10.3.158.156    worker-prod3-spot
+9     i-0dcf7c304f2683112    10.3.113.9      worker-prod3-spot
 Connect to what line ?
 ```
 
 ```bash
-ssm-jump --profile ugm worker-prod3-standalone --forward "api-db-slave-prod3.portablenorthpole.com:6033:6033" 
+ssm-jump --profile ugm worker-prod3-standalone --forward "api-db-slave-prod3.portablenorthpole.com:6033:6033"
 ```
+
+##### Use as an SSH ProxyCommand
+
+The following snippet is a example of what could be added to your `~/.ssh/config`, which will let you use `ssh 10.1.x.x`, `ssh i-abcd1234`, or `ssh api-beta1-standalone`:
+
+```ssh-config
+Host 10.1.* 10.5.* 10.3.* i-* api-* grpc-* worker-*
+    User                  ubuntu
+    StrictHostKeyChecking no
+    UserKnownHostsFile    /dev/null
+    ProxyCommand          ssm-jump --profile myprofile --autoselect-first --proxy-command %p %h
+```
+
+You could also combine with subshells to manipulate the target name, for example if you want to have a specific prefix:
+
+```ssh-config
+Host myclient-api-* myclient-i-*
+    User                  ubuntu
+    StrictHostKeyChecking no
+    UserKnownHostsFile    /dev/null
+    ProxyCommand          ssm-jump --profile myprofile --autoselect-first --proxy-command %p $(echo "%h" | sed -E 's/^myclient-//')
+```
+
+That way, using `ssh myclient-api-rc5-standalone` will strip the `myclient-` prefix before trying to match an EC2 instance with that name.
 
 ### sync-jira-release
 
