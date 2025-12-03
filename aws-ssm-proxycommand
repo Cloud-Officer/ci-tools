@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+
+# exit on failure
+set -e
+
+# exit on unassigned variable
+set -u
+
+# variables
+positional=()
+profile=""
+target=""
+port="22"
+action="connect"
+filter=""
+
+# fatal helper
+fatal() {
+  echo "$*" >&2
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  key="${1}"
+
+  case ${key} in
+    -h | --help)
+      echo "Usage: $0 [options] [shell command]"
+      echo "Options:"
+      echo "  -h, --help                           Print this help message"
+      echo "  -p, --profile <profile>              Specify the aws cli profile to use"
+      echo "  -P, --port <ssh-port>                SSH port (default: ${port})"
+      echo "  -t, --target <ssh-target>            SSH target, which could be IP address, instance name, or instance ID"
+      echo "  -a, --action <action>                Action to perform, possible choices: connect|dumpconfig|install (default: ${action})"
+      exit 0
+      ;;
+    -p | --profile)
+      profile="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -P | --port)
+      port="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -t | --target)
+      target="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -a | --action)
+      action="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    *)                     # unknown option
+      positional+=("${1}") # save it in an array for later
+      shift                # past argument
+      ;;
+  esac
+done
+
+# restore positional parameters
+set -- "${positional[@]}"
+
+# run action
+case "${action}" in
+  connect)
+    # check parameters
+    if [ -z "${profile}" ]; then
+      fatal "No profile specified !"
+    elif [ -z "${target}" ]; then
+      fatal "No target specified !"
+    fi
+
+    # perform target lookup (AWS SSM target *must* be an EC2 instance ID)
+    if echo "${target}" | grep -qE '^i-.*'; then
+      instance_id="${target}"
+      echo "using instance ID ${target}" >&2
+    elif echo "${target}" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
+      filter="Name=private-ip-address,Values=${target}"
+    elif echo "${target}" | grep -qE '^[a-z0-9\-]+$'; then
+      filter="Name=tag:Name,Values=${target}"
+    else
+      fatal "Invalid target '${target}' !"
+    fi
+
+    if [ -n "${filter}" ]; then
+      instance_id="$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" "${filter}" --query "Reservations[*].Instances[*].{a: InstanceId}" --output text | head -n 1)"
+
+      if [ -z "${instance_id}" ]; then
+        fatal "Unable to detect instance ID for target ${target}"
+      fi
+    fi
+
+    exec aws ssm start-session \
+      --profile "${profile}" \
+      --target "${instance_id}" \
+      --document-name "AWS-StartSSHSession" \
+      --parameters "portNumber=${port}"
+    ;;
+
+  dumpconfig)
+    cat <<EOF
+#
+# This is a sample snippet to be added to your ~/.ssh/config for using ssh and
+# scp commands right away.
+#
+# Feel free to add/remove host wildcards, or modify the default username.
+#
+Host 10.1.* 10.5.* 10.3.* i-* api-* grpc-* worker-*
+    User                  ubuntu
+    StrictHostKeyChecking no
+    UserKnownHostsFile    /dev/null
+    ProxyCommand          aws-ssm-proxycommand --profile ugm --target %h --port %p
+EOF
+    ;;
+
+  install)
+    echo "Invoking sudo permissions to copy aws-ssm-proxycommand to /usr/local/bin/" >&2
+    sudo cp $0 /usr/local/bin/aws-ssm-proxycommand
+    ;;
+
+  *)
+    fatal "Invalid action '${action}' !"
+    ;;
+esac

@@ -18,6 +18,9 @@
   * [ssh-jump](#ssh-jump)
     * [Usage ssh-jump](#usage-ssh-jump)
     * [Examples ssh-jump](#examples-ssh-jump)
+  * [aws-ssm-proxycommand](#aws-ssm-proxycommand)
+    * [Usage aws-ssm-proxycommand](#usage-aws-ssm-proxycommand)
+    * [Installation aws-ssm-proxycommand](#installation-aws-ssm-proxycommand)
   * [ssm-jump](#ssm-jump)
     * [Usage ssm-jump](#usage-ssm-jump)
     * [Examples ssm-jump](#examples-ssm-jump)
@@ -176,6 +179,56 @@ Connect to what line ?
 ```bash
 ssm-jump --profile ugm worker-prod3-standalone --forward "api-db-slave-prod3.portablenorthpole.com:6033:6033" 
 ```
+
+### aws-ssm-proxycommand
+
+This command is intented to be used as an SSH `ProxyCommand`. This will make the user able to use `ssh` and `scp` commands right away
+when using AWS SSM connections. Your AWS user must have access to the `AWS-StartSSHSession` SSM document to be able to use that.
+
+The `--target` parameter can be either:
+
+* an EC2 internal IP address
+* an EC2 instance ID
+* an EC2 instance name (defined by the `Name` tag) (if multiple instances matches that name, the first one in the list will be chosen)
+
+#### Installation aws-ssm-proxycommand
+
+You can use the 'install' action to copy the script in your PATH:
+
+```bash
+#~ ./aws-ssm-proxycommand --action install
+Invoking sudo permissions to copy aws-ssm-proxycommand to /usr/local/bin/
+[sudo] user password :
+#~ command -v aws-ssm-proxycommand
+/usr/local/bin/aws-ssm-proxycommand
+#~
+```
+
+#### Usage aws-ssm-proxycommand
+
+The following snippet is a example of what could be added to your `~/.ssh/config`, which will let you use `ssh 10.1.x.x`, `ssh i-abcd1234`, or `ssh api-beta1-standalone`:
+
+```ssh-config
+Host 10.1.* 10.5.* 10.3.* i-* api-* grpc-* worker-*
+    User                  ubuntu
+    StrictHostKeyChecking no
+    UserKnownHostsFile    /dev/null
+    ProxyCommand          aws-ssm-proxycommand --profile myprofile --target %h --port %p
+```
+
+You could also combine with subshells to manipulate the target name, for example if you want to have a specific prefix:
+
+```ssh-config
+Host myclient-api-* myclient-i-*
+    User                  ubuntu
+    StrictHostKeyChecking no
+    UserKnownHostsFile    /dev/null
+    ProxyCommand          aws-ssm-proxycommand --profile myprofile --target $(echo "%h" | sed -E 's/^myclient-//') --port %p
+```
+
+That way, using `ssh myclient-api-rc5-standalone` will strip the `myclient-` prefix before trying to match an EC2 instance with that name.
+
+Note: running `aws-ssm-proxycommand --action dumpconfig` will also display an SSH config sample on the console.
 
 ### sync-jira-release
 
