@@ -7,6 +7,12 @@ forward=""
 parameters=""
 document="AWS-StartPortForwardingSessionToRemoteHost"
 
+# fatal helper
+fatal() {
+  echo "$*" >&2
+  exit 1
+}
+
 while [[ $# -gt 0 ]]; do
   key="${1}"
 
@@ -45,20 +51,17 @@ done
 set -- "${positional[@]}" # restore positional parameters
 
 if [ -z "${profile}" ]; then
-  echo "No profile specified!"
-  exit 1
+  fatal "No profile specified !"
 fi
 
 if [ -z "${1}" ]; then
-  echo "No hostname specified!"
-  exit 1
+  fatal "No target specified !"
 fi
 
 if [ ! -z "${forward}" ]; then
   IFS=":" read -a forward_array <<< "${forward}"
   if [ ${#forward_array[@]} -ne 3 ]; then
-    echo "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
-    exit 1
+    fatal "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
   fi
 fi
 
