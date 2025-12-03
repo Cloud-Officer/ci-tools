@@ -3,6 +3,7 @@ set -e
 
 positional=()
 profile=""
+autoselect_first="false"
 forward=""
 parameters=""
 document="AWS-StartPortForwardingSessionToRemoteHost"
@@ -22,9 +23,14 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  -h, --help                                   Print this help message"
       echo "  -p, --profile <profile>                      Specify the aws cli profile to use"
+      echo "  -a, --autoselect-first                       Automatically select first matching instance without prompting"
       echo "  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC"
       echo "  -d, --document <ssm-document-name>           AWS Systems Manager document name (default: ${document})"
       exit 0
+      ;;
+    -a | --autoselect-first)
+      autoselect_first="true"
+      shift # past argument
       ;;
     -f | --forward)
       forward="${2}"
@@ -86,6 +92,10 @@ if [ -n "${filter}" ]; then
   if [ -z "${instances}" ]; then
 	fatal "Unable to detect any instance for target ${target}"
   fi
+fi
+
+if "${autoselect_first}"; then
+  instances=$(echo "${instances}" | head -n1)
 fi
 
 if [ "$(echo "${instances}" | wc -l | tr -d ' ')" = "1" ]; then
