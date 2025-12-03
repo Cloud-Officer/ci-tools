@@ -5,6 +5,7 @@ positional=()
 profile=""
 autoselect_first="false"
 forward=""
+proxycommand_port=""
 parameters=""
 document="AWS-StartPortForwardingSessionToRemoteHost"
 
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -p, --profile <profile>                      Specify the aws cli profile to use"
       echo "  -a, --autoselect-first                       Automatically select first matching instance without prompting"
       echo "  -f, --forward <host:remote_port:local_port>  Create a TCP tunnel to a host inside the VPC"
+      echo "  -c, --proxy-command <remote_port>            Establish an SSH session to be used as ProxyCommand"
       echo "  -d, --document <ssm-document-name>           AWS Systems Manager document name (default: ${document})"
       exit 0
       ;;
@@ -34,6 +36,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     -f | --forward)
       forward="${2}"
+      shift # past argument
+      shift # past value
+      ;;
+    -c | --proxy-command)
+      proxycommand_port="${2}"
       shift # past argument
       shift # past value
       ;;
@@ -126,7 +133,14 @@ else
   done <<< "${instances}"
 fi
 
-if [ -z "${forward}" ]; then
+if [ -n "${proxycommand_port}" ]; then
+  # for proxycommand, we *must* start an SSH session
+  document="AWS-StartSSHSession"
+
+  echo "aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "portNumber=${proxycommand_port}""
+  exec aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "portNumber=${proxycommand_port}"
+
+elif [ -z "${forward}" ]; then
   echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\""
   exec aws --profile "${profile}" ssm start-session --target "${instance_id}"
 
