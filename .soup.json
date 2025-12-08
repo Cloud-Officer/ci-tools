@@ -122,7 +122,7 @@
   "aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.136.0",
+    "version": "1.137.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
