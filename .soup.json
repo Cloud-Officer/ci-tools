@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1190.0",
+    "version": "1.1194.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.583.0",
+    "version": "1.584.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -146,7 +146,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.170.0",
+    "version": "1.171.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -254,7 +254,7 @@
   "json": {
     "language": "Ruby",
     "package": "json",
-    "version": "2.17.1",
+    "version": "2.18.0",
     "license": "Ruby",
     "description": "A JSON implementation as a JRuby extension.",
     "website": "https://github.com/ruby/json",
@@ -338,7 +338,7 @@
   "optparse": {
     "language": "Ruby",
     "package": "optparse",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "license": "Ruby",
     "description": "OptionParser is a class for command-line option analysis",
     "website": "https://github.com/ruby/optparse",
