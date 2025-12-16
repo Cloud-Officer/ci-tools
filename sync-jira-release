@@ -80,7 +80,7 @@ if [ "$#" -ne 3 ]; then
   exit 1
 fi
 
-if [ -z "${JIRA_USER_EMAIL}" ] || [ -z "${JIRA_API_TOKEN}" ] || [ -z "${JIRA_BASE_URL}" ] || [ -z "${GITHUB_TOKEN}" ]; then
+if [ -z "${JIRA_API_TOKEN}" ] || [ -z "${GITHUB_TOKEN}" ]; then
   echo "Error: Required environment variables \`JIRA_USER_EMAIL\`, \`JIRA_API_TOKEN\`, \`JIRA_BASE_URL\`, and \`GITHUB_TOKEN\` must be set."
   exit 1
 fi
@@ -148,7 +148,7 @@ temp_file=$(mktemp)
 
 for pr_number in $(git log "${1}..${2}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g'); do
   pr_description=$(gh pr view "${pr_number}" --repo "${repo}" --json body -q '.body')
-  echo "Checking PR ${pr_number}..."expected
+  echo "Checking PR ${pr_number}..."
   echo "${pr_description}" | grep -o "\b${JIRA_PREFIX}-[0-9]\+\b" >> "${temp_file}" || true
 done
 
