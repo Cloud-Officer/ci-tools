@@ -190,6 +190,7 @@ jobs:
           brew update
         fi
 
+        set -x
         bundle exec ./brew-resources.rb
         bundle exec ./deploy.rb -h
         ./generate-codeowners @ydesgagn @ydesgagn
