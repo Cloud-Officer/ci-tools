@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1195.0",
+    "version": "1.1198.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.585.0",
+    "version": "1.586.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -374,7 +374,7 @@
   "prism": {
     "language": "Ruby",
     "package": "prism",
-    "version": "1.6.0",
+    "version": "1.7.0",
     "license": "MIT",
     "description": "Prism Ruby parser",
     "website": "https://github.com/ruby/prism",
@@ -542,7 +542,7 @@
   "unicode-emoji": {
     "language": "Ruby",
     "package": "unicode-emoji",
-    "version": "4.1.0",
+    "version": "4.2.0",
     "license": "MIT",
     "description": "[Emoji 17.0] Provides Unicode Emoji data and regexes, incorporating the latest Unicode and Emoji standards",
     "website": "https://github.com/janlelis/unicode-emoji",
