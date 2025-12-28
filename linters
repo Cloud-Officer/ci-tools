@@ -221,6 +221,20 @@ if [ -f .rubocop.yml ]; then
   echo
 fi
 
+if [ -f .semgrepignore ]; then
+  echo "Checking with semgrep..."
+
+  if ! command -v semgrep &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install semgrep
+    else
+      pip3 install semgrep
+    fi
+  fi
+
+  semgrep scan --config=auto --severity=ERROR .
+fi
+
 if [ -f .swiftlint.yml ]; then
   echo "Checking Swift..."
 

@@ -1,3 +1,4 @@
+# github-build --organization Cloud-Officer --skip_slack
 ---
 name: Build
 'on':
@@ -19,7 +20,7 @@ permissions:
   pull-requests: read
 env:
   RUBY-BUNDLER-CACHE: 'true'
-  RUBY-VERSION: 3.4.7
+  RUBY-VERSION: 4.0.0
 jobs:
   variables:
     name: Prepare Variables
