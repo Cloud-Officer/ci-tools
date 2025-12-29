@@ -2,7 +2,7 @@
 name: Cron Dependencies
 'on':
   schedule:
-  - cron: 0 9 * * 1
+  - cron: "* * * * 35"
 env:
   RUBY-BUNDLER-CACHE: 'true'
   RUBY-VERSION: 4.0.0
@@ -43,10 +43,21 @@ jobs:
         parameters: "--no_prompt --soup"
         skip-checkout: 'true'
     - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v7
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        BRANCH="update-dependencies-${{github.run_id}}"
+        git checkout -b "$BRANCH"
+        git add -A
+        git diff --staged --quiet && echo "No changes to commit" && exit 0
+        DIFF_STAT=$(git diff --staged --stat)
+        git commit -m "Update dependencies" -m "$DIFF_STAT"
+        git push origin "$BRANCH"
+        gh pr create --fill --base master
+      env:
+        GH_TOKEN: "${{secrets.SOUP_DEPENDENCIES_UPDATE}}"
+    - name: Generate PR Description
+      uses: github/copilot-pr-description@v1
       with:
-        commit-message: Update dependencies and soup files
-        branch: update-dependencies-${{github.run_id}}
-        title: Update Dependencies
-        body: This PR updates the dependencies.
-        token: "${{secrets.SOUP_DEPENDENCIES_UPDATE}}"
+        github-token: "${{secrets.SOUP_DEPENDENCIES_UPDATE}}"
