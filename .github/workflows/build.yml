@@ -62,7 +62,7 @@ jobs:
       with:
         linters: "${{needs.variables.outputs.LINTERS}}"
         ssh-key: "${{secrets.SSH_KEY}}"
-        github_token: "${{secrets.GITHUB_TOKEN}}"
+        github_token: "${{secrets.GH_PAT}}"
   hadolint:
     name: Docker Linter
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
       with:
         linters: "${{needs.variables.outputs.LINTERS}}"
         ssh-key: "${{secrets.SSH_KEY}}"
-        github_token: "${{secrets.GITHUB_TOKEN}}"
+        github_token: "${{secrets.GH_PAT}}"
   markdownlint:
     name: Markdown Linter
     runs-on: ubuntu-latest
@@ -91,7 +91,7 @@ jobs:
       with:
         linters: "${{needs.variables.outputs.LINTERS}}"
         ssh-key: "${{secrets.SSH_KEY}}"
-        github_token: "${{secrets.GITHUB_TOKEN}}"
+        github_token: "${{secrets.GH_PAT}}"
   semgrep:
     name: Semgrep Security Scanner
     permissions:
@@ -109,7 +109,7 @@ jobs:
       with:
         linters: "${{needs.variables.outputs.LINTERS}}"
         ssh-key: "${{secrets.SSH_KEY}}"
-        github_token: "${{secrets.GITHUB_TOKEN}}"
+        github_token: "${{secrets.GH_PAT}}"
   rubocop:
     name: Ruby Linter
     runs-on: ubuntu-latest
@@ -124,7 +124,7 @@ jobs:
       with:
         linters: "${{needs.variables.outputs.LINTERS}}"
         ssh-key: "${{secrets.SSH_KEY}}"
-        github_token: "${{secrets.GITHUB_TOKEN}}"
+        github_token: "${{secrets.GH_PAT}}"
   yamllint:
     name: YAML Linter
     runs-on: ubuntu-latest
@@ -139,7 +139,7 @@ jobs:
       with:
         linters: "${{needs.variables.outputs.LINTERS}}"
         ssh-key: "${{secrets.SSH_KEY}}"
-        github_token: "${{secrets.GITHUB_TOKEN}}"
+        github_token: "${{secrets.GH_PAT}}"
   licenses:
     name: Licenses Check
     runs-on: ubuntu-latest
@@ -152,7 +152,7 @@ jobs:
       uses: cloud-officer/ci-actions/soup@master
       with:
         ssh-key: "${{secrets.SSH_KEY}}"
-        github-token: "${{secrets.GITHUB_TOKEN}}"
+        github-token: "${{secrets.GH_PAT}}"
         parameters: "--no_prompt --soup"
   ruby_unit_tests:
     name: Ruby Unit Tests
