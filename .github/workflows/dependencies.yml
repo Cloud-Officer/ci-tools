@@ -19,7 +19,7 @@ jobs:
     steps:
     - name: Setup
       id: setup
-      uses: cloud-officer/ci-actions/setup@master
+      uses: cloud-officer/ci-actions/setup@v2
       with:
         ruby-version: "${{env.RUBY-VERSION}}"
         ruby-bundler-cache: "${{env.RUBY-BUNDLER-CACHE}}"
@@ -27,6 +27,7 @@ jobs:
         aws-access-key-id: "${{secrets.AWS_ACCESS_KEY_ID}}"
         aws-secret-access-key: "${{secrets.AWS_SECRET_ACCESS_KEY}}"
         aws-region: "${{secrets.AWS_DEFAULT_REGION}}"
+        github-token: "${{secrets.GH_PAT}}"
     - name: Update Dependencies
       shell: bash
       run: |
@@ -36,7 +37,7 @@ jobs:
 
         bundle config set frozen false ; bundle update
     - name: Licenses
-      uses: cloud-officer/ci-actions/soup@master
+      uses: cloud-officer/ci-actions/soup@v2
       with:
         ssh-key: "${{secrets.SSH_KEY}}"
         github-token: "${{secrets.GH_PAT}}"
