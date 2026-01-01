@@ -13,6 +13,7 @@ if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
       brew install actionlint
     else
       go install github.com/rhysd/actionlint/cmd/actionlint@latest
+      export PATH="${PATH}:${HOME}/go/bin"
     fi
   fi
 
