@@ -192,6 +192,7 @@ if [ -f .protolint.yaml ]; then
       brew install protolint
     else
       go install github.com/yoheimuta/protolint/cmd/protolint@latest
+      export PATH="${PATH}:${HOME}/go/bin"
     fi
   fi
 
