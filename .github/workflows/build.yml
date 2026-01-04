@@ -172,7 +172,6 @@ jobs:
       uses: cloud-officer/ci-actions/setup@v2
       if: "${{needs.variables.outputs.SKIP_LICENSES != '1' || needs.variables.outputs.SKIP_TESTS != '1'}}"
       with:
-        ruby-version: "${{env.RUBY-VERSION}}"
         ruby-bundler-cache: "${{env.RUBY-BUNDLER-CACHE}}"
         ssh-key: "${{secrets.SSH_KEY}}"
         aws-access-key-id: "${{secrets.AWS_ACCESS_KEY_ID}}"

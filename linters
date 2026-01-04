@@ -2,6 +2,8 @@
 set -e
 shopt -s globstar
 
+FAILED=0
+
 yml_files=(.github/workflows/*.yml)
 yaml_files=(.github/workflows/*.yaml)
 
@@ -17,7 +19,7 @@ if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
     fi
   fi
 
-  actionlint
+  actionlint || FAILED=1
 fi
 
 if [ -f .markdownlint.yml ]; then
@@ -37,7 +39,7 @@ if [ -f .markdownlint.yml ]; then
     fi
   fi
 
-  markdownlint-cli2 "**/*.md" "#.*" "#**/vendor/**" "#**/node_modules/**" "#**/Libraries/**" "#**/Pods/**"
+  markdownlint-cli2 "**/*.md" "#.*" "#**/vendor/**" "#**/node_modules/**" "#**/Libraries/**" "#**/Pods/**" || FAILED=1
 fi
 
 if [ -f .yamllint.yml ]; then
@@ -51,7 +53,7 @@ if [ -f .yamllint.yml ]; then
     fi
   fi
 
-  yamllint --strict .
+  yamllint --strict . || FAILED=1
 fi
 
 if [ -f .shellcheckrc ]; then
@@ -65,7 +67,7 @@ if [ -f .shellcheckrc ]; then
     fi
   fi
 
-  shellcheck --external-sources ./**/*.sh
+  shellcheck --external-sources ./**/*.sh || FAILED=1
 fi
 
 if [ -f .hadolint.yaml ]; then
@@ -76,7 +78,7 @@ if [ -f .hadolint.yaml ]; then
   fi
 
   # shellcheck disable=SC2046
-  hadolint $(find . -name Dockerfile)
+  hadolint $(find . -name Dockerfile -not -path "*/vendor/*" -not -path "*/node_modules/*" -not -path "*/Libraries/*" -not -path "*/Pods/*") || FAILED=1
 fi
 
 if [ -f .golangci.yml ]; then
@@ -86,7 +88,7 @@ if [ -f .golangci.yml ]; then
     brew install golangci-lint
   fi
 
-  golangci-lint run
+  golangci-lint run || FAILED=1
 fi
 
 if [ -f .pmd.xml ]; then
@@ -96,7 +98,7 @@ if [ -f .pmd.xml ]; then
     brew install pmd
   fi
 
-  pmd check --dir . --format textcolor --rulesets ".pmd.xml"
+  pmd check --dir . --format textcolor --rulesets ".pmd.xml" || FAILED=1
   echo
 fi
 
@@ -133,7 +135,7 @@ if [ -f .eslintrc.json ]; then
     fi
   fi
 
-  eslint .
+  eslint --ignore-pattern "vendor/" --ignore-pattern "node_modules/" --ignore-pattern "Libraries/" --ignore-pattern "Pods/" . || FAILED=1
 fi
 
 if [ -f .editorconfig ]; then
@@ -147,7 +149,7 @@ if [ -f .editorconfig ]; then
     fi
   fi
 
-  ktlint --verbose
+  ktlint --verbose || FAILED=1
 fi
 
 if [ -f .bandit ]; then
@@ -161,7 +163,7 @@ if [ -f .bandit ]; then
     fi
   fi
 
-  bandit -ll --ini .bandit --silent .
+  bandit -ll --ini .bandit --silent . || FAILED=1
   echo
 fi
 
@@ -180,7 +182,7 @@ if [ -f .flake8 ]; then
   #  pip3 install --upgrade flake8-docstrings
   #fi
 
-  flake8 .
+  flake8 --exclude=vendor,node_modules,Libraries,Pods . || FAILED=1
 fi
 
 if [ -f .protolint.yaml ]; then
@@ -196,7 +198,7 @@ if [ -f .protolint.yaml ]; then
     fi
   fi
 
-  protolint .
+  protolint . || FAILED=1
 fi
 
 if [ -f .rubocop.yml ]; then
@@ -216,7 +218,7 @@ if [ -f .rubocop.yml ]; then
     fi
   fi
 
-  rubocop
+  rubocop || FAILED=1
   echo
 fi
 
@@ -231,7 +233,7 @@ if [ -f .semgrepignore ]; then
     fi
   fi
 
-  semgrep scan --config=auto --severity=ERROR --error .
+  semgrep scan --config=auto --severity=ERROR --error . || FAILED=1
 fi
 
 if [ -f .swiftlint.yml ]; then
@@ -246,7 +248,12 @@ if [ -f .swiftlint.yml ]; then
     fi
   fi
 
-  swiftlint lint --strict
+  swiftlint lint --strict || FAILED=1
+fi
+
+if [ ${FAILED} -eq 1 ]; then
+  echo "Some checks failed."
+  exit 1
 fi
 
 echo "All checks passed."
