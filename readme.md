@@ -162,7 +162,7 @@ A VPN connection is not required. You need to have a matching AWS CLI profile wi
 #### Usage ssm-jump
 
 ```bash
-Usage: ssh-jump.sh [options] internal-ip|instance-id|instance-name
+Usage: ssm-jump.sh [options] internal-ip|instance-id|instance-name
 Options:
   -h, --help                                   Print this help message
   -p, --profile <profile>                      Specify the aws cli profile to use
