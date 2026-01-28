@@ -11,5 +11,4 @@
 .rubocop.yml             @ydesgagn
 .ruby-version            @ydesgagn
 .yamllint.yml            @ydesgagn
-codeowners               @ydesgagn
 Dockerfile               @ydesgagn

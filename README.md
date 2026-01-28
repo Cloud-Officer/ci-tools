@@ -5,7 +5,7 @@
 * [Introduction](#introduction)
 * [Installation](#installation)
 * [Usage](#usage)
-  * [codeowners](#codeowners)
+  * [generate-codeowners](#generate-codeowners)
     * [Examples](#examples)
   * [cycle-keys](#cycle-keys)
     * [Usage cycle-keys](#usage-cycle-keys)
@@ -13,6 +13,9 @@
   * [deploy](#deploy)
     * [Usage deploy](#usage-deploy)
     * [Examples deploy](#examples-deploy)
+  * [encrypt-logs](#encrypt-logs)
+    * [Usage encrypt-logs](#usage-encrypt-logs)
+    * [Examples encrypt-logs](#examples-encrypt-logs)
   * [linters](#linters)
     * [Examples linters](#examples-linters)
   * [ssh-jump](#ssh-jump)
@@ -32,7 +35,9 @@ This is a collection of tools to run locally or on a CI pipeline.
 
 ## Installation
 
-You can run `bundle install` and then run the commands.
+Prerequisites are Ruby >= 4.0 and Bundler.
+
+Run `bundle install` to install dependencies, then run the commands.
 
 You can install via [Homebrew](https://github.com/Cloud-Officer/homebrew-ci).
 
@@ -40,17 +45,15 @@ You can use the [Docker images](https://hub.docker.com/r/ydesgagne/ci-tools).
 
 ## Usage
 
-### codeowners
+### generate-codeowners
 
-This script generates the `codeowners` file. It must be executed from the root of a repository.
+This script generates the `.github/CODEOWNERS` file. It must be executed from the root of a repository.
 
 #### Examples
 
 ```bash
-codeowners '@default_owner_GitHub****_id'
+generate-codeowners '@build_owner_GitHub_id' '@default_owner_GitHub_id'
 ```
-
-All the build files are by default assigned to `@tlacroix` and `@ydesgagn`.
 
 ### cycle-keys
 
@@ -60,7 +63,7 @@ your `credentials` file, and disables and deletes the other one.
 #### Usage cycle-keys
 
 ```bash
-Usage: cycle-keys options
+Usage: cycle-keys.rb options
 
 options
         --profile profile
@@ -72,8 +75,8 @@ options
 #### Examples cycle-keys
 
 ```bash
-cycle-keys --profile in --username tommy.lacroix@innodemneurosciences.com
-cycle-keys --profile in --username tommy.lacroix@innodemneurosciences.com --force
+cycle-keys.rb --profile in --username tommy.lacroix@innodemneurosciences.com
+cycle-keys.rb --profile in --username tommy.lacroix@innodemneurosciences.com --force
 ```
 
 ### deploy
@@ -83,10 +86,11 @@ Automate the ASG, spot fleet and Lambda deployments on AWS.
 #### Usage deploy
 
 ```bash
-Usage: deploy options
+Usage: deploy.rb options
 
 options
         --ami ami
+        --create_ami_only
         --environment environment
         --instance instance
         --type instance_type
@@ -94,6 +98,7 @@ options
         --profile profile
         --preserve_desired_capacity
         --skip_scale_down
+        --spot_target_capacity spot_target_capacity
     -h, --help
 ```
 
@@ -101,10 +106,31 @@ options
 
 ```bash
 # perform an ami of the betaX-api-standalone instance, create a launch config and update the auto scaling group
-deploy --profile in --environment beta --instance api
+deploy.rb --profile in --environment beta --instance api
 
 # create a launch configuration and update the auto scaling group (and spot fleet if existing) from the provided AMI id
-deploy --profile ugm --environment prod3 --instance worker --ami ami-09d6e0e85d7fba11d
+deploy.rb --profile ugm --environment prod3 --instance worker --ami ami-09d6e0e85d7fba11d
+```
+
+### encrypt-logs
+
+Encrypt CloudWatch log groups with KMS keys and set retention policies. The script maps KMS keys to environments (beta, rc, prod) based on key descriptions and log group names.
+
+#### Usage encrypt-logs
+
+```bash
+Usage: encrypt_logs.rb options
+
+options
+        --profile profile
+        --retention_in_days retention_in_days
+    -h, --help
+```
+
+#### Examples encrypt-logs
+
+```bash
+encrypt-logs.rb --profile myprofile --retention_in_days 90
 ```
 
 ### linters
@@ -127,6 +153,8 @@ All checks passed.
 ```
 
 ### ssh-jump
+
+> **Deprecated:** This script is deprecated and will be removed soon. Please use [ssm-jump](#ssm-jump) instead, which has the same syntax.
 
 Ssh to a host by name via when connected to an AWS VPN. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
 
@@ -162,7 +190,7 @@ A VPN connection is not required. You need to have a matching AWS CLI profile wi
 #### Usage ssm-jump
 
 ```bash
-Usage: ssm-jump.sh [options] internal-ip|instance-id|instance-name
+Usage: ssm-jump [options] internal-ip|instance-id|instance-name
 Options:
   -h, --help                                   Print this help message
   -p, --profile <profile>                      Specify the aws cli profile to use
@@ -287,5 +315,5 @@ Pull requests are the best way to propose changes to the codebase. We actively w
 4. Make sure your code lints.
 5. Issue that pull request!
 
-When you submit code changes, your submissions are understood to be under the same [License](license) that covers the
+When you submit code changes, your submissions are understood to be under the same [License](LICENSE) that covers the
 project. Feel free to contact the maintainers if that's a concern.

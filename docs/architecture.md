@@ -282,37 +282,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 For the complete and detailed SOUP documentation, see [soup.md](soup.md).
 
-### Summary
-
-| Category                         | Count | Licenses        |
-|----------------------------------|-------|-----------------|
-| AWS SDK Components               | 14    | Apache-2.0      |
-| Ruby Standard Library Extensions | 8     | Ruby            |
-| Development Tools (RuboCop)      | 8     | MIT             |
-| Utility Libraries                | 10    | MIT, Apache-2.0 |
-
-### Critical Dependencies
-
-| Package                | Version | License    | Purpose                           |
-|------------------------|---------|------------|-----------------------------------|
-| aws-sdk-core           | 3.241.4 | Apache-2.0 | Core AWS API client functionality |
-| aws-sdk-ec2            | 1.591.0 | Apache-2.0 | EC2 instance and AMI management   |
-| aws-sdk-autoscaling    | 1.152.0 | Apache-2.0 | Auto Scaling Group operations     |
-| aws-sdk-cloudformation | 1.149.0 | Apache-2.0 | CloudFormation stack updates      |
-| aws-sdk-iam            | 1.140.0 | Apache-2.0 | IAM key rotation                  |
-| aws-sdk-ssm            | 1.210.0 | Apache-2.0 | SSM parameter management          |
-| aws-sdk-kms            | 1.121.0 | Apache-2.0 | KMS encryption operations         |
-| nokogiri               | 1.19.0  | MIT        | XML/HTML parsing                  |
-| httparty               | 0.24.2  | MIT        | HTTP client for API requests      |
-
-### Security-Sensitive Dependencies
-
-| Package     | Version | Purpose                   | Security Consideration               |
-|-------------|---------|---------------------------|--------------------------------------|
-| aws-sdk-iam | 1.140.0 | IAM key management        | Handles access key creation/deletion |
-| aws-sdk-kms | 1.121.0 | Encryption key management | Manages KMS key associations         |
-| aws-sigv4   | 1.12.1  | AWS request signing       | Cryptographic signature generation   |
-| inifile     | 3.0.0   | INI file parsing          | Reads AWS credentials files          |
+All SOUP data is managed in `.soup.json`. The `soup.md` file is auto-generated and must not be edited directly.
 
 ## Critical algorithms
 
@@ -320,7 +290,7 @@ For the complete and detailed SOUP documentation, see [soup.md](soup.md).
 
 **Purpose:** Safely deploy new AMIs to Auto Scaling Groups with zero-downtime.
 
-**Location:** `deploy.rb:381-487`
+**Location:** `deploy.rb` in main deployment logic (scaling section after CloudFormation updates)
 
 **Implementation:**
 
@@ -341,7 +311,7 @@ For the complete and detailed SOUP documentation, see [soup.md](soup.md).
 
 **Purpose:** Safely rotate AWS IAM access keys with automatic cleanup.
 
-**Location:** `cycle-keys.rb:49-164`
+**Location:** `cycle-keys.rb` in main credentials iteration block
 
 **Implementation:**
 
@@ -363,7 +333,7 @@ For the complete and detailed SOUP documentation, see [soup.md](soup.md).
 
 **Purpose:** Resolve EC2 instances by multiple identifier types.
 
-**Location:** `ssm-jump:85-103`
+**Location:** `ssm-jump` in target lookup section (after argument parsing)
 
 **Implementation:**
 
@@ -378,47 +348,47 @@ For the complete and detailed SOUP documentation, see [soup.md](soup.md).
 
 ### Authentication and Authorization
 
-| Control               | Implementation                                     | Location                  |
-|-----------------------|----------------------------------------------------|---------------------------|
-| AWS Profile Selection | All scripts require explicit `--profile` parameter | All Ruby/Bash scripts     |
-| Credential Isolation  | Uses AWS SDK profile-based authentication          | `deploy.rb:69-72`         |
-| Username Validation   | Key rotation validates username matches expected   | `cycle-keys.rb:102-105`   |
-| Environment Variables | Sensitive tokens passed via environment            | `sync-jira-release:83-86` |
+| Control               | Implementation                                     | Location                              |
+|-----------------------|----------------------------------------------------|---------------------------------------|
+| AWS Profile Selection | All scripts require explicit `--profile` parameter | All Ruby/Bash scripts                 |
+| Credential Isolation  | Uses AWS SDK profile-based authentication          | `deploy.rb` in `Aws.config.update`    |
+| Username Validation   | Key rotation validates username matches expected   | `cycle-keys.rb` in username check     |
+| Environment Variables | Sensitive tokens passed via environment            | `sync-jira-release` in env var check  |
 
 ### Input Validation
 
-| Control                 | Implementation                                | Location                    |
-|-------------------------|-----------------------------------------------|-----------------------------|
-| Required Parameters     | OptionParser with mandatory argument checking | All Ruby scripts            |
-| Target Validation       | Regex validation for instance identifiers     | `ssm-jump:86-94`            |
-| Git Tag Verification    | Validates tags exist before processing        | `sync-jira-release:104-112` |
-| Release Existence Check | Verifies Jira release exists before updates   | `sync-jira-release:90-97`   |
+| Control                 | Implementation                                | Location                                   |
+|-------------------------|-----------------------------------------------|--------------------------------------------|
+| Required Parameters     | OptionParser with mandatory argument checking | All Ruby scripts                           |
+| Target Validation       | Regex validation for instance identifiers     | `ssm-jump` in target lookup section        |
+| Git Tag Verification    | Validates tags exist before processing        | `sync-jira-release` in git tag validation  |
+| Release Existence Check | Verifies Jira release exists before updates   | `sync-jira-release` in release check       |
 
 ### Error Handling
 
-| Control                | Implementation                            | Location            |
-|------------------------|-------------------------------------------|---------------------|
-| Exception Wrapping     | Top-level rescue blocks with stack traces | All Ruby scripts    |
-| Validation Errors      | CloudFormation validation error handling  | `deploy.rb:335-338` |
-| Stack State Monitoring | Checks for failed stack states            | `deploy.rb:342-353` |
-| Exit Codes             | Non-zero exit codes on failures           | All scripts         |
+| Control                | Implementation                            | Location                                     |
+|------------------------|-------------------------------------------|----------------------------------------------|
+| Exception Wrapping     | Top-level rescue blocks with stack traces | All Ruby scripts                             |
+| Validation Errors      | CloudFormation validation error handling  | `deploy.rb` in CloudFormation update section |
+| Stack State Monitoring | Checks for failed stack states            | `deploy.rb` in stack status check            |
+| Exit Codes             | Non-zero exit codes on failures           | All scripts                                  |
 
 ### Operational Safety
 
-| Control              | Implementation                                | Location            |
-|----------------------|-----------------------------------------------|---------------------|
-| Capacity Limits      | Respects ASG max_size constraints             | `deploy.rb:385-412` |
-| Health Checks        | Waits for ELB target health before proceeding | `deploy.rb:17-31`   |
-| Warm-up Periods      | Configurable sleep times for cache warming    | `deploy.rb:431-438` |
-| Deprecation Warnings | Clear warnings for deprecated tools           | `ssh-jump:4-9`      |
+| Control              | Implementation                                | Location                                        |
+|----------------------|-----------------------------------------------|-------------------------------------------------|
+| Capacity Limits      | Respects ASG max_size constraints             | `deploy.rb` in ASG update section               |
+| Health Checks        | Waits for ELB target health before proceeding | `deploy.rb` in `wait_for_healthy_instances`     |
+| Warm-up Periods      | Configurable sleep times for cache warming    | `deploy.rb` in cache warm-up section            |
+| Deprecation Warnings | Clear warnings for deprecated tools           | `ssh-jump` at script start                      |
 
 ### Logging and Monitoring
 
-| Control                | Implementation                             | Location            |
-|------------------------|--------------------------------------------|---------------------|
-| Progress Output        | Step-by-step status messages               | All scripts         |
-| AWS Operation Logging  | Logs SSM parameter updates, stack changes  | `deploy.rb`         |
-| Linter Result Tracking | Tracks pass/fail status across all linters | `linters:5,254-257` |
+| Control                | Implementation                             | Location                             |
+|------------------------|--------------------------------------------|--------------------------------------|
+| Progress Output        | Step-by-step status messages               | All scripts                          |
+| AWS Operation Logging  | Logs SSM parameter updates, stack changes  | `deploy.rb`                          |
+| Linter Result Tracking | Tracks pass/fail status across all linters | `linters` in `FAILED` variable check |
 
 ### Failure Modes
 

@@ -233,7 +233,7 @@ if [ -f .semgrepignore ]; then
     fi
   fi
 
-  semgrep scan --config=auto --severity=ERROR --error . || FAILED=1
+  semgrep scan --config=auto --severity=ERROR --error --quiet . || FAILED=1
 fi
 
 if [ -f .swiftlint.yml ]; then
