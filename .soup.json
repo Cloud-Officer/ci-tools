@@ -26,7 +26,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1209.0",
+    "version": "1.1210.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.593.0",
+    "version": "1.596.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -127,7 +127,7 @@
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
     "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
+    "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
   },
@@ -139,14 +139,14 @@
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
     "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
+    "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
   },
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.174.0",
+    "version": "1.175.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -223,9 +223,9 @@
     "description": "Makes http fun! Also, makes consuming restful web services dead easy.",
     "website": "https://github.com/jnunemaker/httparty",
     "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
-    "requirements": "Access URL",
-    "verification_reasoning": "Most popular gem on rubygems"
+    "risk_level": "Medium",
+    "requirements": "HTTP client for downloading gems from RubyGems API",
+    "verification_reasoning": "Widely adopted Ruby HTTP client with active maintenance and security updates"
   },
   "inifile": {
     "language": "Ruby",
@@ -235,9 +235,9 @@
     "description": "Although made popular by Windows, INI files can be used on any system thanks",
     "website": "http://rubygems.org/gems/inifile",
     "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
-    "requirements": "Access ini files",
-    "verification_reasoning": "Most popular gem on rubygems"
+    "risk_level": "Medium",
+    "requirements": "Parse AWS credentials INI files for key rotation",
+    "verification_reasoning": "Standard Ruby INI file parser used for reading and writing AWS credentials"
   },
   "jmespath": {
     "language": "Ruby",
@@ -331,9 +331,9 @@
     "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
     "website": "https://nokogiri.org",
     "last_verified_at": "2023-06-12",
-    "risk_level": "Low",
+    "risk_level": "Medium",
     "requirements": "XML parser",
-    "verification_reasoning": "Most popular gem on rubygems"
+    "verification_reasoning": "Industry-standard Ruby XML/HTML parser with active security maintenance"
   },
   "optparse": {
     "language": "Ruby",
@@ -374,7 +374,7 @@
   "prism": {
     "language": "Ruby",
     "package": "prism",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "license": "MIT",
     "description": "Prism Ruby parser",
     "website": "https://github.com/ruby/prism",
@@ -422,7 +422,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.82.1",
+    "version": "1.84.0",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
