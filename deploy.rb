@@ -14,12 +14,24 @@ require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
 require 'optparse'
 
+# Timing constants for polling and warmup periods
+POLL_INTERVAL = 15      # Seconds between status checks
+WARMUP_SHORT = 60       # Short warmup period for standard instances
+WARMUP_LONG = 180       # Long warmup period for gRPC instances
+
+# Instance types that use load balancer health checks
+LOAD_BALANCED_INSTANCES = %w[api grpc].freeze
+
+def load_balanced_instance?(instance)
+  LOAD_BALANCED_INSTANCES.include?(instance)
+end
+
 def wait_for_healthy_instances(elb, target_group_arn)
   puts('Waiting for all instances to be healthy...')
 
   loop do
     unhealthy_targets = 0
-    sleep(15)
+    sleep(POLL_INTERVAL)
 
     elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions.each do |health_description|
       unhealthy_targets += 1 if health_description.target_health.state != 'healthy'
@@ -141,7 +153,7 @@ begin
       instance.tags.each do |tag|
         next unless tag.key == 'Name'
 
-        if tag.value[/#{options[:instance]}-#{options[:environment]}.*-standalone/]
+        if tag.value[/#{Regexp.escape(options[:instance])}-#{Regexp.escape(options[:environment])}.*-standalone/]
           instance_id = instance.id
           instance_name = tag.value
         end
@@ -210,7 +222,7 @@ begin
   puts('Checking auto scaling groups...')
 
   asg_resources.groups.each do |group|
-    next unless group.auto_scaling_group_name[/#{options[:environment]}.*-#{options[:instance]}.*/]
+    next unless group.auto_scaling_group_name[/#{Regexp.escape(options[:environment])}.*-#{Regexp.escape(options[:instance])}.*/]
 
     puts("Auto scaling group #{group.auto_scaling_group_name} found with desired capacity at #{group.desired_capacity}.")
     auto_scaling_group_name = group.auto_scaling_group_name
@@ -222,7 +234,7 @@ begin
 
   raise('Unable to find auto scaling group') if auto_scaling_group_name.empty?
 
-  if (options[:instance] == 'api') || (options[:instance] == 'grpc')
+  if load_balanced_instance?(options[:instance])
     # find load balancer target group
 
     elb = Aws::ElasticLoadBalancingV2::Client.new
@@ -235,7 +247,7 @@ begin
     elb.describe_target_groups.each do |targets|
       targets.target_groups.each do |group|
         ports.each do |port|
-          target_group_arn = group.target_group_arn if group.target_group_name[/#{options[:environment]}\d*-#{port}$/]
+          target_group_arn = group.target_group_arn if group.target_group_name[/#{Regexp.escape(options[:environment])}\d*-#{Regexp.escape(port)}$/]
         end
       end
     end
@@ -256,7 +268,7 @@ begin
   stack_name = nil
 
   stacks.stack_summaries.each do |stack|
-    next unless stack.stack_name[/#{options[:environment]}.*-StackInstances.*/]
+    next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
 
     puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
     stack_name = stack.stack_name
@@ -265,11 +277,14 @@ begin
 
   raise('Unable to find cloudformation stack') if stack_name.nil?
 
-  parameters = cf.describe_stacks(
+  stacks_response = cf.describe_stacks(
     {
       stack_name: stack_name
     }
-  ).stacks.first.parameters
+  ).stacks
+  raise("Unable to describe stack #{stack_name}") if stacks_response.empty?
+
+  parameters = stacks_response.first.parameters
   environment = stack_name.split('-').first.tr('0-9', '')
   subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
 
@@ -342,12 +357,15 @@ begin
   stack_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
 
   loop do
-    sleep(15)
-    stack = cf.describe_stacks(
+    sleep(POLL_INTERVAL)
+    stack_response = cf.describe_stacks(
       {
         stack_name: stack_name
       }
-    ).stacks.first
+    ).stacks
+    raise("Unable to describe stack #{stack_name}") if stack_response.empty?
+
+    stack = stack_response.first
     break if stack.stack_status == 'UPDATE_COMPLETE'
     raise('Stack update failed') if stack_states.include?(stack.stack_status)
   end
@@ -417,23 +435,26 @@ begin
     puts('Waiting for auto scaling group to start the instances...')
 
     loop do
-      sleep(15)
-      instances = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups.first.instances.count
+      sleep(POLL_INTERVAL)
+      asg_response = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups
+      raise("Unable to describe ASG #{auto_scaling_group_name}") if asg_response.empty?
+
+      instances = asg_response.first.instances.count
       puts("Waiting on instances #{instances}/#{(desired_capacity * asg_multiplier) + asg_increase}...")
       break if instances == (desired_capacity * asg_multiplier) + asg_increase
     end
 
-    if (options[:instance] == 'api') || (options[:instance] == 'grpc')
-      sleep(60) if options[:instance] == 'grpc'
+    if load_balanced_instance?(options[:instance])
+      sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
       wait_for_healthy_instances(elb, target_group_arn)
     end
 
     puts('Waiting for cache/instances to warm up...')
 
     if options[:instance] == 'grpc'
-      sleep(180)
+      sleep(WARMUP_LONG)
     else
-      sleep(60)
+      sleep(WARMUP_SHORT)
     end
   end
 
@@ -469,8 +490,8 @@ begin
       }
     )
 
-    if (options[:instance] == 'api') || (options[:instance] == 'grpc')
-      sleep(15)
+    if load_balanced_instance?(options[:instance])
+      sleep(POLL_INTERVAL)
       wait_for_healthy_instances(elb, target_group_arn)
     end
 
@@ -479,8 +500,11 @@ begin
     puts('Waiting for auto scaling group to stop the instances...')
 
     loop do
-      sleep(15)
-      instances = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups.first.instances.count
+      sleep(POLL_INTERVAL)
+      asg_response = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups
+      raise("Unable to describe ASG #{auto_scaling_group_name}") if asg_response.empty?
+
+      instances = asg_response.first.instances.count
       puts("Waiting on instances #{instances}/#{desired_capacity}...")
       break if instances == desired_capacity
     end

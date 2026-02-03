@@ -113,23 +113,58 @@ begin
 
     # create new key
 
+    new_access_key_id = nil
     begin
       response = iam.create_access_key(
         {
           user_name: user_name
         }
       )
-      puts("\tCreated key: #{response.access_key.access_key_id}")
+      new_access_key_id = response.access_key.access_key_id
+      puts("\tCreated key: #{new_access_key_id}")
       credentials[profile]['aws_access_key_id'] = response.access_key.access_key_id
       credentials[profile]['aws_secret_access_key'] = response.access_key.secret_access_key
 
-      credentials.write
-      puts("\tNew key saved into: #{credentials.filename}")
+      # Use file locking to prevent race conditions when multiple instances run simultaneously
+      File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
+        lock_file.flock(File::LOCK_EX)
+        credentials.write
+        puts("\tNew key saved into: #{credentials.filename}")
+      end
     rescue StandardError => e
       puts("\tError creating new access key")
       pp(e)
       exit(1)
     end
+
+    # Helper to rollback: delete new key and restore old credentials
+    rollback =
+      lambda do |error_context|
+        puts("\tRolling back due to: #{error_context}")
+        begin
+          puts("\tDeleting newly created key #{new_access_key_id}...")
+          iam.delete_access_key(
+            {
+              access_key_id: new_access_key_id,
+              user_name: user_name
+            }
+          )
+          puts("\tRollback: deleted new key")
+
+          # Restore original credentials
+          credentials[profile]['aws_access_key_id'] = access_key
+          credentials[profile]['aws_secret_access_key'] = secret_key
+          File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
+            lock_file.flock(File::LOCK_EX)
+            credentials.write
+            puts("\tRollback: restored original credentials")
+          end
+        rescue StandardError => e
+          puts("\tWARNING: Rollback failed - manual cleanup required!")
+          puts("\tNew key #{new_access_key_id} may still be active")
+          pp(e)
+        end
+      end
 
     # disable old key
     puts("\tDisabling old access key")
@@ -144,6 +179,7 @@ begin
     rescue StandardError => e
       puts("\tError disabling old access key")
       pp(e)
+      rollback.call('failed to disable old key')
       exit(1)
     end
 
@@ -160,6 +196,7 @@ begin
     rescue StandardError => e
       puts("\tError deleting access key")
       pp(e)
+      rollback.call('failed to delete old key')
       exit(1)
     end
   end
