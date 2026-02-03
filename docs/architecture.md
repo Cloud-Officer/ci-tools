@@ -103,8 +103,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Internal Dependencies:** None
 
-**External Dependencies:
-** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-lambda, aws-sdk-ssm, optparse
+**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-lambda, aws-sdk-ssm, optparse
 
 ### cycle-keys.rb
 
