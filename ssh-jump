@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 echo -e "\033[1;31m"
 echo "WARNING: THIS SCRIPT IS DEPRECATED AND WILL BE REMOVED SOON."

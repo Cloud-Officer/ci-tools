@@ -281,7 +281,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 For the complete and detailed SOUP documentation, see [soup.md](soup.md).
 
-All SOUP data is managed in `.soup.json`. The `soup.md` file is auto-generated and must not be edited directly.
+All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is auto-generated and must not be edited directly.
 
 ## Critical algorithms
 

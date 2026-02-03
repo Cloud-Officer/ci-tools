@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # Check if jira CLI is installed, if not install it
 if ! command -v jira &> /dev/null; then
@@ -40,9 +40,35 @@ if ! command -v jira &> /dev/null; then
 
   # Download and install
   TEMP_DIR=$(mktemp -d)
-  DOWNLOAD_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${LATEST_VERSION}/jira_${LATEST_VERSION}_${DOWNLOAD_OS}_${ARCH}.tar.gz"
+  trap 'rm -rf "${TEMP_DIR}"' exit
+  ARCHIVE_NAME="jira_${LATEST_VERSION}_${DOWNLOAD_OS}_${ARCH}.tar.gz"
+  DOWNLOAD_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${LATEST_VERSION}/${ARCHIVE_NAME}"
+  CHECKSUMS_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${LATEST_VERSION}/checksums.txt"
 
   curl -sL "${DOWNLOAD_URL}" -o "${TEMP_DIR}/jira.tar.gz"
+  curl -sL "${CHECKSUMS_URL}" -o "${TEMP_DIR}/checksums.txt"
+
+  # Verify checksum
+  EXPECTED_CHECKSUM=$(grep "${ARCHIVE_NAME}" "${TEMP_DIR}/checksums.txt" | awk '{print $1}')
+  if [ -z "${EXPECTED_CHECKSUM}" ]; then
+    echo "Error: Could not find checksum for ${ARCHIVE_NAME}"
+    exit 1
+  fi
+
+  if command -v sha256sum &> /dev/null; then
+    ACTUAL_CHECKSUM=$(sha256sum "${TEMP_DIR}/jira.tar.gz" | awk '{print $1}')
+  else
+    ACTUAL_CHECKSUM=$(shasum -a 256 "${TEMP_DIR}/jira.tar.gz" | awk '{print $1}')
+  fi
+
+  if [ "${EXPECTED_CHECKSUM}" != "${ACTUAL_CHECKSUM}" ]; then
+    echo "Error: Checksum verification failed!"
+    echo "Expected: ${EXPECTED_CHECKSUM}"
+    echo "Actual:   ${ACTUAL_CHECKSUM}"
+    exit 1
+  fi
+  echo "Checksum verified."
+
   tar -xzf "${TEMP_DIR}/jira.tar.gz" -C "${TEMP_DIR}"
 
   # Install to /usr/local/bin or ~/.local/bin
@@ -133,6 +159,7 @@ echo "Using Jira project prefix: ${JIRA_PREFIX}"
 
 repo=$(git config --get remote.origin.url | cut -d : -f 2 | sed 's/\.git$//')
 temp_file=$(mktemp)
+trap 'rm -f "${temp_file}" "${temp_file}_unique"' exit
 
 for pr_number in $(git log "${1}..${2}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g'); do
   pr_description=$(gh pr view "${pr_number}" --repo "${repo}" --json body -q '.body')

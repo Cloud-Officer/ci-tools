@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 positional=()
 profile=""
@@ -149,7 +149,21 @@ else
   forward_host=${forward_array[0]}
   forward_remote_port=${forward_array[1]}
   forward_local_port=${forward_array[2]}
-  parameters="{\"host\":[\"${forward_host}\"],\"portNumber\":[\"${forward_remote_port}\"],\"localPortNumber\":[\"${forward_local_port}\"]}"
+
+  # Validate port numbers are numeric
+  if ! echo "${forward_remote_port}" | grep -qE '^[0-9]+$'; then
+    fatal "Remote port must be numeric: ${forward_remote_port}"
+  fi
+  if ! echo "${forward_local_port}" | grep -qE '^[0-9]+$'; then
+    fatal "Local port must be numeric: ${forward_local_port}"
+  fi
+
+  # Use jq for proper JSON construction to prevent injection
+  parameters=$(jq -n \
+    --arg host "${forward_host}" \
+    --arg port "${forward_remote_port}" \
+    --arg localPort "${forward_local_port}" \
+    '{host: [$host], portNumber: [$port], localPortNumber: [$localPort]}')
 
   echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name \"${document}\" --parameters '${parameters}'"
   exec aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "${parameters}"
