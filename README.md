@@ -18,9 +18,6 @@
     * [Examples encrypt-logs](#examples-encrypt-logs)
   * [linters](#linters)
     * [Examples linters](#examples-linters)
-  * [ssh-jump](#ssh-jump)
-    * [Usage ssh-jump](#usage-ssh-jump)
-    * [Examples ssh-jump](#examples-ssh-jump)
   * [ssm-jump](#ssm-jump)
     * [Usage ssm-jump](#usage-ssm-jump)
     * [Examples ssm-jump](#examples-ssm-jump)
@@ -119,7 +116,7 @@ Encrypt CloudWatch log groups with KMS keys and set retention policies. The scri
 #### Usage encrypt-logs
 
 ```bash
-Usage: encrypt_logs.rb options
+Usage: encrypt-logs.rb options
 
 options
         --profile profile
@@ -150,31 +147,6 @@ Inspecting 2 files
 2 files inspected, no offenses detected
 
 All checks passed.
-```
-
-### ssh-jump
-
-> **Deprecated:** This script is deprecated and will be removed soon. Please use [ssm-jump](#ssm-jump) instead, which has the same syntax.
-
-Ssh to a host by name via when connected to an AWS VPN. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
-
-#### Usage ssh-jump
-
-```bash
-Usage: ssh-jump.sh [options] hostname
-Options:
-  -h, --help                 Print this help message
-  -p, --profile <profile>    Specify the aws cli profile to use
-```
-
-#### Examples ssh-jump
-
-```bash
-ssh-jump --profile ugm worker-prod3-spot
-1    worker-prod3-spot 10.3.106.201
-2    worker-prod3-spot 10.3.105.91
-3    worker-prod3-spot 10.3.100.193
-Connect to what line ?
 ```
 
 ### ssm-jump

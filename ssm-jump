@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
 
   case ${key} in
     -h | --help)
-      echo "Usage: ssh-jump.sh [options] internal-ip|instance-id|instance-name"
+      echo "Usage: ssm-jump [options] internal-ip|instance-id|instance-name"
       echo "Options:"
       echo "  -h, --help                                   Print this help message"
       echo "  -p, --profile <profile>                      Specify the aws cli profile to use"

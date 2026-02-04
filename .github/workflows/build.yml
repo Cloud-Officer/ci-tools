@@ -198,6 +198,5 @@ jobs:
         bundle exec ./deploy.rb -h
         ./generate-codeowners @ydesgagn @ydesgagn
         ./linters
-        ./ssh-jump -h
       env:
         GITHUB_TOKEN: "${{secrets.GH_PAT}}"

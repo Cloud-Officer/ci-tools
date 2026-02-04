@@ -205,22 +205,6 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **External Dependencies:** AWS CLI, jq
 
-### ssh-jump (Deprecated)
-
-**Purpose:** SSH to EC2 instances by name (deprecated, replaced by ssm-jump).
-
-**Location:** `ssh-jump`
-
-**Functionality:**
-
-- Queries EC2 instances by Name tag
-- Establishes direct SSH connection via private IP
-- Requires VPN connectivity
-
-**Internal Dependencies:** None
-
-**External Dependencies:** AWS CLI, jq
-
 ### sync-jira-release
 
 **Purpose:** Synchronizes Jira releases with GitHub pull requests by extracting issue keys from PRs.
@@ -379,7 +363,7 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 | Capacity Limits      | Respects ASG max_size constraints             | `deploy.rb` in ASG update section               |
 | Health Checks        | Waits for ELB target health before proceeding | `deploy.rb` in `wait_for_healthy_instances`     |
 | Warm-up Periods      | Configurable sleep times for cache warming    | `deploy.rb` in cache warm-up section            |
-| Deprecation Warnings | Clear warnings for deprecated tools           | `ssh-jump` at script start                      |
+| Deprecation Warnings | Clear warnings for deprecated tools           | N/A (no deprecated tools currently)             |
 
 ### Logging and Monitoring
 
