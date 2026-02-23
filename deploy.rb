@@ -22,40 +22,243 @@ WARMUP_LONG = 180       # Long warmup period for gRPC instances
 # Instance types that use load balancer health checks
 LOAD_BALANCED_INSTANCES = %w[api grpc].freeze
 
+# CloudFormation stack statuses to query
+ACTIVE_STACK_STATUSES = %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE].freeze
+
 def load_balanced_instance?(instance)
   LOAD_BALANCED_INSTANCES.include?(instance)
 end
 
 def wait_for_healthy_instances(elb, target_group_arn)
   puts('Waiting for all instances to be healthy...')
-
   loop do
-    unhealthy_targets = 0
     sleep(POLL_INTERVAL)
-
-    elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions.each do |health_description|
-      unhealthy_targets += 1 if health_description.target_health.state != 'healthy'
-    end
-
-    puts("Waiting on #{unhealthy_targets} unhealthy targets...")
-    break if unhealthy_targets.zero?
+    unhealthy = elb.describe_target_health({ target_group_arn: target_group_arn })
+                   .target_health_descriptions.count { |h| h.target_health.state != 'healthy' }
+    puts("Waiting on #{unhealthy} unhealthy targets...")
+    break if unhealthy.zero?
   end
 end
 
-begin
-  # parse command line options
+def wait_for_asg_instance_count(asg_client, asg_name, target_count)
+  loop do
+    sleep(POLL_INTERVAL)
+    response = asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [asg_name] }).auto_scaling_groups
+    raise("Unable to describe ASG #{asg_name}") if response.empty?
 
+    count = response.first.instances.count
+    puts("Waiting on instances #{count}/#{target_count}...")
+    break if count == target_count
+  end
+end
+
+def find_matching_distribution(cloudfront, environment)
+  cloudfront.list_distributions.distribution_list.items.find do |distribution|
+    distribution.aliases.items.any? { |a| a.include?(environment) }
+  end
+end
+
+def update_distribution_lambda(cloudfront, distribution, function_arn)
+  associations = distribution.default_cache_behavior.lambda_function_associations
+  return if !associations.quantity.zero? && associations.items.first.lambda_function_arn == function_arn
+
+  puts("Updating distribution #{distribution.id} lambda function associations to #{function_arn}...")
+  config = cloudfront.get_distribution_config({ id: distribution.id })
+  config_assoc = config.distribution_config.default_cache_behavior.lambda_function_associations
+
+  if config_assoc.quantity.zero?
+    config_assoc.items.push({ event_type: 'viewer-request', include_body: false, lambda_function_arn: function_arn })
+    config_assoc.quantity = 1
+  else
+    config_assoc.items.first.lambda_function_arn = function_arn
+  end
+
+  cloudfront.update_distribution({ id: distribution.id, if_match: config.etag, distribution_config: config.distribution_config })
+  puts("Update completed successfully for distribution #{distribution.id} and lambda function associations to #{function_arn}.")
+end
+
+def publish_lambda_and_update_cloudfront(options)
+  puts("Publishing lambda version for function #{options[:lambda_publish_version]}...")
+  lambda_client = Aws::Lambda::Client.new
+  version = lambda_client.publish_version({ function_name: "#{options[:environment]} - #{options[:lambda_publish_version]}" })
+  puts("Publish completed successfully for function ARN = #{version.function_arn}.")
+  puts('Checking cloudfront distributions...')
+  cloudfront = Aws::CloudFront::Client.new
+  distribution = find_matching_distribution(cloudfront, options[:environment])
+  raise('Unable to find cloudfront distribution') if distribution.nil?
+
+  update_distribution_lambda(cloudfront, distribution, version.function_arn)
+end
+
+def find_standalone_instance(ec2, options)
+  puts("Searching for #{options[:instance]} standalone instance...")
+  ec2.instances.each do |instance|
+    next unless %w[running stopped].include?(instance.data.state.name)
+
+    instance.tags.each do |tag|
+      next unless tag.key == 'Name'
+      next unless tag.value[/#{Regexp.escape(options[:instance])}-#{Regexp.escape(options[:environment])}.*-standalone/]
+
+      puts("Standalone instance #{tag.value} found with id #{instance.id}.")
+      return [instance.id, tag.value]
+    end
+  end
+
+  raise('Unable to find standalone instance')
+end
+
+def create_ami(ec2, instance_id, instance_name, options)
+  ami = ec2.client.create_image({ instance_id: instance_id, name: instance_name.sub('standalone', Time.now.strftime('%Y-%m-%d-%H%M%S')) })
+  puts("Creating image #{ami.image_id}...")
+  max_attempts = options[:instance] == 'worker' ? 1024 : 256
+  Aws::EC2::Waiters::ImageAvailable.new({ client: ec2.client, max_attempts: max_attempts, delay: 30 }).wait(
+    { filters: [{ name: 'image-id', values: [ami.image_id] }, { name: 'state', values: ['available'] }] }
+  )
+
+  puts("Image creation completed for #{ami.image_id}.")
+  ami.image_id
+end
+
+def find_auto_scaling_group(asg_resources, options)
+  puts('Checking auto scaling groups...')
+  asg_resources.groups.each do |group|
+    next unless group.auto_scaling_group_name[/#{Regexp.escape(options[:environment])}.*-#{Regexp.escape(options[:instance])}.*/]
+
+    puts("Auto scaling group #{group.auto_scaling_group_name} found with desired capacity at #{group.desired_capacity}.")
+    return { name: group.auto_scaling_group_name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
+  end
+
+  raise('Unable to find auto scaling group')
+end
+
+def find_target_group(elb, options)
+  ports = options[:instance] == 'grpc' ? ['8443-HTTP2'] : %w[80 443]
+  puts('Checking load balancer target groups...')
+
+  elb.describe_target_groups.each do |targets|
+    targets.target_groups.each do |group|
+      ports.each do |port|
+        return group.target_group_arn if group.target_group_name[/#{Regexp.escape(options[:environment])}\d*-#{Regexp.escape(port)}$/]
+      end
+    end
+  end
+
+  raise('Unable to find load balancer target group')
+end
+
+def find_cloudformation_stack(cfn, options)
+  puts('Checking cloudformation stacks...')
+  cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).stack_summaries.each do |stack|
+    next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
+
+    puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
+    return stack.stack_name
+  end
+
+  raise('Unable to find cloudformation stack')
+end
+
+def parameter_prefix_for(instance)
+  case instance
+  when 'api', 'grpc' then instance.upcase
+  else instance.capitalize
+  end
+end
+
+def resolve_parameter_value(key, prefix, ami_id, asg, options)
+  case key
+  when "#{prefix}ImageId" then ami_id
+  when "#{prefix}MinSize" then asg[:min_size].to_s
+  when "#{prefix}MaxSize" then asg[:max_size].to_s
+  when "#{prefix}DesiredCapacity" then asg[:desired_capacity].to_s
+  when "#{prefix}InstanceType" then options[:type]
+  when 'SpotTargetCapacity' then options[:spot_target_capacity]&.to_s
+  end
+end
+
+def update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
+  ignored_parameters = %w[DbPassword MqPassword SendGridApiKey]
+  ssm = Aws::SSM::Client.new
+  parameters.each do |parameter|
+    replace_with = resolve_parameter_value(parameter.parameter_key, prefix, ami_id, asg, options)
+
+    unless replace_with.nil?
+      puts("Updating SSM parameter '/#{environment}/#{subnet}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
+      ssm.put_parameter({ name: "/#{environment}/#{subnet}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
+    end
+
+    next unless ignored_parameters.include?(parameter.parameter_key)
+
+    parameter.parameter_value = nil
+    parameter.use_previous_value = true
+  end
+end
+
+def wait_for_stack_update(cfn, stack_name)
+  failure_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
+  loop do
+    sleep(POLL_INTERVAL)
+    response = cfn.describe_stacks({ stack_name: stack_name }).stacks
+    raise("Unable to describe stack #{stack_name}") if response.empty?
+
+    break if response.first.stack_status == 'UPDATE_COMPLETE'
+    raise('Stack update failed') if failure_states.include?(response.first.stack_status)
+  end
+end
+
+def update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
+  puts("Updating cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}...")
+  begin
+    cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
+  rescue Aws::CloudFormation::Errors::ValidationError => e
+    puts("Stopping here: #{e.message}")
+    exit
+  end
+  wait_for_stack_update(cfn, stack_name)
+  puts("Update completed successfully for cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}.")
+end
+
+def fetch_asg_mixed_parameters(environment, subnet)
+  ssm = Aws::SSM::Client.new
+  response = ssm.get_parameters({ names: ["/#{environment}/#{subnet}/OnDemandPercentAbove", "/#{environment}/#{subnet}/OnDemandBaseCapacity"], with_decryption: true })
+  result = {}
+  response.parameters.each do |param|
+    case param[:name]
+    when "/#{environment}/#{subnet}/OnDemandPercentAbove" then result[:percent_above] = param.value.to_s
+    when "/#{environment}/#{subnet}/OnDemandBaseCapacity" then result[:base_capacity] = param.value.to_s
+    end
+  end
+
+  raise('Unable to load ASG mixed parameters: OnDemandPercentAbove') if result[:percent_above].nil?
+  raise('Unable to load ASG mixed parameters: OnDemandBaseCapacity') if result[:base_capacity].nil?
+
+  result
+end
+
+def update_asg_capacity(asg_client, asg_name, base_capacity:, percent_above:, desired_capacity: nil, max_size: nil)
+  params = {
+    auto_scaling_group_name: asg_name,
+    mixed_instances_policy: {
+      instances_distribution: {
+        on_demand_base_capacity: base_capacity,
+        on_demand_percentage_above_base_capacity: percent_above
+      }
+    }
+  }
+  params[:desired_capacity] = desired_capacity unless desired_capacity.nil?
+  params[:max_size] = max_size unless max_size.nil?
+  asg_client.update_auto_scaling_group(params)
+end
+
+begin
   options = {}
   asg_increase = 1
   asg_multiplier = 2
-  asg_max_size = 1
-  asg_min_size = 1
 
   OptionParser.new do |opts|
     opts.banner = 'Usage: deploy.rb options'
     opts.separator('')
     opts.separator('options')
-
     opts.on('--ami ami', String)
     opts.on('--create_ami_only')
     opts.on('--environment environment', String)
@@ -84,48 +287,7 @@ begin
   end
 
   if options[:lambda_publish_version]
-    puts("Publishing lambda version for function #{options[:lambda_publish_version]}...")
-    lambda = Aws::Lambda::Client.new
-    version = lambda.publish_version({ function_name: "#{options[:environment]} - #{options[:lambda_publish_version]}" })
-    puts("Publish completed successfully for function ARN = #{version.function_arn}.")
-
-    puts('Checking cloudfront distributions...')
-    cloudfront = Aws::CloudFront::Client.new
-    distribution_id = nil
-
-    cloudfront.list_distributions.distribution_list.items.each do |distribution|
-      distribution.aliases.items.each do |distribution_alias|
-        next unless distribution_alias.include?(options[:environment])
-
-        distribution_id = distribution.id
-
-        if distribution.default_cache_behavior.lambda_function_associations.quantity.zero? || distribution.default_cache_behavior.lambda_function_associations.items.first.lambda_function_arn != version.function_arn
-          puts("Updating distribution #{distribution.id} lambda function associations to #{version.function_arn}...")
-          get_distribution = cloudfront.get_distribution_config({ id: distribution.id })
-
-          if get_distribution.distribution_config.default_cache_behavior.lambda_function_associations.quantity.zero?
-            get_distribution.distribution_config.default_cache_behavior.lambda_function_associations.items.push(
-              {
-                event_type: 'viewer-request',
-                include_body: false,
-                lambda_function_arn: version.function_arn
-              }
-            )
-            get_distribution.distribution_config.default_cache_behavior.lambda_function_associations.quantity = 1
-          else
-            get_distribution.distribution_config.default_cache_behavior.lambda_function_associations.items.first.lambda_function_arn = version.function_arn
-          end
-
-          cloudfront.update_distribution({ id: distribution.id, if_match: get_distribution.etag, distribution_config: get_distribution.distribution_config })
-          puts("Update completed successfully for distribution #{distribution.id} and lambda function associations to #{version.function_arn}.")
-        end
-
-        break
-      end
-    end
-
-    raise('Unable to find cloudfront distribution') if distribution_id.nil?
-
+    publish_lambda_and_update_cloudfront(options)
     exit
   end
 
@@ -139,74 +301,9 @@ begin
   if options[:ami]
     ami_id = options[:ami]
   else
-    # find standalone instance
-
-    instance_id = nil
-    instance_name = ''
     ec2 = Aws::EC2::Resource.new
-    puts("Searching for #{options[:instance]} standalone instance...")
-    instance_states = %w[running stopped]
-
-    ec2.instances.each do |instance|
-      next unless instance_states.include?(instance.data.state.name)
-
-      instance.tags.each do |tag|
-        next unless tag.key == 'Name'
-
-        if tag.value[/#{Regexp.escape(options[:instance])}-#{Regexp.escape(options[:environment])}.*-standalone/]
-          instance_id = instance.id
-          instance_name = tag.value
-        end
-      end
-    end
-
-    raise('Unable to find standalone instance') if instance_id.nil?
-
-    puts("Standalone instance #{instance_name} found with id #{instance_id}.")
-
-    # create image
-
-    ami = ec2.client.create_image(
-      {
-        instance_id: instance_id,
-        name: instance_name.sub('standalone', Time.now.strftime('%Y-%m-%d-%H%M%S'))
-      }
-    )
-    puts("Creating image #{ami.image_id}...")
-    waiter = Aws::EC2::Waiters::ImageAvailable.new(
-      {
-        client: ec2.client,
-        max_attempts: if options[:instance] == 'worker'
-                        1024
-                      else
-                        256
-                      end,
-        delay: 30
-      }
-    )
-    waiter.wait(
-      {
-        filters:
-          [
-            {
-              name: 'image-id',
-              values:
-                [
-                  ami.image_id
-                ]
-            },
-            {
-              name: 'state',
-              values:
-                [
-                  'available'
-                ]
-            }
-          ]
-      }
-    )
-    ami_id = ami.image_id
-    puts("Image creation completed for #{ami.image_id}.")
+    instance_id, instance_name = find_standalone_instance(ec2, options)
+    ami_id = create_ami(ec2, instance_id, instance_name, options)
 
     if options[:create_ami_only]
       puts('Exiting now as --create_ami_only was supplied.')
@@ -214,235 +311,39 @@ begin
     end
   end
 
-  # find auto scaling group
-
   asg_resources = Aws::AutoScaling::Resource.new
-  auto_scaling_group_name = ''
-  desired_capacity = 1
-  puts('Checking auto scaling groups...')
-
-  asg_resources.groups.each do |group|
-    next unless group.auto_scaling_group_name[/#{Regexp.escape(options[:environment])}.*-#{Regexp.escape(options[:instance])}.*/]
-
-    puts("Auto scaling group #{group.auto_scaling_group_name} found with desired capacity at #{group.desired_capacity}.")
-    auto_scaling_group_name = group.auto_scaling_group_name
-    desired_capacity = group.desired_capacity
-    asg_min_size = group.min_size
-    asg_max_size = group.max_size
-    break
-  end
-
-  raise('Unable to find auto scaling group') if auto_scaling_group_name.empty?
+  asg = find_auto_scaling_group(asg_resources, options)
+  elb = target_group_arn = nil
 
   if load_balanced_instance?(options[:instance])
-    # find load balancer target group
-
     elb = Aws::ElasticLoadBalancingV2::Client.new
-    target_group_arn = nil
-
-    ports = %w[80 443]
-    ports = ['8443-HTTP2'] if options[:instance] == 'grpc'
-    puts('Checking load balancer target groups...')
-
-    elb.describe_target_groups.each do |targets|
-      targets.target_groups.each do |group|
-        ports.each do |port|
-          target_group_arn = group.target_group_arn if group.target_group_name[/#{Regexp.escape(options[:environment])}\d*-#{Regexp.escape(port)}$/]
-        end
-      end
-    end
-
-    raise('Unable to find load balancer target group') if target_group_arn.nil?
+    target_group_arn = find_target_group(elb, options)
   end
 
-  # check cloudformation stacks...
+  cfn = Aws::CloudFormation::Client.new
+  stack_name = find_cloudformation_stack(cfn, options)
 
-  puts('Checking cloudformation stacks...')
-  cf = Aws::CloudFormation::Client.new
-  stacks = cf.list_stacks(
-    {
-      stack_status_filter: %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE]
-    }
-  )
-
-  stack_name = nil
-
-  stacks.stack_summaries.each do |stack|
-    next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
-
-    puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
-    stack_name = stack.stack_name
-    break
-  end
-
-  raise('Unable to find cloudformation stack') if stack_name.nil?
-
-  stacks_response = cf.describe_stacks(
-    {
-      stack_name: stack_name
-    }
-  ).stacks
+  stacks_response = cfn.describe_stacks({ stack_name: stack_name }).stacks
   raise("Unable to describe stack #{stack_name}") if stacks_response.empty?
 
   parameters = stacks_response.first.parameters
   environment = stack_name.split('-').first.tr('0-9', '')
   subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
+  prefix = parameter_prefix_for(options[:instance])
 
-  # set ssm parameters: ami, min_size, max_size, desired_capacity
+  update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
+  update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
 
-  parameter_prefix =
-    case options[:instance]
-    when 'api', 'grpc'
-      options[:instance].upcase
-    else
-      options[:instance].capitalize
-    end
-  ignored_parameters = %w[DbPassword MqPassword SendGridApiKey]
+  mixed_params = fetch_asg_mixed_parameters(environment, subnet)
+  new_capacity = (asg[:desired_capacity] * asg_multiplier) + asg_increase
 
-  parameters.each do |parameter|
-    replace_with =
-      case parameter.parameter_key
-      when "#{parameter_prefix}ImageId"
-        ami_id
-      when "#{parameter_prefix}MinSize"
-        asg_min_size.to_s
-      when "#{parameter_prefix}MaxSize"
-        asg_max_size.to_s
-      when "#{parameter_prefix}DesiredCapacity"
-        desired_capacity.to_s
-      when "#{parameter_prefix}InstanceType"
-        options[:type] # nil if not specified
-      when 'SpotTargetCapacity'
-        options[:spot_target_capacity]&.to_s # nil if not specified
-      end
+  puts("Increasing desired capacity from #{asg[:desired_capacity]} to #{new_capacity}...")
+  new_max = asg[:max_size] < new_capacity ? (asg[:max_size] * asg_multiplier) + asg_increase : nil
+  update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: new_capacity, max_size: new_max)
 
-    unless replace_with.nil?
-      puts("Updating SSM parameter '/#{environment}/#{subnet}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
-      ssm = Aws::SSM::Client.new
-      ssm.put_parameter(
-        {
-          name: "/#{environment}/#{subnet}/#{parameter.parameter_key}",
-          value: replace_with,
-          type: 'String',
-          overwrite: true
-        }
-      )
-    end
-
-    next unless ignored_parameters.include?(parameter.parameter_key)
-
-    parameter.parameter_value = nil
-    parameter.use_previous_value = true
-  end
-
-  puts("Updating cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}...")
-
-  begin
-    cf.update_stack(
-      {
-        stack_name: stack_name,
-        use_previous_template: true,
-        parameters: parameters,
-        capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND],
-        disable_rollback: false
-      }
-    )
-  rescue Aws::CloudFormation::Errors::ValidationError => e
-    puts("Stopping here: #{e.message}")
-    exit
-  end
-
-  # wait until stack has updated
-
-  stack_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
-
-  loop do
-    sleep(POLL_INTERVAL)
-    stack_response = cf.describe_stacks(
-      {
-        stack_name: stack_name
-      }
-    ).stacks
-    raise("Unable to describe stack #{stack_name}") if stack_response.empty?
-
-    stack = stack_response.first
-    break if stack.stack_status == 'UPDATE_COMPLETE'
-    raise('Stack update failed') if stack_states.include?(stack.stack_status)
-  end
-
-  puts("Update completed successfully for cloudformation stack #{stack_name} with #{parameter_prefix}ImageId #{ami_id}.")
-
-  # get asg parameters
-
-  ondemand_percent_above = ondemand_base_capacity = nil
-  ssm = Aws::SSM::Client.new
-  asg_parameters = ssm.get_parameters(
-    {
-      names: [
-        "/#{environment}/#{subnet}/OnDemandPercentAbove",
-        "/#{environment}/#{subnet}/OnDemandBaseCapacity"
-      ],
-      with_decryption: true
-    }
-  )
-  asg_parameters.parameters.each do |parameter|
-    case parameter[:name]
-    when "/#{environment}/#{subnet}/OnDemandPercentAbove"
-      ondemand_percent_above = parameter.value.to_s
-    when "/#{environment}/#{subnet}/OnDemandBaseCapacity"
-      ondemand_base_capacity = parameter.value.to_s
-    end
-  end
-  raise('Unable to load ASG mixed parameters: OnDemandPercentAbove') if ondemand_percent_above.nil?
-  raise('Unable to load ASG mixed parameters: OnDemandBaseCapacity') if ondemand_base_capacity.nil?
-
-  # set new launch configuration and increase desired capacity
-
-  puts("Increasing desired capacity from #{desired_capacity} to #{(desired_capacity * asg_multiplier) + asg_increase}...")
-
-  if asg_max_size >= (desired_capacity * asg_multiplier) + asg_increase
-    asg_resources.client.update_auto_scaling_group(
-      {
-        auto_scaling_group_name: auto_scaling_group_name,
-        desired_capacity: (desired_capacity * asg_multiplier) + asg_increase,
-        mixed_instances_policy: {
-          instances_distribution: {
-            on_demand_base_capacity: ondemand_base_capacity,
-            on_demand_percentage_above_base_capacity: 100
-          }
-        }
-      }
-    )
-  else
-    asg_resources.client.update_auto_scaling_group(
-      {
-        auto_scaling_group_name: auto_scaling_group_name,
-        desired_capacity: (desired_capacity * asg_multiplier) + asg_increase,
-        max_size: (asg_max_size * asg_multiplier) + asg_increase,
-        mixed_instances_policy: {
-          instances_distribution: {
-            on_demand_base_capacity: ondemand_base_capacity,
-            on_demand_percentage_above_base_capacity: 100
-          }
-        }
-      }
-    )
-  end
-
-  # wait for auto scaling group to start instances
-
-  if ((desired_capacity * asg_multiplier) + asg_increase) > desired_capacity
+  if new_capacity > asg[:desired_capacity]
     puts('Waiting for auto scaling group to start the instances...')
-
-    loop do
-      sleep(POLL_INTERVAL)
-      asg_response = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups
-      raise("Unable to describe ASG #{auto_scaling_group_name}") if asg_response.empty?
-
-      instances = asg_response.first.instances.count
-      puts("Waiting on instances #{instances}/#{(desired_capacity * asg_multiplier) + asg_increase}...")
-      break if instances == (desired_capacity * asg_multiplier) + asg_increase
-    end
+    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
 
     if load_balanced_instance?(options[:instance])
       sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
@@ -450,68 +351,25 @@ begin
     end
 
     puts('Waiting for cache/instances to warm up...')
-
-    if options[:instance] == 'grpc'
-      sleep(WARMUP_LONG)
-    else
-      sleep(WARMUP_SHORT)
-    end
+    sleep(options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
   end
 
-  # set original desired capacity
-
   if options[:skip_scale_down]
-    puts("Setting max_size to #{asg_max_size}...")
-    asg_resources.client.update_auto_scaling_group(
-      {
-        auto_scaling_group_name: auto_scaling_group_name,
-        max_size: asg_max_size,
-        mixed_instances_policy: {
-          instances_distribution: {
-            on_demand_base_capacity: ondemand_base_capacity,
-            on_demand_percentage_above_base_capacity: ondemand_percent_above
-          }
-        }
-      }
-    )
+    puts("Setting max_size to #{asg[:max_size]}...")
+    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
   else
-    puts("Setting desired capacity from #{(desired_capacity * asg_multiplier) + asg_increase} to #{desired_capacity}...")
-    asg_resources.client.update_auto_scaling_group(
-      {
-        auto_scaling_group_name: auto_scaling_group_name,
-        desired_capacity: desired_capacity,
-        max_size: asg_max_size,
-        mixed_instances_policy: {
-          instances_distribution: {
-            on_demand_base_capacity: ondemand_base_capacity,
-            on_demand_percentage_above_base_capacity: ondemand_percent_above
-          }
-        }
-      }
-    )
-
+    puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
+    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
     if load_balanced_instance?(options[:instance])
       sleep(POLL_INTERVAL)
       wait_for_healthy_instances(elb, target_group_arn)
     end
 
-    # wait for auto scaling group to stop instances
-
     puts('Waiting for auto scaling group to stop the instances...')
-
-    loop do
-      sleep(POLL_INTERVAL)
-      asg_response = asg_resources.client.describe_auto_scaling_groups({ auto_scaling_group_names: [auto_scaling_group_name] }).auto_scaling_groups
-      raise("Unable to describe ASG #{auto_scaling_group_name}") if asg_response.empty?
-
-      instances = asg_response.first.instances.count
-      puts("Waiting on instances #{instances}/#{desired_capacity}...")
-      break if instances == desired_capacity
-    end
+    wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
   end
 
-  puts("Update completed successfully for Auto scaling group #{auto_scaling_group_name}.")
-
+  puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
   puts('Deployment completed successfully.')
 rescue StandardError => e
   puts(e)
