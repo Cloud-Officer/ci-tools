@@ -181,6 +181,21 @@ RSpec.describe(Deploy) do
     end
   end
 
+  describe '#extract_subnet_number' do
+    it 'extracts subnet number from stack name' do
+      expect(extract_subnet_number('beta1-StackInstances-abc')).to(eq(1))
+    end
+
+    it 'extracts multi-digit subnet number' do
+      expect(extract_subnet_number('prod12-StackInstances-abc')).to(eq(12))
+    end
+
+    it 'raises error when no digits in first segment' do
+      expect { extract_subnet_number('beta-StackInstances-abc') }
+        .to(raise_error(RuntimeError, "Unable to extract subnet number from stack name 'beta-StackInstances-abc'"))
+    end
+  end
+
   describe '#find_standalone_instance' do
     let(:ec2) { Aws::EC2::Resource.new(stub_responses: true) }
     let(:options) { { instance: 'api', environment: 'beta' } }
