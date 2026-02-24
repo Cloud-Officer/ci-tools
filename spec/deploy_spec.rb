@@ -480,12 +480,21 @@ RSpec.describe(Deploy) do
       expect(cfn).to(have_received(:update_stack).with(hash_including(stack_name: 'test-stack')))
     end
 
-    context 'when ValidationError occurs' do
-      before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'No updates'))) }
+    context 'when ValidationError is no updates to be performed' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'No updates are to be performed'))) }
 
-      it 'exits gracefully' do
+      it 'exits with code 0', :aggregate_failures do
         expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
-          .to(raise_error(SystemExit))
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+      end
+    end
+
+    context 'when ValidationError is a genuine error' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'Template validation failed'))) }
+
+      it 'exits with code 1', :aggregate_failures do
+        expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
       end
     end
   end
