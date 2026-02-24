@@ -74,7 +74,12 @@ if [ -f .hadolint.yaml ]; then
   echo "Checking Dockerfiles..."
 
   if ! command -v hadolint &>/dev/null; then
-    brew install hadolint
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install hadolint
+    else
+      wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+      chmod +x /usr/local/bin/hadolint
+    fi
   fi
 
   # shellcheck disable=SC2046
@@ -85,7 +90,12 @@ if [ -f .golangci.yml ]; then
   echo "Checking Go..."
 
   if ! command -v golangci-lint &>/dev/null; then
-    brew install golangci-lint
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install golangci-lint
+    else
+      go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      export PATH="${PATH}:${HOME}/go/bin"
+    fi
   fi
 
   golangci-lint run || FAILED=1
@@ -102,6 +112,8 @@ if [ -f .pmd.xml ]; then
   echo
 fi
 
+# .eslintrc.json is the legacy config format, which requires eslint@8.
+# eslint v9+ only supports the flat config format (eslint.config.js/mjs).
 if [ -f .eslintrc.json ]; then
   echo "Checking JS with eslint..."
 
