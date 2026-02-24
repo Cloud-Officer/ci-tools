@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe('cycle-keys.rb') do
+module CycleKeys
+  # Methods defined in cycle-keys.rb
+end
+
+RSpec.describe(CycleKeys) do
   describe '#cleanup_secondary_keys' do
     let(:iam)            { Aws::IAM::Client.new(stub_responses: true) }
     let(:primary_key_id) { 'AKIAIOSFODNN7EXAMPLE'                     }
@@ -10,83 +14,92 @@ RSpec.describe('cycle-keys.rb') do
       allow(iam).to(receive(:delete_access_key).and_call_original)
     end
 
-    it 'disables and deletes active secondary keys' do
-      metadata = [
-        double('key', access_key_id: primary_key_id, user_name: 'testuser', status: 'Active'),
-        double('key', access_key_id: 'AKIAI44QH8DHBSECONDARY', user_name: 'testuser', status: 'Active')
-      ]
-      cleanup_secondary_keys(iam, primary_key_id, metadata)
-      expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: 'AKIAI44QH8DHBSECONDARY', status: 'Inactive')))
-      expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIAI44QH8DHBSECONDARY')))
+    context 'with active secondary key' do
+      let(:metadata) do
+        [
+          instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: primary_key_id, user_name: 'testuser', status: 'Active'),
+          instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: 'AKIAI44QH8DHBSECONDARY', user_name: 'testuser', status: 'Active')
+        ]
+      end
+
+      before { cleanup_secondary_keys(iam, primary_key_id, metadata) }
+
+      it 'disables and deletes the key', :aggregate_failures do
+        expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: 'AKIAI44QH8DHBSECONDARY', status: 'Inactive')))
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIAI44QH8DHBSECONDARY')))
+      end
     end
 
-    it 'deletes inactive secondary keys without disabling' do
-      metadata = [
-        double('key', access_key_id: primary_key_id, user_name: 'testuser', status: 'Active'),
-        double('key', access_key_id: 'AKIAI44QH8DHBSECONDARY', user_name: 'testuser', status: 'Inactive')
-      ]
-      cleanup_secondary_keys(iam, primary_key_id, metadata)
-      expect(iam).not_to(have_received(:update_access_key))
-      expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIAI44QH8DHBSECONDARY')))
+    context 'with inactive secondary key' do
+      let(:metadata) do
+        [
+          instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: primary_key_id, user_name: 'testuser', status: 'Active'),
+          instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: 'AKIAI44QH8DHBSECONDARY', user_name: 'testuser', status: 'Inactive')
+        ]
+      end
+
+      before { cleanup_secondary_keys(iam, primary_key_id, metadata) }
+
+      it 'deletes without disabling', :aggregate_failures do
+        expect(iam).not_to(have_received(:update_access_key))
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIAI44QH8DHBSECONDARY')))
+      end
     end
 
-    it 'skips the primary key' do
-      metadata = [
-        double('key', access_key_id: primary_key_id, user_name: 'testuser', status: 'Active')
-      ]
-      cleanup_secondary_keys(iam, primary_key_id, metadata)
-      expect(iam).not_to(have_received(:update_access_key))
-      expect(iam).not_to(have_received(:delete_access_key))
+    context 'with only primary key' do
+      let(:metadata) do
+        [instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: primary_key_id, user_name: 'testuser', status: 'Active')]
+      end
+
+      before { cleanup_secondary_keys(iam, primary_key_id, metadata) }
+
+      it 'skips the primary key', :aggregate_failures do
+        expect(iam).not_to(have_received(:update_access_key))
+        expect(iam).not_to(have_received(:delete_access_key))
+      end
     end
 
-    it 'handles empty metadata list' do
-      cleanup_secondary_keys(iam, primary_key_id, [])
-      expect(iam).not_to(have_received(:update_access_key))
-      expect(iam).not_to(have_received(:delete_access_key))
+    context 'with empty metadata' do
+      before { cleanup_secondary_keys(iam, primary_key_id, []) }
+
+      it 'does nothing', :aggregate_failures do
+        expect(iam).not_to(have_received(:update_access_key))
+        expect(iam).not_to(have_received(:delete_access_key))
+      end
     end
   end
 
   describe '#create_and_save_new_key' do
     let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
-    let(:credentials)           { instance_double(IniFile, filename: '/tmp/test-credentials') }
-    let(:profile)               { 'test-profile'                                              }
-    let(:user_name)             { 'testuser'                                                  }
-    let(:credentials_file_name) { '/tmp/test-credentials'                                     }
-    let(:lock_file)             { instance_double(File)                                       }
+    let(:credentials) { instance_double(IniFile, filename: '/tmp/test-credentials')   }
+    let(:user_name)   { 'testuser'                                                    }
+    let(:lock_file)   { instance_double(File)                                         }
 
     before do
       iam.stub_responses(
         :create_access_key,
-        {
-          access_key: {
-            access_key_id: 'AKIANEWKEY123',
-            secret_access_key: 'secret123',
-            user_name: user_name,
-            status: 'Active'
-          }
-        }
+        { access_key: { access_key_id: 'AKIANEWKEY123', secret_access_key: 'secret123', user_name: user_name, status: 'Active' } }
       )
-      allow(credentials).to(receive(:[]).with(profile).and_return({}))
+      allow(credentials).to(receive(:[]).with('test-profile').and_return({}))
       allow(credentials).to(receive(:write))
-      allow(File).to(receive(:open).with("#{credentials_file_name}.lock", anything, anything).and_yield(lock_file))
+      allow(File).to(receive(:open).with("#{credentials.filename}.lock", anything, anything).and_yield(lock_file))
       allow(lock_file).to(receive(:flock))
     end
 
     it 'creates a new access key and returns the key id' do
-      result = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
-      expect(result).to(eq('AKIANEWKEY123'))
+      expect(create_and_save_new_key(iam, credentials, 'test-profile', user_name, credentials.filename)).to(eq('AKIANEWKEY123'))
     end
 
-    it 'writes credentials with file lock' do
-      create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
+    it 'writes credentials with file lock', :aggregate_failures do
+      create_and_save_new_key(iam, credentials, 'test-profile', user_name, credentials.filename)
       expect(lock_file).to(have_received(:flock).with(File::LOCK_EX))
       expect(credentials).to(have_received(:write))
     end
 
-    it 'updates credentials hash with new key' do
+    it 'updates credentials hash with new key', :aggregate_failures do
       cred_hash = {}
-      allow(credentials).to(receive(:[]).with(profile).and_return(cred_hash))
-      create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
+      allow(credentials).to(receive(:[]).with('test-profile').and_return(cred_hash))
+      create_and_save_new_key(iam, credentials, 'test-profile', user_name, credentials.filename)
       expect(cred_hash['aws_access_key_id']).to(eq('AKIANEWKEY123'))
       expect(cred_hash['aws_secret_access_key']).to(eq('secret123'))
     end
@@ -104,20 +117,20 @@ RSpec.describe('cycle-keys.rb') do
       allow(iam).to(receive(:delete_access_key).and_call_original)
     end
 
-    it 'disables then deletes the old key' do
+    it 'disables then deletes the old key', :aggregate_failures do
       disable_and_delete_old_key(iam, access_key, user_name, rollback)
       expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: access_key, status: 'Inactive')))
       expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: access_key)))
     end
 
-    it 'calls rollback and raises when disable fails' do
+    it 'calls rollback and raises when disable fails', :aggregate_failures do
       allow(iam).to(receive(:update_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'error')))
       expect { disable_and_delete_old_key(iam, access_key, user_name, rollback) }
         .to(raise_error(Aws::IAM::Errors::ServiceError))
       expect(rollback).to(have_received(:call).with('failed to disable old key'))
     end
 
-    it 'calls rollback and raises when delete fails' do
+    it 'calls rollback and raises when delete fails', :aggregate_failures do
       allow(iam).to(receive(:delete_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'error')))
       expect { disable_and_delete_old_key(iam, access_key, user_name, rollback) }
         .to(raise_error(Aws::IAM::Errors::ServiceError))

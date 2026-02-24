@@ -23,11 +23,11 @@ def build_kms_key_map(kms)
     )
 
     if key_metadata[:key_metadata][:description].start_with?('beta')
-      keys['beta'] = key_metadata[:key_metadata][:arn]
+      keys[:beta] = key_metadata[:key_metadata][:arn]
     elsif key_metadata[:key_metadata][:description].start_with?('rc')
-      keys['rc'] = key_metadata[:key_metadata][:arn]
+      keys[:rc] = key_metadata[:key_metadata][:arn]
     elsif key_metadata[:key_metadata][:description].start_with?('prod')
-      keys['prod'] = key_metadata[:key_metadata][:arn]
+      keys[:prod] = key_metadata[:key_metadata][:arn]
     end
   end
 
@@ -49,11 +49,11 @@ def process_log_group(logs, log_group, keys, retention_in_days)
 
   key =
     if log_group[:log_group_name].include?('beta')
-      keys['beta']
+      keys[:beta]
     elsif log_group[:log_group_name].include?('rc')
-      keys['rc']
+      keys[:rc]
     else
-      keys['prod']
+      keys[:prod]
     end
 
   puts("Encrypting #{log_group[:log_group_name]} with key = #{key}...")
