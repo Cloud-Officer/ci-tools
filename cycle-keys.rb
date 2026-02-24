@@ -4,7 +4,7 @@
 
 require 'aws-sdk-iam'
 require 'date'
-require 'inifile'
+require 'iniparse'
 require 'optparse'
 
 def cleanup_secondary_keys(iam, primary_key_id, metadata_list)
@@ -45,8 +45,8 @@ def create_and_save_new_key(iam, credentials, profile, user_name, credentials_fi
   # Use file locking to prevent race conditions when multiple instances run simultaneously
   File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
     lock_file.flock(File::LOCK_EX)
-    credentials.write
-    puts("\tNew key saved into: #{credentials.filename}")
+    credentials.save
+    puts("\tNew key saved into: #{credentials_file_name}")
   end
 
   new_access_key_id
@@ -111,9 +111,10 @@ if __FILE__ == $PROGRAM_NAME
 
     credentials_file_name = "#{Dir.home}/.aws/credentials"
     puts("Reading #{credentials_file_name}")
-    credentials = IniFile.load(credentials_file_name)
+    credentials = IniParse.open(credentials_file_name)
 
-    credentials.each_section do |profile|
+    credentials.each do |section|
+      profile = section.key
       next if profile != options[:profile]
 
       region = credentials[profile]['region'] || 'us-east-1'
@@ -186,7 +187,7 @@ if __FILE__ == $PROGRAM_NAME
             credentials[profile]['aws_secret_access_key'] = secret_key
             File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
               lock_file.flock(File::LOCK_EX)
-              credentials.write
+              credentials.save
               puts("\tRollback: restored original credentials")
             end
           rescue StandardError => e

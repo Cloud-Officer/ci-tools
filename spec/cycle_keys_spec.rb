@@ -71,9 +71,9 @@ RSpec.describe(CycleKeys) do
 
   describe '#create_and_save_new_key' do
     let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
-    let(:credentials) { instance_double(IniFile, filename: '/tmp/test-credentials')   }
-    let(:user_name)   { 'testuser'                                                    }
-    let(:lock_file)   { instance_double(File)                                         }
+    let(:credentials) { instance_double(IniParse::Document) }
+    let(:user_name)   { 'testuser'                          }
+    let(:lock_file)   { instance_double(File)               }
 
     before do
       iam.stub_responses(
@@ -81,25 +81,25 @@ RSpec.describe(CycleKeys) do
         { access_key: { access_key_id: 'AKIANEWKEY123', secret_access_key: 'secret123', user_name: user_name, status: 'Active' } }
       )
       allow(credentials).to(receive(:[]).with('test-profile').and_return({}))
-      allow(credentials).to(receive(:write))
-      allow(File).to(receive(:open).with("#{credentials.filename}.lock", anything, anything).and_yield(lock_file))
+      allow(credentials).to(receive(:save))
+      allow(File).to(receive(:open).with('/tmp/test-credentials.lock', anything, anything).and_yield(lock_file))
       allow(lock_file).to(receive(:flock))
     end
 
     it 'creates a new access key and returns the key id' do
-      expect(create_and_save_new_key(iam, credentials, 'test-profile', user_name, credentials.filename)).to(eq('AKIANEWKEY123'))
+      expect(create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')).to(eq('AKIANEWKEY123'))
     end
 
     it 'writes credentials with file lock', :aggregate_failures do
-      create_and_save_new_key(iam, credentials, 'test-profile', user_name, credentials.filename)
+      create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')
       expect(lock_file).to(have_received(:flock).with(File::LOCK_EX))
-      expect(credentials).to(have_received(:write))
+      expect(credentials).to(have_received(:save))
     end
 
     it 'updates credentials hash with new key', :aggregate_failures do
       cred_hash = {}
       allow(credentials).to(receive(:[]).with('test-profile').and_return(cred_hash))
-      create_and_save_new_key(iam, credentials, 'test-profile', user_name, credentials.filename)
+      create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')
       expect(cred_hash['aws_access_key_id']).to(eq('AKIANEWKEY123'))
       expect(cred_hash['aws_secret_access_key']).to(eq('secret123'))
     end
