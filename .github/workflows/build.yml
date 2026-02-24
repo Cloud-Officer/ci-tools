@@ -187,16 +187,6 @@ jobs:
     - name: RSpec
       shell: bash
       if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
-      run: |
-        if [ "${RUNNER_OS}" == "Linux" ]; then
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew update
-        fi
-
-        set -x
-        bundle exec ./brew-resources.rb
-        bundle exec ./deploy.rb -h
-        ./generate-codeowners @ydesgagn @ydesgagn
-        ./linters
+      run: bundle exec rspec --format documentation
       env:
         GITHUB_TOKEN: "${{secrets.GH_PAT}}"

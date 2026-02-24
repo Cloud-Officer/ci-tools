@@ -215,6 +215,30 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "diff-lcs": {
+    "language": "Ruby",
+    "package": "diff-lcs",
+    "version": "1.6.2",
+    "license": "MIT",
+    "description": "Computes the difference between two Enumerable sequences using the McIlroy-Hunt longest common subsequence algorithm.",
+    "website": "https://github.com/halostatue/diff-lcs",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "docile": {
+    "language": "Ruby",
+    "package": "docile",
+    "version": "1.4.1",
+    "license": "MIT",
+    "description": "Docile keeps your Ruby DSLs tame and well-behaved.",
+    "website": "https://github.com/ms-ati/docile",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "httparty": {
     "language": "Ruby",
     "package": "httparty",
@@ -419,6 +443,66 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "rspec": {
+    "language": "Ruby",
+    "package": "rspec",
+    "version": "3.13.2",
+    "license": "MIT",
+    "description": "BDD for Ruby. RSpec runner and example groups.",
+    "website": "https://github.com/rspec/rspec",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Test framework for unit testing Ruby scripts",
+    "verification_reasoning": "Most popular Ruby testing framework with active maintenance"
+  },
+  "rspec-core": {
+    "language": "Ruby",
+    "package": "rspec-core",
+    "version": "3.13.6",
+    "license": "MIT",
+    "description": "BDD for Ruby. RSpec runner and example groups.",
+    "website": "https://github.com/rspec/rspec-core",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rspec-expectations": {
+    "language": "Ruby",
+    "package": "rspec-expectations",
+    "version": "3.13.5",
+    "license": "MIT",
+    "description": "Provides a readable API to express expected outcomes of a code example.",
+    "website": "https://github.com/rspec/rspec-expectations",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rspec-mocks": {
+    "language": "Ruby",
+    "package": "rspec-mocks",
+    "version": "3.13.7",
+    "license": "MIT",
+    "description": "A test double framework for rspec featuring stubbing and mocking.",
+    "website": "https://github.com/rspec/rspec-mocks",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rspec-support": {
+    "language": "Ruby",
+    "package": "rspec-support",
+    "version": "3.13.7",
+    "license": "MIT",
+    "description": "Support utilities for RSpec gems.",
+    "website": "https://github.com/rspec/rspec-support",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
@@ -523,6 +607,42 @@
     "description": "Ruby/ProgressBar is an extremely flexible text progress bar library for Ruby",
     "website": "https://github.com/jfelchner/ruby-progressbar",
     "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "simplecov": {
+    "language": "Ruby",
+    "package": "simplecov",
+    "version": "0.22.0",
+    "license": "MIT",
+    "description": "Code coverage for Ruby with a powerful configuration library and automatic merging of coverage across test suites.",
+    "website": "https://github.com/simplecov-ruby/simplecov",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Code coverage reporting for RSpec test suite",
+    "verification_reasoning": "Most popular Ruby code coverage tool with active maintenance"
+  },
+  "simplecov-html": {
+    "language": "Ruby",
+    "package": "simplecov-html",
+    "version": "0.13.2",
+    "license": "MIT",
+    "description": "HTML formatter for SimpleCov code coverage tool.",
+    "website": "https://github.com/simplecov-ruby/simplecov-html",
+    "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "simplecov_json_formatter": {
+    "language": "Ruby",
+    "package": "simplecov_json_formatter",
+    "version": "0.1.4",
+    "license": "MIT",
+    "description": "JSON formatter for SimpleCov.",
+    "website": "https://github.com/simplecov-ruby/simplecov_json_formatter",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
