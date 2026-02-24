@@ -251,17 +251,17 @@
     "requirements": "HTTP client for downloading gems from RubyGems API",
     "verification_reasoning": "Widely adopted Ruby HTTP client with active maintenance and security updates"
   },
-  "inifile": {
+  "iniparse": {
     "language": "Ruby",
-    "package": "inifile",
-    "version": "3.0.0",
-    "license": null,
-    "description": "Although made popular by Windows, INI files can be used on any system thanks",
-    "website": "http://rubygems.org/gems/inifile",
-    "last_verified_at": "2023-06-12",
+    "package": "iniparse",
+    "version": "1.5.0",
+    "license": "MIT",
+    "description": "A pure Ruby library for parsing INI documents.",
+    "website": "https://github.com/antw/iniparse",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Medium",
     "requirements": "Parse AWS credentials INI files for key rotation",
-    "verification_reasoning": "Standard Ruby INI file parser used for reading and writing AWS credentials"
+    "verification_reasoning": "Actively maintained Ruby INI file parser used for reading and writing AWS credentials"
   },
   "jmespath": {
     "language": "Ruby",

@@ -15,7 +15,7 @@ gem 'aws-sdk-lambda', '>= 1.96.0'
 gem 'aws-sdk-ssm', '>= 1.150.0'
 gem 'base64', '>= 0.2.0'
 gem 'httparty', '>= 0.21.0'
-gem 'inifile', '>= 3.0.0'
+gem 'iniparse', '>= 1.5.0'
 gem 'nokogiri', '>= 1.15.2'
 gem 'optparse', '>= 0.3.1'
 
