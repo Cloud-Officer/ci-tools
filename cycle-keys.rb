@@ -110,6 +110,8 @@ if __FILE__ == $PROGRAM_NAME
     raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
 
     credentials_file_name = "#{Dir.home}/.aws/credentials"
+    raise("AWS credentials file not found: #{credentials_file_name}") unless File.exist?(credentials_file_name)
+
     puts("Reading #{credentials_file_name}")
     credentials = IniParse.open(credentials_file_name)
 
