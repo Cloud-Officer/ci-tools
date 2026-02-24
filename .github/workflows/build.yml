@@ -187,8 +187,6 @@ jobs:
     - name: RSpec
       shell: bash
       if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
-      run: |
-        set -x
-        bundle exec rspec --format documentation
+      run: bundle exec rspec --format documentation
       env:
         GITHUB_TOKEN: "${{secrets.GH_PAT}}"
