@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Pinned known-good version of jira-cli (update manually after verification)
+JIRA_CLI_VERSION="1.7.0"
+
 # Check if jira CLI is installed, if not install it
 if ! command -v jira &> /dev/null; then
   echo "jira CLI not found. Installing..."
@@ -21,15 +24,7 @@ if ! command -v jira &> /dev/null; then
     exit 1
   fi
 
-  # Get latest version
-  LATEST_VERSION=$(curl -s https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-
-  if [ -z "${LATEST_VERSION}" ]; then
-    echo "Error: Could not determine latest jira CLI version"
-    exit 1
-  fi
-
-  echo "Installing jira CLI version ${LATEST_VERSION} for ${OS}/${ARCH}..."
+  echo "Installing jira CLI version ${JIRA_CLI_VERSION} for ${OS}/${ARCH}..."
 
   # Map OS name for download URL
   if [ "${OS}" = "darwin" ]; then
@@ -41,9 +36,9 @@ if ! command -v jira &> /dev/null; then
   # Download and install
   TEMP_DIR=$(mktemp -d)
   trap 'rm -rf "${TEMP_DIR}"' exit
-  ARCHIVE_NAME="jira_${LATEST_VERSION}_${DOWNLOAD_OS}_${ARCH}.tar.gz"
-  DOWNLOAD_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${LATEST_VERSION}/${ARCHIVE_NAME}"
-  CHECKSUMS_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${LATEST_VERSION}/checksums.txt"
+  ARCHIVE_NAME="jira_${JIRA_CLI_VERSION}_${DOWNLOAD_OS}_${ARCH}.tar.gz"
+  DOWNLOAD_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${JIRA_CLI_VERSION}/${ARCHIVE_NAME}"
+  CHECKSUMS_URL="https://github.com/ankitpokhrel/jira-cli/releases/download/v${JIRA_CLI_VERSION}/checksums.txt"
 
   curl -sL "${DOWNLOAD_URL}" -o "${TEMP_DIR}/jira.tar.gz"
   curl -sL "${CHECKSUMS_URL}" -o "${TEMP_DIR}/checksums.txt"
@@ -72,7 +67,7 @@ if ! command -v jira &> /dev/null; then
   tar -xzf "${TEMP_DIR}/jira.tar.gz" -C "${TEMP_DIR}"
 
   # Install to /usr/local/bin or ~/.local/bin
-  JIRA_BINARY="${TEMP_DIR}/jira_${LATEST_VERSION}_${DOWNLOAD_OS}_${ARCH}/bin/jira"
+  JIRA_BINARY="${TEMP_DIR}/jira_${JIRA_CLI_VERSION}_${DOWNLOAD_OS}_${ARCH}/bin/jira"
 
   if [ -w /usr/local/bin ]; then
     mv "${JIRA_BINARY}" /usr/local/bin/
