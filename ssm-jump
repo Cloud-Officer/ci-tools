@@ -135,6 +135,10 @@ else
 fi
 
 if [ -n "${proxycommand_port}" ]; then
+  if ! echo "${proxycommand_port}" | grep -qE '^[0-9]+$'; then
+    fatal "Port must be numeric: ${proxycommand_port}"
+  fi
+
   # for proxycommand, we *must* start an SSH session
   document="AWS-StartSSHSession"
 
