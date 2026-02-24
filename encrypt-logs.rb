@@ -15,19 +15,21 @@ require 'optparse'
 def build_kms_key_map(kms)
   keys = {}
 
-  kms.list_keys[:keys].each do |key|
-    key_metadata = kms.describe_key(
-      {
-        key_id: key.key_id
-      }
-    )
+  kms.list_keys.each_page do |page|
+    page[:keys].each do |key|
+      key_metadata = kms.describe_key(
+        {
+          key_id: key.key_id
+        }
+      )
 
-    if key_metadata[:key_metadata][:description].start_with?('beta')
-      keys[:beta] = key_metadata[:key_metadata][:arn]
-    elsif key_metadata[:key_metadata][:description].start_with?('rc')
-      keys[:rc] = key_metadata[:key_metadata][:arn]
-    elsif key_metadata[:key_metadata][:description].start_with?('prod')
-      keys[:prod] = key_metadata[:key_metadata][:arn]
+      if key_metadata[:key_metadata][:description].start_with?('beta')
+        keys[:beta] = key_metadata[:key_metadata][:arn]
+      elsif key_metadata[:key_metadata][:description].start_with?('rc')
+        keys[:rc] = key_metadata[:key_metadata][:arn]
+      elsif key_metadata[:key_metadata][:description].start_with?('prod')
+        keys[:prod] = key_metadata[:key_metadata][:arn]
+      end
     end
   end
 
@@ -99,8 +101,10 @@ if __FILE__ == $PROGRAM_NAME
 
     logs = Aws::CloudWatchLogs::Client.new
 
-    logs.describe_log_groups[:log_groups].each do |log_group|
-      process_log_group(logs, log_group, keys, options[:retention_in_days])
+    logs.describe_log_groups.each_page do |page|
+      page.log_groups.each do |log_group|
+        process_log_group(logs, log_group, keys, options[:retention_in_days])
+      end
     end
   rescue StandardError => e
     puts(e)
