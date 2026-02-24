@@ -212,7 +212,7 @@ def update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
     cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
   rescue Aws::CloudFormation::Errors::ValidationError => e
     puts("Stopping here: #{e.message}")
-    exit
+    exit(e.message.include?('No updates are to be performed') ? 0 : 1)
   end
   wait_for_stack_update(cfn, stack_name)
   puts("Update completed successfully for cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}.")
