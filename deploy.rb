@@ -16,6 +16,7 @@ require 'optparse'
 
 # Timing constants for polling and warmup periods
 POLL_INTERVAL = 15      # Seconds between status checks
+MAX_POLL_ATTEMPTS = 120 # Max polling attempts (30 minutes at 15-second intervals)
 WARMUP_SHORT = 60       # Short warmup period for standard instances
 WARMUP_LONG = 180       # Long warmup period for gRPC instances
 
@@ -31,7 +32,10 @@ end
 
 def wait_for_healthy_instances(elb, target_group_arn)
   puts('Waiting for all instances to be healthy...')
+  attempts = 0
   loop do
+    raise('Timed out waiting for healthy instances') if (attempts += 1) > MAX_POLL_ATTEMPTS
+
     sleep(POLL_INTERVAL)
     unhealthy = elb.describe_target_health({ target_group_arn: target_group_arn })
                    .target_health_descriptions.count { |h| h.target_health.state != 'healthy' }
@@ -41,7 +45,10 @@ def wait_for_healthy_instances(elb, target_group_arn)
 end
 
 def wait_for_asg_instance_count(asg_client, asg_name, target_count)
+  attempts = 0
   loop do
+    raise("Timed out waiting for ASG #{asg_name} to reach #{target_count} instances") if (attempts += 1) > MAX_POLL_ATTEMPTS
+
     sleep(POLL_INTERVAL)
     response = asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [asg_name] }).auto_scaling_groups
     raise("Unable to describe ASG #{asg_name}") if response.empty?

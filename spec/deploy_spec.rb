@@ -395,6 +395,19 @@ RSpec.describe(Deploy) do
         expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
       end
     end
+
+    context 'when targets never become healthy' do
+      before do
+        unhealthy = { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'unhealthy' } }] }
+        elb.stub_responses(:describe_target_health, unhealthy)
+      end
+
+      it 'raises after max attempts' do
+        stub_const('MAX_POLL_ATTEMPTS', 2)
+        expect { wait_for_healthy_instances(elb, 'arn:aws:tg/test') }
+          .to(raise_error(RuntimeError, /Timed out waiting for healthy instances/))
+      end
+    end
   end
 
   describe '#wait_for_asg_instance_count' do
@@ -421,6 +434,19 @@ RSpec.describe(Deploy) do
       it 'raises an error' do
         expect { wait_for_asg_instance_count(asg_client, 'missing-asg', 2) }
           .to(raise_error(RuntimeError, /Unable to describe ASG/))
+      end
+    end
+
+    context 'when instance count never reaches target' do
+      before do
+        stuck = build_asg_data('test-asg', instances: [build_asg_instance('i-1')])
+        asg_client.stub_responses(:describe_auto_scaling_groups, stuck)
+      end
+
+      it 'raises after max attempts' do
+        stub_const('MAX_POLL_ATTEMPTS', 2)
+        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 3) }
+          .to(raise_error(RuntimeError, /Timed out waiting for ASG/))
       end
     end
   end
