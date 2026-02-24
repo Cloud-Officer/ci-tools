@@ -242,6 +242,13 @@ def fetch_asg_mixed_parameters(environment, subnet)
   result
 end
 
+def extract_subnet_number(stack_name)
+  digits = stack_name.split('-').first.scan(/\d+/).first
+  raise("Unable to extract subnet number from stack name '#{stack_name}'") if digits.nil?
+
+  Integer(digits, 10)
+end
+
 def update_asg_capacity(asg_client, asg_name, base_capacity:, percent_above:, desired_capacity: nil, max_size: nil)
   params = {
     auto_scaling_group_name: asg_name,
@@ -337,7 +344,7 @@ if __FILE__ == $PROGRAM_NAME
 
     parameters = stacks_response.first.parameters
     environment = stack_name.split('-').first.tr('0-9', '')
-    subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
+    subnet = extract_subnet_number(stack_name)
     prefix = parameter_prefix_for(options[:instance])
 
     update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
