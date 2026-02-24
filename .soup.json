@@ -18,7 +18,7 @@
     "license": "Apache-2.0",
     "description": "Amazon Web Services event stream library",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -30,7 +30,7 @@
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -42,7 +42,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -54,7 +54,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -66,7 +66,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -78,7 +78,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -90,7 +90,7 @@
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -102,7 +102,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -114,7 +114,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -126,7 +126,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -138,7 +138,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -150,7 +150,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -162,7 +162,7 @@
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -174,7 +174,7 @@
     "license": "Apache-2.0",
     "description": "Amazon Web Services Signature Version 4 signing library",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -246,7 +246,7 @@
     "license": "MIT",
     "description": "Makes http fun! Also, makes consuming restful web services dead easy.",
     "website": "https://github.com/jnunemaker/httparty",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Medium",
     "requirements": "HTTP client for downloading gems from RubyGems API",
     "verification_reasoning": "Widely adopted Ruby HTTP client with active maintenance and security updates"
@@ -270,7 +270,7 @@
     "license": "Apache-2.0",
     "description": "Implements JMESPath for Ruby",
     "website": "http://github.com/trevorrowe/jmespath.rb",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -330,7 +330,7 @@
     "license": "MIT",
     "description": "A minimal mime type library",
     "website": "https://github.com/discourse/mini_mime",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -342,7 +342,7 @@
     "license": "MIT",
     "description": "Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML.",
     "website": "https://github.com/sferik/multi_xml",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -354,7 +354,7 @@
     "license": "MIT",
     "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
     "website": "https://nokogiri.org",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Medium",
     "requirements": "XML parser",
     "verification_reasoning": "Industry-standard Ruby XML/HTML parser with active security maintenance"
@@ -366,7 +366,7 @@
     "license": "Ruby",
     "description": "OptionParser is a class for command-line option analysis",
     "website": "https://github.com/ruby/optparse",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Parse command line options",
     "verification_reasoning": "Most popular gem on rubygems"
@@ -414,7 +414,7 @@
     "license": "Ruby",
     "description": "Racc is an LALR(1) parser generator.",
     "website": "https://github.com/ruby/racc",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -510,7 +510,7 @@
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Ruby linter",
     "verification_reasoning": "Most popular gem on rubygems"
@@ -522,7 +522,7 @@
     "license": "MIT",
     "description": "  RuboCop's Node and NodePattern classes.",
     "website": "https://www.rubocop.org/",
-    "last_verified_at": "2023-06-12",
+    "last_verified_at": "2026-02-24",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
