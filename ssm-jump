@@ -118,7 +118,7 @@ else
 
   input=0
 
-  while [ ${input} -lt 1 ] || [ ${input} -gt "${max_lines}" ]; do
+  while ! [[ ${input} =~ ^[0-9]+$ ]] || [ ${input} -lt 1 ] || [ ${input} -gt "${max_lines}" ]; do
     echo -n "Connect to what line ? "
     read -r input
   done
