@@ -65,7 +65,7 @@ done
 set -- "${positional[@]}" # restore positional parameters
 
 # first positional argument is the target
-target="${1}"
+target="${1:-}"
 
 if [ -z "${profile}" ]; then
   fatal "No profile specified !"
