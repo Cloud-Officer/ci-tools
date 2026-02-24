@@ -20,6 +20,7 @@ gem 'nokogiri', '>= 1.15.2'
 gem 'optparse', '>= 0.3.1'
 
 group :development do
+  gem 'rspec', '>= 3.13.0', require: false
   gem 'rubocop', '>= 1.61.0', require: false
   gem 'rubocop-capybara', '>= 2.16.0', require: false
   gem 'rubocop-graphql', '>= 0.18.0', require: false
@@ -27,4 +28,5 @@ group :development do
   gem 'rubocop-performance', '>= 1.13.3', require: false
   gem 'rubocop-rspec', '>= 2.16.0', require: false
   gem 'rubocop-thread_safety', '>= 0.5.1', require: false
+  gem 'simplecov', '>= 0.22.0', require: false
 end

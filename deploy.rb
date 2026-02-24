@@ -250,129 +250,133 @@ def update_asg_capacity(asg_client, asg_name, base_capacity:, percent_above:, de
   asg_client.update_auto_scaling_group(params)
 end
 
-begin
-  options = {}
-  asg_increase = 1
-  asg_multiplier = 2
+# :nocov:
+if __FILE__ == $PROGRAM_NAME
+  begin
+    options = {}
+    asg_increase = 1
+    asg_multiplier = 2
 
-  OptionParser.new do |opts|
-    opts.banner = 'Usage: deploy.rb options'
-    opts.separator('')
-    opts.separator('options')
-    opts.on('--ami ami', String)
-    opts.on('--create_ami_only')
-    opts.on('--environment environment', String)
-    opts.on('--instance instance', String)
-    opts.on('--type instance_type', String)
-    opts.on('--lambda_publish_version function_name', String)
-    opts.on('--profile profile', String)
-    opts.on('--preserve_desired_capacity')
-    opts.on('--skip_scale_down')
-    opts.on('--spot_target_capacity spot_target_capacity', Integer)
-    opts.on('-h', '--help') do
-      puts(opts)
-      exit(0)
+    OptionParser.new do |opts|
+      opts.banner = 'Usage: deploy.rb options'
+      opts.separator('')
+      opts.separator('options')
+      opts.on('--ami ami', String)
+      opts.on('--create_ami_only')
+      opts.on('--environment environment', String)
+      opts.on('--instance instance', String)
+      opts.on('--type instance_type', String)
+      opts.on('--lambda_publish_version function_name', String)
+      opts.on('--profile profile', String)
+      opts.on('--preserve_desired_capacity')
+      opts.on('--skip_scale_down')
+      opts.on('--spot_target_capacity spot_target_capacity', Integer)
+      opts.on('-h', '--help') do
+        puts(opts)
+        exit(0)
+      end
+    end.parse!(into: options)
+
+    mandatory = %i[environment instance profile]
+    missing = mandatory.select { |param| options[param].nil? }
+    raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
+
+    puts('Starting deployment...')
+
+    if options[:profile]
+      puts("Setting profile '#{options[:profile]}'...")
+      Aws.config.update({ profile: options[:profile] })
     end
-  end.parse!(into: options)
 
-  mandatory = %i[environment instance profile]
-  missing = mandatory.select { |param| options[param].nil? }
-  raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
-
-  puts('Starting deployment...')
-
-  if options[:profile]
-    puts("Setting profile '#{options[:profile]}'...")
-    Aws.config.update({ profile: options[:profile] })
-  end
-
-  if options[:lambda_publish_version]
-    publish_lambda_and_update_cloudfront(options)
-    exit
-  end
-
-  asg_increase = 3 if options[:environment].start_with?('prod')
-
-  if options[:preserve_desired_capacity]
-    asg_increase = 0
-    asg_multiplier = 1
-  end
-
-  if options[:ami]
-    ami_id = options[:ami]
-  else
-    ec2 = Aws::EC2::Resource.new
-    instance_id, instance_name = find_standalone_instance(ec2, options)
-    ami_id = create_ami(ec2, instance_id, instance_name, options)
-
-    if options[:create_ami_only]
-      puts('Exiting now as --create_ami_only was supplied.')
+    if options[:lambda_publish_version]
+      publish_lambda_and_update_cloudfront(options)
       exit
     end
-  end
 
-  asg_resources = Aws::AutoScaling::Resource.new
-  asg = find_auto_scaling_group(asg_resources, options)
-  elb = target_group_arn = nil
+    asg_increase = 3 if options[:environment].start_with?('prod')
 
-  if load_balanced_instance?(options[:instance])
-    elb = Aws::ElasticLoadBalancingV2::Client.new
-    target_group_arn = find_target_group(elb, options)
-  end
-
-  cfn = Aws::CloudFormation::Client.new
-  stack_name = find_cloudformation_stack(cfn, options)
-
-  stacks_response = cfn.describe_stacks({ stack_name: stack_name }).stacks
-  raise("Unable to describe stack #{stack_name}") if stacks_response.empty?
-
-  parameters = stacks_response.first.parameters
-  environment = stack_name.split('-').first.tr('0-9', '')
-  subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
-  prefix = parameter_prefix_for(options[:instance])
-
-  update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
-  update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
-
-  mixed_params = fetch_asg_mixed_parameters(environment, subnet)
-  new_capacity = (asg[:desired_capacity] * asg_multiplier) + asg_increase
-
-  puts("Increasing desired capacity from #{asg[:desired_capacity]} to #{new_capacity}...")
-  new_max = asg[:max_size] < new_capacity ? (asg[:max_size] * asg_multiplier) + asg_increase : nil
-  update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: new_capacity, max_size: new_max)
-
-  if new_capacity > asg[:desired_capacity]
-    puts('Waiting for auto scaling group to start the instances...')
-    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
-
-    if load_balanced_instance?(options[:instance])
-      sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
-      wait_for_healthy_instances(elb, target_group_arn)
+    if options[:preserve_desired_capacity]
+      asg_increase = 0
+      asg_multiplier = 1
     end
 
-    puts('Waiting for cache/instances to warm up...')
-    sleep(options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
-  end
+    if options[:ami]
+      ami_id = options[:ami]
+    else
+      ec2 = Aws::EC2::Resource.new
+      instance_id, instance_name = find_standalone_instance(ec2, options)
+      ami_id = create_ami(ec2, instance_id, instance_name, options)
 
-  if options[:skip_scale_down]
-    puts("Setting max_size to #{asg[:max_size]}...")
-    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
-  else
-    puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
-    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
-    if load_balanced_instance?(options[:instance])
-      sleep(POLL_INTERVAL)
-      wait_for_healthy_instances(elb, target_group_arn)
+      if options[:create_ami_only]
+        puts('Exiting now as --create_ami_only was supplied.')
+        exit
+      end
     end
 
-    puts('Waiting for auto scaling group to stop the instances...')
-    wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
-  end
+    asg_resources = Aws::AutoScaling::Resource.new
+    asg = find_auto_scaling_group(asg_resources, options)
+    elb = target_group_arn = nil
 
-  puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
-  puts('Deployment completed successfully.')
-rescue StandardError => e
-  puts(e)
-  puts(e.backtrace)
-  exit(1)
+    if load_balanced_instance?(options[:instance])
+      elb = Aws::ElasticLoadBalancingV2::Client.new
+      target_group_arn = find_target_group(elb, options)
+    end
+
+    cfn = Aws::CloudFormation::Client.new
+    stack_name = find_cloudformation_stack(cfn, options)
+
+    stacks_response = cfn.describe_stacks({ stack_name: stack_name }).stacks
+    raise("Unable to describe stack #{stack_name}") if stacks_response.empty?
+
+    parameters = stacks_response.first.parameters
+    environment = stack_name.split('-').first.tr('0-9', '')
+    subnet = Integer(stack_name.split('-').first.scan(/\d+/).first, 10)
+    prefix = parameter_prefix_for(options[:instance])
+
+    update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
+    update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
+
+    mixed_params = fetch_asg_mixed_parameters(environment, subnet)
+    new_capacity = (asg[:desired_capacity] * asg_multiplier) + asg_increase
+
+    puts("Increasing desired capacity from #{asg[:desired_capacity]} to #{new_capacity}...")
+    new_max = asg[:max_size] < new_capacity ? (asg[:max_size] * asg_multiplier) + asg_increase : nil
+    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: new_capacity, max_size: new_max)
+
+    if new_capacity > asg[:desired_capacity]
+      puts('Waiting for auto scaling group to start the instances...')
+      wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
+
+      if load_balanced_instance?(options[:instance])
+        sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
+        wait_for_healthy_instances(elb, target_group_arn)
+      end
+
+      puts('Waiting for cache/instances to warm up...')
+      sleep(options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
+    end
+
+    if options[:skip_scale_down]
+      puts("Setting max_size to #{asg[:max_size]}...")
+      update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
+    else
+      puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
+      update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
+      if load_balanced_instance?(options[:instance])
+        sleep(POLL_INTERVAL)
+        wait_for_healthy_instances(elb, target_group_arn)
+      end
+
+      puts('Waiting for auto scaling group to stop the instances...')
+      wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
+    end
+
+    puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
+    puts('Deployment completed successfully.')
+  rescue StandardError => e
+    puts(e)
+    puts(e.backtrace)
+    exit(1)
+  end
 end
+# :nocov:
