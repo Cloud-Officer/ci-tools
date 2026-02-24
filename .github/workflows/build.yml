@@ -156,7 +156,7 @@ jobs:
         parameters: "--no_prompt --soup"
   ruby_unit_tests:
     name: Ruby Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: "${{matrix.os}}"
     needs:
     - variables
     if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
