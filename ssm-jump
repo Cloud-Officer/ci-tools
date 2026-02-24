@@ -142,7 +142,7 @@ if [ -n "${proxycommand_port}" ]; then
   # for proxycommand, we *must* start an SSH session
   document="AWS-StartSSHSession"
 
-  echo "aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "portNumber=${proxycommand_port}""
+  echo "aws --profile \"${profile}\" ssm start-session --target \"${instance_id}\" --document-name \"${document}\" --parameters \"portNumber=${proxycommand_port}\""
   exec aws --profile "${profile}" ssm start-session --target "${instance_id}" --document-name "${document}" --parameters "portNumber=${proxycommand_port}"
 
 elif [ -z "${forward}" ]; then
