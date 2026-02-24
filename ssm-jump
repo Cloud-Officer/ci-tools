@@ -75,6 +75,10 @@ if [ -z "${target}" ]; then
   fatal "No target specified !"
 fi
 
+if ! echo "${document}" | grep -qE '^[A-Za-z0-9_-]+$'; then
+  fatal "Invalid document name: ${document}"
+fi
+
 if [ ! -z "${forward}" ]; then
   IFS=":" read -a forward_array <<< "${forward}"
   if [ ${#forward_array[@]} -ne 3 ]; then
