@@ -186,6 +186,10 @@ RSpec.describe(Deploy) do
       expect(extract_subnet_number('beta1-StackInstances-abc')).to(eq(1))
     end
 
+    it 'extracts subnet number from DR environment stack name' do
+      expect(extract_subnet_number('beta3-StackInstances-abc')).to(eq(3))
+    end
+
     it 'extracts multi-digit subnet number' do
       expect(extract_subnet_number('prod12-StackInstances-abc')).to(eq(12))
     end
@@ -278,6 +282,15 @@ RSpec.describe(Deploy) do
       end
     end
 
+    context 'when matching DR ASG exists' do
+      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta3-api-asg')) }
+
+      it 'returns ASG details for DR environment' do
+        result = find_auto_scaling_group(asg_resources, { environment: 'beta3', instance: 'api' })
+        expect(result[:name]).to(eq('beta3-api-asg'))
+      end
+    end
+
     context 'when no matching ASG exists' do
       before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('prod1-worker-asg')) }
 
@@ -309,6 +322,15 @@ RSpec.describe(Deploy) do
       end
     end
 
+    context 'with DR environment' do
+      before { elb.stub_responses(:describe_target_groups, { target_groups: [{ target_group_name: 'beta3-443', target_group_arn: 'arn:aws:tg/beta3-443' }] }) }
+
+      it 'finds target group for DR environment' do
+        result = find_target_group(elb, { environment: 'beta3', instance: 'api' })
+        expect(result).to(eq('arn:aws:tg/beta3-443'))
+      end
+    end
+
     context 'when no target group found' do
       before { elb.stub_responses(:describe_target_groups, { target_groups: [] }) }
 
@@ -328,6 +350,14 @@ RSpec.describe(Deploy) do
 
       it 'returns stack name' do
         expect(find_cloudformation_stack(cfn, options)).to(eq('beta1-StackInstances-abc'))
+      end
+    end
+
+    context 'when matching DR stack exists' do
+      before { cfn.stub_responses(:list_stacks, { stack_summaries: [{ stack_name: 'beta3-StackInstances-xyz', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] }) }
+
+      it 'returns DR stack name' do
+        expect(find_cloudformation_stack(cfn, { environment: 'beta3' })).to(eq('beta3-StackInstances-xyz'))
       end
     end
 
@@ -552,6 +582,16 @@ RSpec.describe(Deploy) do
         result = fetch_asg_mixed_parameters('beta', 1)
         expect(result[:percent_above]).to(eq('100'))
         expect(result[:base_capacity]).to(eq('2'))
+      end
+    end
+
+    context 'when both parameters exist for DR environment' do
+      before { ssm.stub_responses(:get_parameters, { parameters: [{ name: '/beta/3/OnDemandPercentAbove', value: '50' }, { name: '/beta/3/OnDemandBaseCapacity', value: '1' }] }) }
+
+      it 'returns percent_above and base_capacity for DR subnet', :aggregate_failures do
+        result = fetch_asg_mixed_parameters('beta', 3)
+        expect(result[:percent_above]).to(eq('50'))
+        expect(result[:base_capacity]).to(eq('1'))
       end
     end
 
