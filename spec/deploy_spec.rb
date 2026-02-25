@@ -535,6 +535,18 @@ RSpec.describe(Deploy) do
           .to(raise_error(RuntimeError, /Unable to describe stack/))
       end
     end
+
+    context 'when stack update never completes' do
+      before do
+        cfn.stub_responses(:describe_stacks, { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_IN_PROGRESS', creation_time: Time.now }] })
+      end
+
+      it 'raises after max attempts' do
+        stub_const('MAX_POLL_ATTEMPTS', 2)
+        expect { wait_for_stack_update(cfn, 'test') }
+          .to(raise_error(RuntimeError, /Timed out waiting for stack/))
+      end
+    end
   end
 
   describe '#update_cloudformation_stack' do
