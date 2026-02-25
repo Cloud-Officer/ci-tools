@@ -113,7 +113,10 @@ fi
 
 # Verify the release exists in Jira and get its ID
 
-RELEASE_INFO=$(jira release list 2>/dev/null | tail -n +2 | awk -F'\t' -v name="${3}" '$2 == name {print $1}')
+RELEASE_INFO=$(jira release list 2>&1 | tail -n +2 | awk -F'\t' -v name="${3}" '$2 == name {print $1}') || {
+  echo "Error: Failed to list Jira releases. Check JIRA_API_TOKEN and JIRA_BASE_URL."
+  exit 1
+}
 
 if [ -z "${RELEASE_INFO}" ]; then
   echo "Error: Release '${3}' does not exist in Jira."
