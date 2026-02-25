@@ -229,7 +229,10 @@ end
 
 def wait_for_stack_update(cfn, stack_name)
   failure_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
+  attempts = 0
   loop do
+    raise("Timed out waiting for stack #{stack_name} to update") if (attempts += 1) > MAX_POLL_ATTEMPTS
+
     sleep(POLL_INTERVAL)
     response = cfn.describe_stacks({ stack_name: stack_name }).stacks
     raise("Unable to describe stack #{stack_name}") if response.empty?
