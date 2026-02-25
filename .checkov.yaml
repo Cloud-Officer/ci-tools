@@ -1,0 +1,9 @@
+directory:
+  - .
+framework:
+  - all
+skip-path:
+  - .github
+  - docs
+  - node_modules
+  - vendor
