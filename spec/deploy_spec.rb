@@ -407,7 +407,7 @@ RSpec.describe(Deploy) do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId', parameter_value: nil, use_previous_value: nil)
         allow(parameter).to(receive(:parameter_value=))
         allow(parameter).to(receive(:use_previous_value=))
-        update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, 'beta', 1)
+        update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, '/beta/1')
         expect(ssm).to(have_received(:put_parameter).with(hash_including(value: 'ami-12345678')))
       end
     end
@@ -417,7 +417,7 @@ RSpec.describe(Deploy) do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword')
         allow(parameter).to(receive(:parameter_value=))
         allow(parameter).to(receive(:use_previous_value=))
-        update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, 'beta', 1)
+        update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, '/beta/1')
         expect(parameter).to(have_received(:parameter_value=).with(nil))
       end
     end
@@ -583,7 +583,7 @@ RSpec.describe(Deploy) do
 
       it 'returns a hash of parameter names to values' do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId')
-        result = capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, 'beta', 1)
+        result = capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, '/beta/1')
         expect(result).to(eq(param_name => 'ami-old'))
       end
     end
@@ -591,7 +591,7 @@ RSpec.describe(Deploy) do
     context 'when no parameters need updating' do
       it 'returns empty hash' do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'Unknown')
-        expect(capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, 'beta', 1)).to(eq({}))
+        expect(capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, '/beta/1')).to(eq({}))
       end
     end
   end
