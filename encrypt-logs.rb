@@ -33,6 +33,10 @@ def build_kms_key_map(kms)
     end
   end
 
+  %i[beta rc prod].each do |env|
+    raise("KMS key not found for environment '#{env}'") if keys[env].nil?
+  end
+
   keys
 end
 

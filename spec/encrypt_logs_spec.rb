@@ -35,16 +35,36 @@ RSpec.describe(EncryptLogs) do
         kms.stub_responses(:describe_key, [{ key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'some other key' } }])
       end
 
-      it 'returns empty map' do
-        expect(build_kms_key_map(kms)).to(be_empty)
+      it 'raises error for missing environment key' do
+        expect { build_kms_key_map(kms) }
+          .to(raise_error(RuntimeError, "KMS key not found for environment 'beta'"))
       end
     end
 
     context 'with no keys' do
       before { kms.stub_responses(:list_keys, { keys: [] }) }
 
-      it 'returns empty map' do
-        expect(build_kms_key_map(kms)).to(eq({}))
+      it 'raises error for missing environment key' do
+        expect { build_kms_key_map(kms) }
+          .to(raise_error(RuntimeError, "KMS key not found for environment 'beta'"))
+      end
+    end
+
+    context 'with partially populated keys' do
+      before do
+        kms.stub_responses(:list_keys, { keys: [{ key_id: 'key-1' }, { key_id: 'key-2' }] })
+        kms.stub_responses(
+          :describe_key,
+          [
+            { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'beta encryption key' } },
+            { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:us-east-1:123:key/key-2', description: 'rc encryption key' } }
+          ]
+        )
+      end
+
+      it 'raises error for missing prod key' do
+        expect { build_kms_key_map(kms) }
+          .to(raise_error(RuntimeError, "KMS key not found for environment 'prod'"))
       end
     end
   end
