@@ -113,7 +113,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Key Components:**
 
-- Credentials file parser using IniFile
+- Credentials file parser using IniParse
 - Key rotation logic with age-based thresholds
 
 **Functionality:**
@@ -125,7 +125,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Internal Dependencies:** None
 
-**External Dependencies:** aws-sdk-iam, inifile, optparse
+**External Dependencies:** aws-sdk-iam, iniparse, optparse
 
 ### encrypt-logs.rb
 
