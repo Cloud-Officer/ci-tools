@@ -190,3 +190,37 @@ jobs:
       run: bundle exec rspec --format documentation
       env:
         GITHUB_TOKEN: "${{secrets.GH_PAT}}"
+  shell_script_unit_tests:
+    name: Shell Script Unit Tests
+    runs-on: "${{matrix.os}}"
+    needs:
+    - variables
+    if: "${{needs.variables.outputs.SKIP_TESTS != '1'}}"
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os:
+        - macos-latest
+        - ubuntu-latest
+    steps:
+    - name: Setup
+      id: setup
+      uses: cloud-officer/ci-actions/setup@v2
+      with:
+        ssh-key: "${{secrets.SSH_KEY}}"
+        github-token: "${{secrets.GH_PAT}}"
+    - name: Bats Install
+      shell: bash
+      run: |-
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          brew install bats-core
+        else
+          sudo apt-get update && sudo apt-get install -y bats
+        fi
+      env:
+        GITHUB_TOKEN: "${{secrets.GH_PAT}}"
+    - name: Bats
+      shell: bash
+      run: bats tests/
+      env:
+        GITHUB_TOKEN: "${{secrets.GH_PAT}}"
