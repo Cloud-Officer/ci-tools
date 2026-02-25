@@ -65,6 +65,26 @@ setup() {
   [[ "$output" == *"Required environment variables"* ]]
 }
 
+@test "exits with error for unsupported architecture" {
+  # Override uname to return unsupported architecture
+  function uname() {
+    if [ "${1}" = "-s" ]; then echo "Linux"; elif [ "${1}" = "-m" ]; then echo "ppc64le"; else command uname "$@"; fi
+  }
+  export -f uname
+
+  # Make jira unavailable to trigger auto-install path
+  function jira() { return 1; }
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "jira" ]; then return 1; fi
+    builtin command "$@"
+  }
+  export -f jira command
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unsupported architecture"* ]]
+}
+
 @test "exits with error when JIRA_BASE_URL is empty" {
   export JIRA_BASE_URL=""
 

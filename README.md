@@ -246,7 +246,7 @@ Prerequisites:
 
 The tool will:
 
-1. Auto-install the Jira CLI if not present (arm64 macOS/Linux only)
+1. Auto-install the Jira CLI if not present (macOS/Linux, arm64 and x86_64)
 2. Extract the Jira project key from your PR template
 3. Find all pull requests between the two tags
 4. Extract Jira issue keys from PR descriptions
