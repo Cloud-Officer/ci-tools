@@ -570,6 +570,52 @@ RSpec.describe(Deploy) do
     end
   end
 
+  describe '#capture_ssm_snapshot' do
+    let(:ssm)        { Aws::SSM::Client.new(stub_responses: true)        }
+    let(:asg)        { { min_size: 1, max_size: 4, desired_capacity: 2 } }
+    let(:options)    { { type: 't3.micro' }                              }
+    let(:param_name) { '/beta/1/APIImageId'                              }
+
+    before { allow(Aws::SSM::Client).to(receive(:new).and_return(ssm)) }
+
+    context 'when SSM parameters exist' do
+      before { ssm.stub_responses(:get_parameters, { parameters: [{ name: param_name, value: 'ami-old' }] }) }
+
+      it 'returns a hash of parameter names to values' do
+        parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId')
+        result = capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, 'beta', 1)
+        expect(result).to(eq(param_name => 'ami-old'))
+      end
+    end
+
+    context 'when no parameters need updating' do
+      it 'returns empty hash' do
+        parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'Unknown')
+        expect(capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, 'beta', 1)).to(eq({}))
+      end
+    end
+  end
+
+  describe '#restore_ssm_parameters' do
+    let(:ssm)        { Aws::SSM::Client.new(stub_responses: true) }
+    let(:param_name) { '/beta/1/APIImageId'                       }
+
+    before do
+      allow(Aws::SSM::Client).to(receive(:new).and_return(ssm))
+      allow(ssm).to(receive(:put_parameter).and_call_original)
+    end
+
+    it 'restores each parameter to its previous value' do
+      restore_ssm_parameters(param_name => 'ami-old')
+      expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+    end
+
+    it 'does nothing when snapshot is empty' do
+      restore_ssm_parameters({})
+      expect(ssm).not_to(have_received(:put_parameter))
+    end
+  end
+
   describe '#fetch_asg_mixed_parameters' do
     let(:ssm) { Aws::SSM::Client.new(stub_responses: true) }
 
@@ -644,8 +690,8 @@ RSpec.describe(Deploy) do
   end
 
   describe '#publish_lambda_and_update_cloudfront' do
-    let(:lambda_client) { Aws::Lambda::Client.new(stub_responses: true) }
-    let(:cloudfront) { Aws::CloudFront::Client.new(stub_responses: true) }
+    let(:lambda_client) { Aws::Lambda::Client.new(stub_responses: true)     }
+    let(:cloudfront)    { Aws::CloudFront::Client.new(stub_responses: true) }
 
     before do
       allow(Aws::Lambda::Client).to(receive(:new).and_return(lambda_client))
