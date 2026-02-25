@@ -11,8 +11,10 @@ if ! command -v jira &> /dev/null; then
 
   if [ "${ARCH}" = "arm64" ] || [ "${ARCH}" = "aarch64" ]; then
     ARCH="arm64"
+  elif [ "${ARCH}" = "x86_64" ] || [ "${ARCH}" = "amd64" ]; then
+    ARCH="x86_64"
   else
-    echo "Error: Only arm64/aarch64 architecture is supported for auto-installation"
+    echo "Error: Unsupported architecture: ${ARCH}"
     exit 1
   fi
 
