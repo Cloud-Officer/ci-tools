@@ -183,15 +183,15 @@ def resolve_parameter_value(key, prefix, ami_id, asg, options)
   end
 end
 
-def update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
+def update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
   ignored_parameters = %w[DbPassword MqPassword SendGridApiKey]
   ssm = Aws::SSM::Client.new
   parameters.each do |parameter|
     replace_with = resolve_parameter_value(parameter.parameter_key, prefix, ami_id, asg, options)
 
     unless replace_with.nil?
-      puts("Updating SSM parameter '/#{environment}/#{subnet}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
-      ssm.put_parameter({ name: "/#{environment}/#{subnet}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
+      puts("Updating SSM parameter '#{ssm_prefix}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
+      ssm.put_parameter({ name: "#{ssm_prefix}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
     end
 
     next unless ignored_parameters.include?(parameter.parameter_key)
@@ -201,12 +201,12 @@ def update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment,
   end
 end
 
-def capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, environment, subnet)
+def capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, ssm_prefix)
   names =
     parameters.filter_map do |parameter|
       next if resolve_parameter_value(parameter.parameter_key, prefix, ami_id, asg, options).nil?
 
-      "/#{environment}/#{subnet}/#{parameter.parameter_key}"
+      "#{ssm_prefix}/#{parameter.parameter_key}"
     end
 
   return {} if names.empty?
@@ -373,8 +373,9 @@ if __FILE__ == $PROGRAM_NAME
     subnet = extract_subnet_number(stack_name)
     prefix = parameter_prefix_for(options[:instance])
 
-    ssm_snapshot = capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, environment, subnet)
-    update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
+    ssm_prefix = "/#{environment}/#{subnet}"
+    ssm_snapshot = capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, ssm_prefix)
+    update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
 
     begin
       update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
