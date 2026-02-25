@@ -357,32 +357,37 @@ if __FILE__ == $PROGRAM_NAME
     new_max = asg[:max_size] < new_capacity ? (asg[:max_size] * asg_multiplier) + asg_increase : nil
     update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: new_capacity, max_size: new_max)
 
-    if new_capacity > asg[:desired_capacity]
-      puts('Waiting for auto scaling group to start the instances...')
-      wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
+    begin
+      if new_capacity > asg[:desired_capacity]
+        puts('Waiting for auto scaling group to start the instances...')
+        wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
 
-      if load_balanced_instance?(options[:instance])
-        sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
-        wait_for_healthy_instances(elb, target_group_arn)
+        if load_balanced_instance?(options[:instance])
+          sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
+          wait_for_healthy_instances(elb, target_group_arn)
+        end
+
+        puts('Waiting for cache/instances to warm up...')
+        sleep(options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
       end
 
-      puts('Waiting for cache/instances to warm up...')
-      sleep(options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
-    end
+      if options[:skip_scale_down]
+        puts("Setting max_size to #{asg[:max_size]}...")
+        update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
+      else
+        puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
+        update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
+        if load_balanced_instance?(options[:instance])
+          sleep(POLL_INTERVAL)
+          wait_for_healthy_instances(elb, target_group_arn)
+        end
 
-    if options[:skip_scale_down]
-      puts("Setting max_size to #{asg[:max_size]}...")
-      update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
-    else
-      puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
-      update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
-      if load_balanced_instance?(options[:instance])
-        sleep(POLL_INTERVAL)
-        wait_for_healthy_instances(elb, target_group_arn)
+        puts('Waiting for auto scaling group to stop the instances...')
+        wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
       end
-
-      puts('Waiting for auto scaling group to stop the instances...')
-      wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
+    ensure
+      puts('Restoring ASG mixed-instances policy...')
+      update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above])
     end
 
     puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
