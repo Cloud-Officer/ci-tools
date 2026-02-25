@@ -201,6 +201,32 @@ def update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment,
   end
 end
 
+def capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, environment, subnet)
+  names =
+    parameters.filter_map do |parameter|
+      next if resolve_parameter_value(parameter.parameter_key, prefix, ami_id, asg, options).nil?
+
+      "/#{environment}/#{subnet}/#{parameter.parameter_key}"
+    end
+
+  return {} if names.empty?
+
+  ssm = Aws::SSM::Client.new
+  response = ssm.get_parameters({ names: names, with_decryption: true })
+  response.parameters.to_h { |p| [p.name, p.value] }
+end
+
+def restore_ssm_parameters(ssm_snapshot)
+  return if ssm_snapshot.empty?
+
+  ssm = Aws::SSM::Client.new
+
+  ssm_snapshot.each do |name, value|
+    puts("Restoring SSM parameter '#{name}' to '#{value}'...")
+    ssm.put_parameter({ name: name, value: value, type: 'String', overwrite: true })
+  end
+end
+
 def wait_for_stack_update(cfn, stack_name)
   failure_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
   loop do
@@ -347,8 +373,23 @@ if __FILE__ == $PROGRAM_NAME
     subnet = extract_subnet_number(stack_name)
     prefix = parameter_prefix_for(options[:instance])
 
+    ssm_snapshot = capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, environment, subnet)
     update_ssm_parameters(parameters, prefix, ami_id, asg, options, environment, subnet)
-    update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
+
+    begin
+      update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
+    rescue SystemExit => e
+      if e.status.nonzero?
+        puts('CloudFormation update failed, rolling back SSM parameters...')
+        restore_ssm_parameters(ssm_snapshot)
+      end
+
+      raise
+    rescue StandardError
+      puts('CloudFormation update failed, rolling back SSM parameters...')
+      restore_ssm_parameters(ssm_snapshot)
+      raise
+    end
 
     mixed_params = fetch_asg_mixed_parameters(environment, subnet)
     new_capacity = (asg[:desired_capacity] * asg_multiplier) + asg_increase
