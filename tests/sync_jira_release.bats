@@ -2,6 +2,7 @@
 
 setup() {
   export PATH="${BATS_TEST_DIRNAME}/../:${PATH}"
+  export JIRA_USER_EMAIL="test@example.com"
   export JIRA_API_TOKEN="test-token"
   export GITHUB_TOKEN="test-token"
   export JIRA_BASE_URL="https://test.atlassian.net"
@@ -26,6 +27,18 @@ setup() {
   run sync-jira-release
   [ "$status" -eq 1 ]
   [[ "$output" == *"Usage:"* ]]
+}
+
+@test "exits with error when JIRA_USER_EMAIL is empty" {
+  export JIRA_USER_EMAIL=""
+
+  function jira() { :; }
+  function gh() { :; }
+  export -f jira gh
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Required environment variables"* ]]
 }
 
 @test "exits with error when JIRA_API_TOKEN is empty" {

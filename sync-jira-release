@@ -106,7 +106,7 @@ if [ "$#" -ne 3 ]; then
   exit 1
 fi
 
-if [ -z "${JIRA_API_TOKEN}" ] || [ -z "${GITHUB_TOKEN}" ] || [ -z "${JIRA_BASE_URL}" ]; then
+if [ -z "${JIRA_USER_EMAIL}" ] || [ -z "${JIRA_API_TOKEN}" ] || [ -z "${GITHUB_TOKEN}" ] || [ -z "${JIRA_BASE_URL}" ]; then
   echo "Error: Required environment variables \`JIRA_USER_EMAIL\`, \`JIRA_API_TOKEN\`, \`JIRA_BASE_URL\`, and \`GITHUB_TOKEN\` must be set."
   exit 1
 fi
