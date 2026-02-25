@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-set -- "${positional[@]}" # restore positional parameters
+set -- ${positional[@]+"${positional[@]}"} # restore positional parameters
 
 # first positional argument is the target
 target="${1:-}"

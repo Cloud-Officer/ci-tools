@@ -11,11 +11,9 @@ setup() {
 }
 
 @test "exits with error when no target specified" {
-  run ssm-jump -p myprofile dummy
-  # Remove the dummy positional to simulate no target - actually ssm-jump requires a positional
-  # With only -p and no positional, the array is empty and set -u triggers unbound variable
   run ssm-jump -p myprofile
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"No target specified"* ]]
 }
 
 @test "exits with error for invalid document name" {
