@@ -3,7 +3,7 @@ GEM
   specs:
     ast (2.4.3)
     aws-eventstream (1.4.0)
-    aws-partitions (1.1217.0)
+    aws-partitions (1.1219.0)
     aws-sdk-autoscaling (1.154.0)
       aws-sdk-core (~> 3, >= 3.241.4)
       aws-sigv4 (~> 1.5)
@@ -24,7 +24,7 @@ GEM
       bigdecimal
       jmespath (~> 1, >= 1.6.1)
       logger
-    aws-sdk-ec2 (1.603.0)
+    aws-sdk-ec2 (1.604.0)
       aws-sdk-core (~> 3, >= 3.241.4)
       aws-sigv4 (~> 1.5)
     aws-sdk-elasticloadbalancingv2 (1.148.0)
@@ -112,7 +112,7 @@ GEM
     rubocop-graphql (1.6.0)
       lint_roller (~> 1.1)
       rubocop (>= 1.72.1, < 2)
-    rubocop-minitest (0.38.2)
+    rubocop-minitest (0.39.1)
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
       rubocop-ast (>= 1.38.0, < 2.0)
@@ -172,4 +172,4 @@ DEPENDENCIES
   simplecov (>= 0.22.0)
 
 BUNDLED WITH
-  4.0.6
+  4.0.7
