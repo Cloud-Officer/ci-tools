@@ -43,9 +43,9 @@ RUN \
 	rm -rf /var/lib/apt/lists/*
 
 # Install AWS dependencies
+WORKDIR /tmp
 RUN \
 	ssm_arch="$(test "$(uname -m)" = "x86_64" && echo "64bit" || echo "arm64")" && \
-	cd /tmp/ && \
 # install AWS CLI \
 	curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" && \
 	unzip awscliv2.zip && \
@@ -75,6 +75,9 @@ ADD https://github.com/Cloud-Officer/ci-tools.git /home/citools/ci-tools
 USER root
 WORKDIR /home/citools/ci-tools
 RUN chown -R citools:citools . && bundle install && ln -s "/home/citools/ci-tools/brew-resources.rb" "/usr/local/bin/brew-resources" && ln -s "/home/citools/ci-tools/cycle-keys.rb" "/usr/local/bin/cycle-keys" && ln -s "/home/citools/ci-tools/deploy.rb" "/usr/local/bin/deploy" && ln -s "/home/citools/ci-tools/encrypt-logs.rb" "/usr/local/bin/encrypt-logs" && ln -s "/home/citools/ci-tools/generate-codeowners" "/usr/local/bin/generate-codeowners" && ln -s "/home/citools/ci-tools/linters" "/usr/local/bin/linters" && ln -s "/home/citools/ci-tools/ssm-jump" "/usr/local/bin/ssm-jump"
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD pgrep -x sleep || exit 1
 
 # Entrypoint
 USER citools

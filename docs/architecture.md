@@ -91,6 +91,8 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 **Key Components:**
 
 - `wait_for_healthy_instances`: Polls ELB target group health status until all instances are healthy
+- `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count
+- `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
 
 **Functionality:**
@@ -168,6 +170,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - yamllint: YAML files
 - shellcheck: Shell scripts
 - hadolint: Dockerfiles
+- cfn-lint: CloudFormation templates
 - golangci-lint: Go code
 - pmd: Java/JS/SQL
 - eslint: JavaScript
@@ -177,6 +180,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - protolint: Protocol Buffers
 - rubocop: Ruby code
 - semgrep: Security scanning
+- trivy: Vulnerability, secret, and misconfiguration scanning
 - swiftlint: Swift code
 
 **Internal Dependencies:** None

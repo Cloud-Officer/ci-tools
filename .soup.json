@@ -1,4 +1,16 @@
 {
+  "addressable": {
+    "language": "Ruby",
+    "package": "addressable",
+    "version": "2.8.8",
+    "license": "Apache-2.0",
+    "description": "Addressable is an alternative implementation to the URI implementation that is",
+    "website": "https://github.com/sporkmonger/addressable",
+    "last_verified_at": "2026-02-26",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "ast": {
     "language": "Ruby",
     "package": "ast",
@@ -26,7 +38,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1219.0",
+    "version": "1.1220.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +110,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.604.0",
+    "version": "1.605.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -287,6 +299,18 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "json-schema": {
+    "language": "Ruby",
+    "package": "json-schema",
+    "version": "6.1.0",
+    "license": "MIT",
+    "description": "Ruby JSON Schema Validator",
+    "website": "https://github.com/voxpupuli/json-schema/",
+    "last_verified_at": "2026-02-26",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "language_server-protocol": {
     "language": "Ruby",
     "package": "language_server-protocol",
@@ -319,6 +343,18 @@
     "description": "Provides a simple logging utility for outputting messages.",
     "website": "https://github.com/ruby/logger",
     "last_verified_at": "2025-03-25",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "mcp": {
+    "language": "Ruby",
+    "package": "mcp",
+    "version": "0.7.1",
+    "license": "Apache-2.0",
+    "description": "The official Ruby SDK for Model Context Protocol servers and clients",
+    "website": "https://github.com/modelcontextprotocol/ruby-sdk",
+    "last_verified_at": "2026-02-26",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -403,6 +439,18 @@
     "description": "Prism Ruby parser",
     "website": "https://github.com/ruby/prism",
     "last_verified_at": "2025-03-31",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "public_suffix": {
+    "language": "Ruby",
+    "package": "public_suffix",
+    "version": "7.0.2",
+    "license": "MIT",
+    "description": "PublicSuffix can parse and decompose a domain name into top level domain, domain and subdomains.",
+    "website": "https://simonecarletti.com/code/publicsuffix-ruby",
+    "last_verified_at": "2026-02-26",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -506,7 +554,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.84.2",
+    "version": "1.85.0",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",

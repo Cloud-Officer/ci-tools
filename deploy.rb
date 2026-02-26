@@ -37,8 +37,9 @@ def wait_for_healthy_instances(elb, target_group_arn)
     raise('Timed out waiting for healthy instances') if (attempts += 1) > MAX_POLL_ATTEMPTS
 
     sleep(POLL_INTERVAL)
-    unhealthy = elb.describe_target_health({ target_group_arn: target_group_arn })
-                   .target_health_descriptions.count { |h| h.target_health.state != 'healthy' }
+    unhealthy =
+      elb.describe_target_health({ target_group_arn: target_group_arn })
+         .target_health_descriptions.count { |h| h.target_health.state != 'healthy' }
     puts("Waiting on #{unhealthy} unhealthy targets...")
     break if unhealthy.zero?
   end
