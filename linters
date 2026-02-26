@@ -102,6 +102,20 @@ if [ -f .hadolint.yaml ]; then
   hadolint $(find . -name Dockerfile -not -path "*/vendor/*" -not -path "*/node_modules/*" -not -path "*/Libraries/*" -not -path "*/Pods/*") || FAILED=1
 fi
 
+if [ -f .cfnlintrc ]; then
+  echo "Checking CloudFormation templates..."
+
+  if ! command -v cfn-lint &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install cfn-lint
+    else
+      pip3 install cfn-lint
+    fi
+  fi
+
+  cfn-lint --non-zero-exit-code error || FAILED=1
+fi
+
 if [ -f .golangci.yml ]; then
   echo "Checking Go..."
 
@@ -262,6 +276,40 @@ if [ -f .semgrepignore ]; then
   fi
 
   semgrep scan --config=auto --severity=ERROR --error --quiet . || FAILED=1
+fi
+
+if [ -f .trivyignore ]; then
+  echo "Checking with trivy..."
+
+  if ! command -v trivy &>/dev/null; then
+    if uname -s | grep Darwin &>/dev/null; then
+      brew install trivy
+    else
+      curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+    fi
+  fi
+
+  SCANNERS="secret"
+
+  if [ -f .cfnlintrc ] || [ -f .hadolint.yaml ] || \
+     find . -maxdepth 3 -name "*.tf" -print -quit 2>/dev/null | grep -q . || \
+     find . -maxdepth 3 -name "Dockerfile*" -print -quit 2>/dev/null | grep -q .; then
+    SCANNERS="${SCANNERS},misconfig"
+  fi
+
+  for lock_file in package-lock.json yarn.lock pnpm-lock.yaml go.sum \
+                   requirements.txt Pipfile.lock poetry.lock \
+                   Gemfile.lock composer.lock \
+                   pom.xml build.gradle build.gradle.kts \
+                   Cargo.lock Package.resolved; do
+    if [ -f "${lock_file}" ]; then
+      SCANNERS="${SCANNERS},vuln"
+      break
+    fi
+  done
+
+  echo "Trivy scanners: ${SCANNERS}"
+  trivy fs --scanners "${SCANNERS}" --exit-code 1 . || FAILED=1
 fi
 
 if [ -f .swiftlint.yml ]; then
