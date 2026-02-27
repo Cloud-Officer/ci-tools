@@ -26,6 +26,21 @@ jobs:
         aws-access-key-id: "${{secrets.AWS_ACCESS_KEY_ID}}"
         aws-secret-access-key: "${{secrets.AWS_SECRET_ACCESS_KEY}}"
         aws-region: "${{secrets.AWS_DEFAULT_REGION}}"
+    - name: Close Stale Dependency PRs
+      shell: bash
+      run: |
+        prs=$(gh pr list --repo "${{github.repository}}" --search "Update Dependencies in:title" --state open --json number,headRefName --jq '.[] | "\(.number) \(.headRefName)"')
+
+        if [ -n "$prs" ]; then
+          while IFS=' ' read -r pr_number branch_name; do
+            echo "Closing PR #${pr_number} and deleting branch ${branch_name}"
+            gh pr close "${pr_number}" --repo "${{github.repository}}" --delete-branch --comment "Superseded by a newer dependency update."
+          done <<< "$prs"
+        else
+          echo "No stale dependency update PRs found."
+        fi
+      env:
+        GH_TOKEN: "${{secrets.GH_PAT}}"
     - name: Update Dependencies
       shell: bash
       run: |
