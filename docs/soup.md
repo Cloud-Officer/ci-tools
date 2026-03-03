@@ -39,7 +39,7 @@
 | Ruby | parallel | 1.27.0 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | parser | 3.3.10.2 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | prism | 1.9.0 | MIT | Prism Ruby parser | <https://github.com/ruby/prism> | 2025-03-31 | Low | Dependency | Dependency |
-| Ruby | public_suffix | 7.0.2 | MIT | PublicSuffix can parse and decompose a domain name into top level domain, domain and subdomains. | <https://simonecarletti.com/code/publicsuffix-ruby> | 2026-02-26 | Low | Dependency | Dependency |
+| Ruby | public_suffix | 7.0.5 | MIT | PublicSuffix can parse and decompose a domain name into top level domain, domain and subdomains. | <https://simonecarletti.com/code/publicsuffix-ruby> | 2026-02-26 | Low | Dependency | Dependency |
 | Ruby | racc | 1.8.1 | Ruby | Racc is an LALR(1) parser generator. | <https://github.com/ruby/racc> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | rainbow | 3.1.1 | MIT | Colorize printed text on ANSI terminals | <https://github.com/sickill/rainbow> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | regexp_parser | 2.11.3 | MIT | A library for tokenizing, lexing, and parsing Ruby regular expressions. | <https://github.com/ammar/regexp_parser> | 2024-06-02 | Low | Dependency | Dependency |
