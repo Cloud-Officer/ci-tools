@@ -31,7 +31,7 @@
 | Ruby | language_server-protocol | 3.17.0.5 | MIT | A Language Server Protocol SDK | <https://github.com/mtsmfm/language_server-protocol-ruby> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | lint_roller | 1.1.0 | MIT | A plugin specification for linter and formatter rulesets | <https://github.com/standardrb/lint_roller> | 2025-02-15 | Low | Dependency | Dependency |
 | Ruby | logger | 1.7.0 | Ruby | Provides a simple logging utility for outputting messages. | <https://github.com/ruby/logger> | 2025-03-25 | Low | Dependency | Dependency |
-| Ruby | mcp | 0.7.1 | Apache-2.0 | The official Ruby SDK for Model Context Protocol servers and clients | <https://github.com/modelcontextprotocol/ruby-sdk> | 2026-02-26 | Low | Dependency | Dependency |
+| Ruby | mcp | 0.8.0 | Apache-2.0 | The official Ruby SDK for Model Context Protocol servers and clients | <https://github.com/modelcontextprotocol/ruby-sdk> | 2026-02-26 | Low | Dependency | Dependency |
 | Ruby | mini_mime | 1.1.5 | MIT | A minimal mime type library | <https://github.com/discourse/mini_mime> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | multi_xml | 0.8.1 | MIT | Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML. | <https://github.com/sferik/multi_xml> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | nokogiri | 1.19.1 | MIT | Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby | <https://nokogiri.org> | 2026-02-24 | Medium | XML parser | Industry-standard Ruby XML/HTML parser with active security maintenance |
