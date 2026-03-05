@@ -121,7 +121,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 **Functionality:**
 
 - Reads AWS credentials from `~/.aws/credentials`
-- Creates new access keys when current keys exceed 80 days (configurable)
+- Creates new access keys when current keys exceed 80 days (override with `--force`)
 - Disables and deletes old keys after successful rotation
 - Updates credentials file with new key material
 
