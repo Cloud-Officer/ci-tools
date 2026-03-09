@@ -38,7 +38,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1221.0",
+    "version": "1.1223.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.242.0",
+    "version": "3.243.0",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -110,7 +110,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.606.0",
+    "version": "1.607.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -290,7 +290,7 @@
   "json": {
     "language": "Ruby",
     "package": "json",
-    "version": "2.18.1",
+    "version": "2.19.1",
     "license": "Ruby",
     "description": "A JSON implementation as a JRuby extension.",
     "website": "https://github.com/ruby/json",
@@ -302,7 +302,7 @@
   "json-schema": {
     "language": "Ruby",
     "package": "json-schema",
-    "version": "6.1.0",
+    "version": "6.2.0",
     "license": "MIT",
     "description": "Ruby JSON Schema Validator",
     "website": "https://github.com/voxpupuli/json-schema/",
