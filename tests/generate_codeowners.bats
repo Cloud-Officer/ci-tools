@@ -2,6 +2,7 @@
 
 setup() {
   export PATH="${BATS_TEST_DIRNAME}/../:${PATH}"
+  export GHB_IGNORED_EXCLUDES="-not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.build/*' -not -path '*/Pods/*' -not -path '*/Carthage/*' -not -path '*/DerivedData/*'"
   TEST_DIR=$(mktemp -d)
   cd "${TEST_DIR}"
 }
