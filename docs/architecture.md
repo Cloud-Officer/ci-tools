@@ -247,7 +247,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Internal Dependencies:** None
 
-**External Dependencies:** Bash utilities
+**External Dependencies:** github-build CLI, jq
 
 ### brew-resources.rb
 
