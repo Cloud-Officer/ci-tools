@@ -2,6 +2,7 @@
 set -euo pipefail
 
 CODEOWNERS=".github/CODEOWNERS"
+IGNORED_EXCLUDES="${GHB_IGNORED_EXCLUDES:-$(github-build --get_ignored_folders | jq -r '.ignored_folders[]' | sed 's|.*|-not -path "*/&/*"|' | tr '\n' ' ')}"
 
 function check_file()
 {
@@ -15,7 +16,8 @@ function check_file()
     exit 1
   fi
 
-  if find . -name "${1}" -not -path "./*-scripts/*" -not -path "./codedeploy/*" -not -path "./bin/*" -not -path "./sbin/*" | grep -E '.*' &> /dev/null; then
+  # shellcheck disable=SC2086
+  if find . -name "${1}" -not -path "./*-scripts/*" -not -path "./codedeploy/*" -not -path "./bin/*" -not -path "./sbin/*" ${IGNORED_EXCLUDES} | grep -E '.*' &> /dev/null; then
     printf "%-24s %s\n" "${1}" "${2}" >> "./${CODEOWNERS}"
   fi
 }
