@@ -21,6 +21,7 @@
   * [ssm-jump](#ssm-jump)
     * [Usage ssm-jump](#usage-ssm-jump)
     * [Examples ssm-jump](#examples-ssm-jump)
+    * [Windows Installation](#windows-installation)
   * [sync-jira-release](#sync-jira-release)
     * [Usage sync-jira-release](#usage-sync-jira-release)
     * [Examples sync-jira-release](#examples-sync-jira-release)
@@ -28,13 +29,30 @@
 
 ## Introduction
 
-This is a collection of tools to run locally or on a CI pipeline.
+This is a collection of tools to run locally or on a CI pipeline. These tools are designed for DevOps engineers and developers working with AWS infrastructure and CI/CD pipelines.
+
+### Features
+
+* **generate-codeowners** - Automatically generate `.github/CODEOWNERS` files from repository structure
+* **cycle-keys** - Rotate AWS IAM access keys safely with automatic credential file updates
+* **deploy** - Automate ASG, spot fleet, and Lambda deployments on AWS
+* **encrypt-logs** - Encrypt CloudWatch log groups with KMS keys and set retention policies
+* **linters** - Auto-detect file types and run appropriate linters with automatic installation
+* **ssm-jump** - Open SSM connections to EC2 instances without VPN using instance name, ID, or IP
+* **sync-jira-release** - Synchronize Jira releases with GitHub pull requests between git tags
 
 ## Installation
 
 Prerequisites are Ruby >= 4.0 and Bundler.
 
 Run `bundle install` to install dependencies, then run the commands.
+
+### Verification
+
+```bash
+ruby --version
+bundle --version
+```
 
 You can install via [Homebrew](https://github.com/Cloud-Officer/homebrew-ci).
 
@@ -215,6 +233,24 @@ Host myclient-api-* myclient-i-*
 ```
 
 That way, using `ssh myclient-api-rc5-standalone` will strip the `myclient-` prefix before trying to match an EC2 instance with that name.
+
+##### Windows Installation
+
+To install `ssm-jump`, dependencies and associated helpers on a Windows machine:
+
+1. Ensure the user has AWS access/secret keys
+2. Ensure the user has access to `aws ec2 describe-instances`
+3. Ensure the user has access to `aws ssm start-session` and the associated SSM document
+4. Send `ssm-jump.install.bat` to the user (using Slack, email, etc.)
+5. Execute the installation script by double-clicking on it, and follow the prompts to configure the AWS profile, instance name, forward host, SSM document, and desktop shortcut name
+
+Once complete, a batch script shortcut will be present on the Windows desktop.
+
+To use/connect to a database:
+
+1. Double-click the generated desktop shortcut to create a tunnel to the database (leave that window open until you want to disconnect)
+2. Configure your database client to use `127.0.0.1` for the host and the local port specified during installation
+3. The tunnelled connection should be established
 
 ### sync-jira-release
 

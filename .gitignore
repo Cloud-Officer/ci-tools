@@ -1,4 +1,10 @@
-# Edit at https://www.toptal.com/developers/gitignore?templates=eclipse,emacs,jetbrains,linux,macos,netbeans,nova,ruby,rubymine,sublimetext,vim,visualstudiocode,windows
+# Edit at https://www.toptal.com/developers/gitignore?templates=batch,eclipse,emacs,jetbrains,linux,macos,netbeans,nova,ruby,rubymine,sublimetext,vim,visualstudiocode,windows
+
+### Batch ###
+# BatchFiles
+*.bat
+*.cmd
+*.btm
 
 ### Eclipse ###
 .metadata
@@ -514,7 +520,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-# End of https://www.toptal.com/developers/gitignore/api/eclipse,emacs,jetbrains,linux,macos,netbeans,nova,ruby,rubymine,sublimetext,vim,visualstudiocode,windows
+# End of https://www.toptal.com/developers/gitignore/api/batch,eclipse,emacs,jetbrains,linux,macos,netbeans,nova,ruby,rubymine,sublimetext,vim,visualstudiocode,windows
 
 # BEGIN AI Assistants
 
