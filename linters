@@ -298,12 +298,20 @@ if [ -f .trivyignore ]; then
     SCANNERS="${SCANNERS},misconfig"
   fi
 
+  # Build submodule exclusion paths for find
+  SUBMODULE_PRUNE=()
+  if [ -f .gitmodules ]; then
+    while IFS= read -r sm_path; do
+      SUBMODULE_PRUNE+=("-path" "./${sm_path}" "-prune" "-o")
+    done < <(grep 'path = ' .gitmodules | sed 's/.*path = //')
+  fi
+
   for lock_file in package-lock.json yarn.lock pnpm-lock.yaml go.sum \
                    requirements.txt Pipfile.lock poetry.lock \
                    Gemfile.lock composer.lock \
                    pom.xml build.gradle build.gradle.kts \
                    Cargo.lock Package.resolved; do
-    if [ -f "${lock_file}" ]; then
+    if find . "${SUBMODULE_PRUNE[@]}" -name "${lock_file}" -print -quit 2>/dev/null | grep -q .; then
       SCANNERS="${SCANNERS},vuln"
       break
     fi
