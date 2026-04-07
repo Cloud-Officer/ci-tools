@@ -4,11 +4,11 @@
 | :---: | :--- | :---: | :---: | :--- | :--- | :---: | :---: | :--- | :--- |
 | Ruby | ast | 2.4.3 | MIT | A library for working with Abstract Syntax Trees. | <https://whitequark.github.io/ast/> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | aws-eventstream | 1.4.0 | Apache-2.0 | Amazon Web Services event stream library | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
-| Ruby | aws-partitions | 1.1233.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
+| Ruby | aws-partitions | 1.1234.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | aws-sdk-autoscaling | 1.156.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudformation | 1.150.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.143.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-cloudwatchlogs | 1.142.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-cloudwatchlogs | 1.144.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.244.0 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-ec2 | 1.610.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.149.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
@@ -18,7 +18,7 @@
 | Ruby | aws-sdk-ssm | 1.212.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM) | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sigv4 | 1.12.1 | Apache-2.0 | Amazon Web Services Signature Version 4 signing library | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | base64 | 0.3.0 | Ruby | Support for encoding and decoding binary data using a Base64 representation. | <https://github.com/ruby/base64> | 2025-01-08 | Low | Dependency | Dependency |
-| Ruby | bigdecimal | 4.1.0 | Ruby | This library provides arbitrary-precision decimal floating-point number class. | <https://github.com/ruby/bigdecimal> | 2024-04-30 | Low | Dependency | Dependency |
+| Ruby | bigdecimal | 4.1.1 | Ruby | This library provides arbitrary-precision decimal floating-point number class. | <https://github.com/ruby/bigdecimal> | 2024-04-30 | Low | Dependency | Dependency |
 | Ruby | csv | 3.3.5 | Ruby | The CSV library provides a complete interface to CSV files and data | <https://github.com/ruby/csv> | 2024-04-29 | Low | Dependency | Dependency |
 | Ruby | diff-lcs | 1.6.2 | MIT | Diff::LCS computes the difference between two Enumerable sequences using the | <https://github.com/halostatue/diff-lcs> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | docile | 1.4.1 | MIT | Docile treats the methods of a given ruby object as a DSL (domain specific language) within a given block | <https://ms-ati.github.io/docile/> | 2026-02-24 | Low | Dependency | Dependency |
@@ -38,7 +38,7 @@
 | Ruby | prism | 1.9.0 | MIT | Prism Ruby parser | <https://github.com/ruby/prism> | 2025-03-31 | Low | Dependency | Dependency |
 | Ruby | racc | 1.8.1 | Ruby | Racc is an LALR(1) parser generator. | <https://github.com/ruby/racc> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | rainbow | 3.1.1 | MIT | Colorize printed text on ANSI terminals | <https://github.com/sickill/rainbow> | 2024-06-02 | Low | Dependency | Dependency |
-| Ruby | regexp_parser | 2.11.3 | MIT | A library for tokenizing, lexing, and parsing Ruby regular expressions. | <https://github.com/ammar/regexp_parser> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | regexp_parser | 2.12.0 | MIT | A library for tokenizing, lexing, and parsing Ruby regular expressions. | <https://github.com/ammar/regexp_parser> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | rspec | 3.13.2 | MIT | BDD for Ruby | <https://rspec.info> | 2026-02-24 | Low | Test framework for unit testing Ruby scripts | Most popular Ruby testing framework with active maintenance |
 | Ruby | rspec-core | 3.13.6 | MIT | BDD for Ruby | <https://rspec.info> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | rspec-expectations | 3.13.5 | MIT | rspec-expectations provides a simple, readable API to express expected outcomes of a code example. | <https://rspec.info> | 2026-02-24 | Low | Dependency | Dependency |
