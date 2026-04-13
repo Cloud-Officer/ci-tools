@@ -127,7 +127,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Internal Dependencies:** None
 
-**External Dependencies:** aws-sdk-iam, iniparse, optparse
+**External Dependencies:** aws-sdk-iam, date, iniparse, optparse
 
 ### encrypt-logs.rb
 
@@ -263,7 +263,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Internal Dependencies:** None
 
-**External Dependencies:** bundler, httparty
+**External Dependencies:** bundler, digest, httparty
 
 ## Software of Unknown Provenance
 
