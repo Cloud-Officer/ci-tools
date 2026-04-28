@@ -93,13 +93,16 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `wait_for_healthy_instances`: Polls ELB target group health status until all instances are healthy
 - `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count
 - `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
+- `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
 
 **Functionality:**
 
 - Creates EC2 AMIs from standalone instances
 - Updates CloudFormation stack parameters via SSM
+- Captures SSM parameter snapshots and restores them if the CloudFormation update fails
 - Manages ASG desired capacity with blue/green deployment pattern
+- Restores ASG mixed-instances policy via an `ensure` block even if scaling fails
 - Publishes Lambda versions and updates CloudFront distributions
 - Supports spot instance deployments with mixed instance policies
 
@@ -117,11 +120,16 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 - Credentials file parser using IniParse
 - Key rotation logic with age-based thresholds
+- `cleanup_secondary_keys`: Disables and deletes any non-primary keys before rotation
+- `create_and_save_new_key`: Creates a new access key and persists it under an exclusive file lock
+- `disable_and_delete_old_key`: Disables and deletes the previous key with rollback on failure
 
 **Functionality:**
 
 - Reads AWS credentials from `~/.aws/credentials`
 - Creates new access keys when current keys exceed 80 days (override with `--force`)
+- Persists new credentials using an exclusive file lock (`flock`) to prevent concurrent writers
+- Rolls back (deletes the new key and restores the original credentials) if disabling or deleting the old key fails
 - Disables and deletes old keys after successful rotation
 - Updates credentials file with new key material
 
@@ -306,15 +314,17 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 2. Disable and delete any secondary keys
 3. Check age of current key (threshold: 80 days)
 4. Create new access key
-5. Update credentials file with new key
+5. Update credentials file with new key under an exclusive file lock
 6. Disable old key
 7. Delete old key
+8. On failure during steps 6 or 7, delete the newly created key and restore the original credentials
 
 **Security Considerations:**
 
 - Validates username matches expected value
 - Supports force rotation regardless of key age
-- Atomic update to credentials file
+- Uses exclusive file locking (`flock`) when writing the credentials file to prevent races
+- Rollback path restores the original credentials if old-key disable/delete fails
 
 ### Instance Lookup Algorithm
 
@@ -353,12 +363,14 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 ### Error Handling
 
-| Control                | Implementation                            | Location                                     |
-|------------------------|-------------------------------------------|----------------------------------------------|
-| Exception Wrapping     | Top-level rescue blocks with stack traces | All Ruby scripts                             |
-| Validation Errors      | CloudFormation validation error handling  | `deploy.rb` in CloudFormation update section |
-| Stack State Monitoring | Checks for failed stack states            | `deploy.rb` in stack status check            |
-| Exit Codes             | Non-zero exit codes on failures           | All scripts                                  |
+| Control                | Implementation                                    | Location                                     |
+|------------------------|---------------------------------------------------|----------------------------------------------|
+| Exception Wrapping     | Top-level rescue blocks with stack traces         | All Ruby scripts                             |
+| Validation Errors      | CloudFormation validation error handling          | `deploy.rb` in CloudFormation update section |
+| Stack State Monitoring | Checks for failed stack states                    | `deploy.rb` in stack status check            |
+| SSM Parameter Rollback | Restores SSM snapshot when CFN update fails       | `deploy.rb` in `restore_ssm_parameters`      |
+| Key Rotation Rollback  | Deletes new key and restores original credentials | `cycle-keys.rb` in `rollback` lambda         |
+| Exit Codes             | Non-zero exit codes on failures                   | All scripts                                  |
 
 ### Operational Safety
 
@@ -382,8 +394,8 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 | Failure Mode                | Impact                | Mitigation                                          |
 |-----------------------------|-----------------------|-----------------------------------------------------|
 | AMI creation timeout        | Deployment blocked    | Extended waiter timeout (1024 attempts for workers) |
-| Stack update failure        | Partial deployment    | Stack state monitoring with failure detection       |
-| Key rotation failure        | Credentials unchanged | Atomic file update, rollback on error               |
+| Stack update failure        | Partial deployment    | SSM parameter snapshot/restore around CFN updates   |
+| Key rotation failure        | Credentials unchanged | Exclusive file lock, rollback to original key       |
 | Instance lookup failure     | Connection blocked    | Clear error messages with valid alternatives        |
 | Linter installation failure | Build blocked         | Auto-installation with platform detection           |
 

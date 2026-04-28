@@ -74,7 +74,7 @@
   "aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.146.0",
+    "version": "1.147.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-kms": {
     "language": "Ruby",
     "package": "aws-sdk-kms",
-    "version": "1.123.0",
+    "version": "1.124.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -350,7 +350,7 @@
   "nokogiri": {
     "language": "Ruby",
     "package": "nokogiri",
-    "version": "1.19.2",
+    "version": "1.19.3",
     "license": "MIT",
     "description": "Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby",
     "website": "https://nokogiri.org",
