@@ -234,7 +234,7 @@ Host myclient-api-* myclient-i-*
 
 That way, using `ssh myclient-api-rc5-standalone` will strip the `myclient-` prefix before trying to match an EC2 instance with that name.
 
-##### Windows Installation
+#### Windows Installation
 
 To install `ssm-jump`, dependencies and associated helpers on a Windows machine:
 
