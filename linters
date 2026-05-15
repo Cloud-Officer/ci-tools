@@ -192,7 +192,7 @@ if [ -f .editorconfig ]; then
     fi
   fi
 
-  ktlint --verbose || FAILED=1
+  ktlint --log-level=info || FAILED=1
 fi
 
 if [ -f .bandit ]; then
