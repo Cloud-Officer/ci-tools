@@ -1,10 +1,45 @@
 # frozen_string_literal: true
 
+require 'webmock/rspec'
+
 module BrewResources
   # Methods defined in brew-resources.rb
 end
 
 RSpec.describe(BrewResources) do
+  describe '#fetch_gem_sha256' do
+    let(:spec)         { instance_double(Gem::Specification, full_name: 'nokogiri-1.15.2') }
+    let(:gem_url)      { 'https://rubygems.org/gems/nokogiri-1.15.2.gem'                   }
+    let(:gem_bytes)    { "fake gem bytes\n"                                                }
+    let(:expected_sha) { Digest::SHA256.hexdigest(gem_bytes)                               }
+
+    context 'with a 200 response' do
+      before { stub_request(:get, gem_url).to_return(status: 200, body: gem_bytes) }
+
+      it 'returns the sha256 of the response body' do
+        expect(fetch_gem_sha256(spec)).to(eq(expected_sha))
+      end
+    end
+
+    context 'with a 500 response' do
+      before { stub_request(:get, gem_url).to_return(status: 500, body: 'service unavailable') }
+
+      it 'raises with the status code, URL, and body excerpt' do
+        expect { fetch_gem_sha256(spec) }
+          .to(raise_error(RuntimeError, /500.*#{Regexp.escape(gem_url)}.*service unavailable/))
+      end
+    end
+
+    context 'with a 404 response' do
+      before { stub_request(:get, gem_url).to_return(status: 404, body: '<html>Not Found</html>') }
+
+      it 'raises with the status code' do
+        expect { fetch_gem_sha256(spec) }
+          .to(raise_error(RuntimeError, /HTTP 404/))
+      end
+    end
+  end
+
   describe '#format_resource' do
     context 'with ruby platform' do
       let(:spec)   { instance_double(Gem::Specification, name: 'nokogiri', full_name: 'nokogiri-1.15.2', platform: 'ruby') }

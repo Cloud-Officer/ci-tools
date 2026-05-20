@@ -6,6 +6,14 @@ require 'bundler'
 require 'digest'
 require 'httparty'
 
+def fetch_gem_sha256(spec)
+  url = "https://rubygems.org/gems/#{spec.full_name}.gem"
+  response = HTTParty.get(url)
+  raise("rubygems.org returned HTTP #{response.code} for #{url}: #{response.message} — #{response.body.to_s[0, 200]}") unless response.code == 200
+
+  Digest::SHA256.hexdigest(response.body)
+end
+
 def format_resource(spec, sha256)
   lines = []
 
@@ -49,12 +57,7 @@ if __FILE__ == $PROGRAM_NAME
     lock_file = Bundler::LockfileParser.new(Bundler.read_file('Gemfile.lock'))
 
     lock_file.specs.each do |spec|
-      url = "https://rubygems.org/gems/#{spec.full_name}.gem"
-      response = HTTParty.get(url)
-
-      raise("rubygems.org returned HTTP #{response.code} for #{url}: #{response.message} — #{response.body.to_s[0, 200]}") unless response.code == 200
-
-      sha256 = Digest::SHA256.hexdigest(response.body)
+      sha256 = fetch_gem_sha256(spec)
       format_resource(spec, sha256).each { |line| puts(line) }
     end
   rescue StandardError => e
