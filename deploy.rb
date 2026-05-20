@@ -255,6 +255,21 @@ def update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
   puts("Update completed successfully for cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}.")
 end
 
+def update_stack_with_ssm_rollback(cfn, stack_name, parameters, prefix, ami_id, ssm_snapshot)
+  update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
+rescue SystemExit => e
+  if e.status.nonzero?
+    puts('CloudFormation update failed, rolling back SSM parameters...')
+    restore_ssm_parameters(ssm_snapshot)
+  end
+
+  raise
+rescue StandardError
+  puts('CloudFormation update failed, rolling back SSM parameters...')
+  restore_ssm_parameters(ssm_snapshot)
+  raise
+end
+
 def fetch_asg_mixed_parameters(environment, subnet)
   ssm = Aws::SSM::Client.new
   response = ssm.get_parameters({ names: ["/#{environment}/#{subnet}/OnDemandPercentAbove", "/#{environment}/#{subnet}/OnDemandBaseCapacity"], with_decryption: true })
@@ -381,20 +396,7 @@ if __FILE__ == $PROGRAM_NAME
     ssm_snapshot = capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, ssm_prefix)
     update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
 
-    begin
-      update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
-    rescue SystemExit => e
-      if e.status.nonzero?
-        puts('CloudFormation update failed, rolling back SSM parameters...')
-        restore_ssm_parameters(ssm_snapshot)
-      end
-
-      raise
-    rescue StandardError
-      puts('CloudFormation update failed, rolling back SSM parameters...')
-      restore_ssm_parameters(ssm_snapshot)
-      raise
-    end
+    update_stack_with_ssm_rollback(cfn, stack_name, parameters, prefix, ami_id, ssm_snapshot)
 
     mixed_params = fetch_asg_mixed_parameters(environment, subnet)
     new_capacity = (asg[:desired_capacity] * asg_multiplier) + asg_increase
