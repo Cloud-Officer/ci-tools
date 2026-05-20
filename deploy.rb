@@ -12,7 +12,7 @@ require 'aws-sdk-ec2'
 require 'aws-sdk-elasticloadbalancingv2'
 require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
-require 'optparse'
+require_relative 'lib/cli_main'
 
 # Timing constants for polling and warmup periods
 POLL_INTERVAL = 15      # Seconds between status checks
@@ -448,12 +448,7 @@ def run_deployment(options)
 end
 
 def parse_deploy_options(argv = ARGV)
-  options = {}
-
-  OptionParser.new do |opts|
-    opts.banner = 'Usage: deploy.rb options'
-    opts.separator('')
-    opts.separator('options')
+  CliMain.parse_options!(banner: 'Usage: deploy.rb options', mandatory: %i[environment instance profile], argv: argv) do |opts|
     opts.on('--ami ami', String)
     opts.on('--create_ami_only')
     opts.on('--environment environment', String)
@@ -468,25 +463,15 @@ def parse_deploy_options(argv = ARGV)
       puts(opts)
       exit(0)
     end
-  end.parse!(argv, into: options)
-
-  mandatory = %i[environment instance profile]
-  missing = mandatory.select { |param| options[param].nil? }
-  raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
-
-  options
+  end
 end
 
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
-  begin
+  CliMain.run! do
     options = parse_deploy_options
     puts('Starting deployment...')
     run_deployment(options)
-  rescue StandardError => e
-    warn(e)
-    warn(e.backtrace)
-    exit(1)
   end
 end
 # :nocov:
