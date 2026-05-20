@@ -1,4 +1,16 @@
 {
+  "addressable": {
+    "language": "Ruby",
+    "package": "addressable",
+    "version": "2.9.0",
+    "license": "Apache-2.0",
+    "description": "Addressable is an alternative implementation to the URI implementation that is",
+    "website": "https://github.com/sporkmonger/addressable",
+    "last_verified_at": "2026-05-20",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "ast": {
     "language": "Ruby",
     "package": "ast",
@@ -203,6 +215,18 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "crack": {
+    "language": "Ruby",
+    "package": "crack",
+    "version": "1.0.1",
+    "license": "MIT",
+    "description": "Really simple JSON and XML parsing, ripped from Merb and Rails.",
+    "website": "https://github.com/jnunemaker/crack",
+    "last_verified_at": "2026-05-20",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "csv": {
     "language": "Ruby",
     "package": "csv",
@@ -235,6 +259,18 @@
     "description": "Docile treats the methods of a given ruby object as a DSL (domain specific language) within a given block",
     "website": "https://ms-ati.github.io/docile/",
     "last_verified_at": "2026-02-24",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "hashdiff": {
+    "language": "Ruby",
+    "package": "hashdiff",
+    "version": "1.2.1",
+    "license": "MIT",
+    "description": " Hashdiff is a diff lib to compute the smallest difference between two hashes",
+    "website": "https://github.com/liufengyun/hashdiff",
+    "last_verified_at": "2026-05-20",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -407,6 +443,18 @@
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
   },
+  "public_suffix": {
+    "language": "Ruby",
+    "package": "public_suffix",
+    "version": "7.0.5",
+    "license": "MIT",
+    "description": "PublicSuffix can parse and decompose a domain name into top level domain, domain and subdomains.",
+    "website": "https://simonecarletti.com/code/publicsuffix-ruby",
+    "last_verified_at": "2026-05-20",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
   "racc": {
     "language": "Ruby",
     "package": "racc",
@@ -439,6 +487,18 @@
     "description": "A library for tokenizing, lexing, and parsing Ruby regular expressions.",
     "website": "https://github.com/ammar/regexp_parser",
     "last_verified_at": "2024-06-02",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "rexml": {
+    "language": "Ruby",
+    "package": "rexml",
+    "version": "3.4.4",
+    "license": "BSD-2-Clause",
+    "description": "An XML toolkit for Ruby",
+    "website": "https://github.com/ruby/rexml",
+    "last_verified_at": "2026-05-20",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -667,6 +727,18 @@
     "description": "[Emoji 17.0] Provides Unicode Emoji data and regexes, incorporating the latest Unicode and Emoji standards",
     "website": "https://github.com/janlelis/unicode-emoji",
     "last_verified_at": "2024-11-27",
+    "risk_level": "Low",
+    "requirements": "Dependency",
+    "verification_reasoning": "Dependency"
+  },
+  "webmock": {
+    "language": "Ruby",
+    "package": "webmock",
+    "version": "3.26.2",
+    "license": "MIT",
+    "description": "WebMock allows stubbing HTTP requests and setting expectations on HTTP requests.",
+    "website": "https://github.com/bblimke/webmock",
+    "last_verified_at": "2026-05-20",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
