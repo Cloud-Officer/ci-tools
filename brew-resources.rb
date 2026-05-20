@@ -5,6 +5,7 @@
 require 'bundler'
 require 'digest'
 require 'httparty'
+require_relative 'lib/cli_main'
 
 def format_resource(spec, sha256)
   lines = []
@@ -45,7 +46,7 @@ end
 
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
-  begin
+  CliMain.run! do
     lock_file = Bundler::LockfileParser.new(Bundler.read_file('Gemfile.lock'))
 
     lock_file.specs.each do |spec|
@@ -57,10 +58,6 @@ if __FILE__ == $PROGRAM_NAME
       sha256 = Digest::SHA256.hexdigest(response.body)
       format_resource(spec, sha256).each { |line| puts(line) }
     end
-  rescue StandardError => e
-    warn(e)
-    warn(e.backtrace)
-    exit(1)
   end
 end
 # :nocov:

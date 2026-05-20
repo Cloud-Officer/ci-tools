@@ -7,7 +7,7 @@
 require 'aws-sdk-cloudwatchlogs'
 require 'aws-sdk-core'
 require 'aws-sdk-kms'
-require 'optparse'
+require_relative 'lib/cli_main'
 
 KMS_ENVIRONMENTS = %i[beta rc prod].freeze
 
@@ -63,49 +63,38 @@ def process_log_group(logs, log_group, keys, retention_in_days)
   )
 end
 
+def parse_encrypt_logs_options(argv = ARGV)
+  CliMain.parse_options!(banner: 'Usage: encrypt_logs.rb options', mandatory: %i[profile retention_in_days], argv: argv) do |opts|
+    opts.on('--profile profile', String)
+    opts.on('--retention_in_days retention_in_days', Integer)
+    opts.on('-h', '--help') do
+      puts(opts)
+      exit(1)
+    end
+  end
+end
+
+def run_encrypt_logs(options)
+  if options[:profile]
+    puts('Setting profile...')
+    Aws.config.update({ profile: options[:profile] })
+  end
+
+  kms = Aws::KMS::Client.new
+  keys = build_kms_key_map(kms)
+  logs = Aws::CloudWatchLogs::Client.new
+
+  logs.describe_log_groups.each_page do |page|
+    page.log_groups.each do |log_group|
+      process_log_group(logs, log_group, keys, options[:retention_in_days])
+    end
+  end
+end
+
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
-  begin
-    # parse command line options
-
-    options = {}
-
-    OptionParser.new do |opts|
-      opts.banner = 'Usage: encrypt_logs.rb options'
-      opts.separator('')
-      opts.separator('options')
-
-      opts.on('--profile profile', String)
-      opts.on('--retention_in_days retention_in_days', Integer)
-      opts.on('-h', '--help') do
-        puts(opts)
-        exit(1)
-      end
-    end.parse!(into: options)
-
-    mandatory = %i[profile retention_in_days]
-    missing = mandatory.select { |param| options[param].nil? }
-    raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
-
-    if options[:profile]
-      puts('Setting profile...')
-      Aws.config.update({ profile: options[:profile] })
-    end
-
-    kms = Aws::KMS::Client.new
-    keys = build_kms_key_map(kms)
-
-    logs = Aws::CloudWatchLogs::Client.new
-
-    logs.describe_log_groups.each_page do |page|
-      page.log_groups.each do |log_group|
-        process_log_group(logs, log_group, keys, options[:retention_in_days])
-      end
-    end
-  rescue StandardError => e
-    warn(e)
-    warn(e.backtrace)
-    exit(1)
+  CliMain.run! do
+    run_encrypt_logs(parse_encrypt_logs_options)
   end
 end
 # :nocov:

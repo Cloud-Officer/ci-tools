@@ -5,7 +5,7 @@
 require 'aws-sdk-iam'
 require 'date'
 require 'iniparse'
-require 'optparse'
+require_relative 'lib/cli_main'
 
 def cleanup_secondary_keys(iam, primary_key_id, metadata_list)
   metadata_list.each do |key_metadata|
@@ -184,13 +184,7 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback)
 end
 
 def parse_cycle_keys_options(argv = ARGV)
-  options = {}
-
-  OptionParser.new do |opts|
-    opts.banner = 'Usage: cycle-keys.rb options'
-    opts.separator('')
-    opts.separator('options')
-
+  CliMain.parse_options!(banner: 'Usage: cycle-keys.rb options', mandatory: %i[profile username], argv: argv) do |opts|
     opts.on('--profile profile', String)
     opts.on('--username username', String)
     opts.on('--force')
@@ -198,13 +192,7 @@ def parse_cycle_keys_options(argv = ARGV)
       puts(opts)
       exit(1)
     end
-  end.parse!(argv, into: options)
-
-  mandatory = %i[profile username]
-  missing = mandatory.select { |param| options[param].nil? }
-  raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
-
-  options
+  end
 end
 
 def run_cycle_keys(options)
@@ -227,12 +215,8 @@ end
 
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
-  begin
+  CliMain.run! do
     run_cycle_keys(parse_cycle_keys_options)
-  rescue StandardError => e
-    warn(e)
-    warn(e.backtrace)
-    exit(1)
   end
 end
 # :nocov:

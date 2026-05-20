@@ -12,6 +12,7 @@ require_relative '../brew-resources'
 require_relative '../cycle-keys'
 require_relative '../deploy'
 require_relative '../encrypt-logs'
+require_relative '../lib/cli_main'
 
 RSpec.configure do |config|
   config.example_status_persistence_file_path = '.rspec_status'
