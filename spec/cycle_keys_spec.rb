@@ -103,6 +103,39 @@ RSpec.describe(CycleKeys) do
       expect(cred_hash['aws_access_key_id']).to(eq('AKIANEWKEY123'))
       expect(cred_hash['aws_secret_access_key']).to(eq('secret123'))
     end
+
+    context 'when credentials.save raises' do
+      before do
+        allow(credentials).to(receive(:save).and_raise(Errno::EACCES.new('permission denied')))
+        allow(iam).to(receive(:delete_access_key).and_call_original)
+      end
+
+      it 're-raises the disk error after cleanup' do
+        expect { create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials') }
+          .to(raise_error(Errno::EACCES))
+      end
+
+      it 'deletes the orphaned AWS key' do
+        begin
+          create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')
+        rescue Errno::EACCES
+          # expected; we want to inspect side effects after the raise
+        end
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIANEWKEY123', user_name: user_name)))
+      end
+    end
+
+    context 'when credentials.save raises and cleanup also fails' do
+      before do
+        allow(credentials).to(receive(:save).and_raise(Errno::EACCES.new('permission denied')))
+        allow(iam).to(receive(:delete_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'cleanup failed')))
+      end
+
+      it 'still re-raises the original disk error' do
+        expect { create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials') }
+          .to(raise_error(Errno::EACCES))
+      end
+    end
   end
 
   describe '#rollback_key_change' do

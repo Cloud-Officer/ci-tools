@@ -58,8 +58,10 @@ def process_log_group(logs, log_group, keys, retention_in_days)
       keys[:beta]
     elsif log_group[:log_group_name].include?('rc')
       keys[:rc]
-    else
+    elsif log_group[:log_group_name].include?('prod')
       keys[:prod]
+    else
+      raise("Cannot infer KMS environment from log group '#{log_group[:log_group_name]}'; expected name to contain 'beta', 'rc', or 'prod'")
     end
 
   puts("Encrypting #{log_group[:log_group_name]} with key = #{key}...")

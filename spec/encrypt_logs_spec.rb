@@ -115,12 +115,21 @@ RSpec.describe(EncryptLogs) do
       end
     end
 
-    context 'with unencrypted non-beta non-rc log group' do
-      let(:log_group) { { log_group_name: '/aws/production/api', retention_in_days: 30, kms_key_id: nil } }
+    context 'with unencrypted prod log group' do
+      let(:log_group) { { log_group_name: '/aws/prod/api', retention_in_days: 30, kms_key_id: nil } }
 
       it 'encrypts with prod key' do
         process_log_group(logs, log_group, keys, retention_in_days)
         expect(logs).to(have_received(:associate_kms_key).with(hash_including(kms_key_id: 'arn:prod-key')))
+      end
+    end
+
+    context 'with log group name that matches no known environment' do
+      let(:log_group) { { log_group_name: '/aws/staging/api', retention_in_days: 30, kms_key_id: nil } }
+
+      it 'raises rather than silently falling back to the prod KMS key' do
+        expect { process_log_group(logs, log_group, keys, retention_in_days) }
+          .to(raise_error(RuntimeError, /Cannot infer KMS environment/))
       end
     end
 

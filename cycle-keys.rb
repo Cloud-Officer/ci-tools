@@ -42,11 +42,23 @@ def create_and_save_new_key(iam, credentials, profile, user_name, credentials_fi
   credentials[profile]['aws_access_key_id'] = response.access_key.access_key_id
   credentials[profile]['aws_secret_access_key'] = response.access_key.secret_access_key
 
-  # Use file locking to prevent race conditions when multiple instances run simultaneously
-  File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
-    lock_file.flock(File::LOCK_EX)
-    credentials.save
-    puts("\tNew key saved into: #{credentials_file_name}")
+  begin
+    # Use file locking to prevent race conditions when multiple instances run simultaneously
+    File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
+      lock_file.flock(File::LOCK_EX)
+      credentials.save
+      puts("\tNew key saved into: #{credentials_file_name}")
+    end
+  rescue StandardError => e
+    puts("\tFailed to persist new key to #{credentials_file_name}, deleting #{new_access_key_id} from AWS...")
+    begin
+      iam.delete_access_key({ access_key_id: new_access_key_id, user_name: user_name })
+      puts("\tCleanup succeeded: #{new_access_key_id} was deleted")
+    rescue StandardError => cleanup_error
+      puts("\tWARNING: manual cleanup required — orphaned key #{new_access_key_id} for #{user_name}")
+      pp(cleanup_error)
+    end
+    raise(e)
   end
 
   new_access_key_id
