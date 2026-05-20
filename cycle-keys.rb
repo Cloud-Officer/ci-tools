@@ -78,6 +78,66 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
   end
 end
 
+KEY_AGE_DAYS_THRESHOLD = 80 # AWS rotates at 90; this provides a 10-day buffer for cron schedules.
+
+def build_iam_client(region, access_key, secret_key)
+  Aws::IAM::Client.new(
+    region: region,
+    credentials: Aws::Credentials.new(access_key, secret_key)
+  )
+end
+
+def find_primary_key_user(metadata_list, primary_key_id)
+  metadata = metadata_list.find { |key_metadata| key_metadata.access_key_id == primary_key_id }
+  return [nil, 0] if metadata.nil?
+
+  age_days = Integer(Time.now - metadata.create_date) / (24 * 60 * 60)
+  [metadata.user_name, age_days]
+end
+
+def process_credential_profile(credentials, profile, options)
+  region = credentials[profile]['region'] || 'us-east-1'
+  access_key = credentials[profile]['aws_access_key_id']
+  secret_key = credentials[profile]['aws_secret_access_key']
+  credentials_file_name = "#{Dir.home}/.aws/credentials"
+
+  puts("Processing \"#{profile}\" in #{region}: #{access_key}")
+  iam = build_iam_client(region, access_key, secret_key)
+
+  begin
+    response = iam.list_access_keys
+  rescue StandardError => e
+    puts("\tError listing access keys")
+    pp(e)
+    return :error
+  end
+
+  return :no_keys if response.access_key_metadata.none?
+
+  user_name, age_days = find_primary_key_user(response.access_key_metadata, access_key)
+  cleanup_secondary_keys(iam, access_key, response.access_key_metadata)
+
+  if user_name != options[:username]
+    puts("\tUsername does not match: #{user_name}")
+    return :username_mismatch
+  end
+
+  if age_days < KEY_AGE_DAYS_THRESHOLD && options[:force].nil?
+    puts("\tSkipping, key is only #{age_days} day(s) old")
+    return :too_young
+  end
+
+  new_access_key_id = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
+
+  rollback =
+    lambda do |error_context|
+      rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, access_key, secret_key, error_context)
+    end
+
+  disable_and_delete_old_key(iam, access_key, user_name, rollback)
+  :rotated
+end
+
 def disable_and_delete_old_key(iam, access_key, user_name, rollback)
   puts("\tDisabling old access key")
   begin
@@ -111,101 +171,55 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback)
   end
 end
 
+def parse_cycle_keys_options(argv = ARGV)
+  options = {}
+
+  OptionParser.new do |opts|
+    opts.banner = 'Usage: cycle-keys.rb options'
+    opts.separator('')
+    opts.separator('options')
+
+    opts.on('--profile profile', String)
+    opts.on('--username username', String)
+    opts.on('--force')
+    opts.on('-h', '--help') do
+      puts(opts)
+      exit(1)
+    end
+  end.parse!(argv, into: options)
+
+  mandatory = %i[profile username]
+  missing = mandatory.select { |param| options[param].nil? }
+  raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
+
+  options
+end
+
+def run_cycle_keys(options)
+  credentials_file_name = "#{Dir.home}/.aws/credentials"
+  raise("AWS credentials file not found: #{credentials_file_name}") unless File.exist?(credentials_file_name)
+
+  puts("Reading #{credentials_file_name}")
+  credentials = IniParse.open(credentials_file_name)
+
+  credentials.each do |section|
+    next if section.key != options[:profile]
+
+    result = process_credential_profile(credentials, section.key, options)
+    case result
+    when :error, :username_mismatch then exit(1)
+    when :too_young then exit(0)
+    end
+  end
+end
+
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
   begin
-    options = {}
-
-    OptionParser.new do |opts|
-      opts.banner = 'Usage: cycle-keys.rb options'
-      opts.separator('')
-      opts.separator('options')
-
-      opts.on('--profile profile', String)
-      opts.on('--username username', String)
-      opts.on('--force')
-      opts.on('-h', '--help') do
-        puts(opts)
-        exit(1)
-      end
-    end.parse!(into: options)
-
-    mandatory = %i[profile username]
-    missing = mandatory.select { |param| options[param].nil? }
-
-    raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
-
-    credentials_file_name = "#{Dir.home}/.aws/credentials"
-    raise("AWS credentials file not found: #{credentials_file_name}") unless File.exist?(credentials_file_name)
-
-    puts("Reading #{credentials_file_name}")
-    credentials = IniParse.open(credentials_file_name)
-
-    credentials.each do |section|
-      profile = section.key
-      next if profile != options[:profile]
-
-      region = credentials[profile]['region'] || 'us-east-1'
-      access_key = credentials[profile]['aws_access_key_id']
-      secret_key = credentials[profile]['aws_secret_access_key']
-
-      puts("Processing \"#{profile}\" in #{region}: #{access_key}")
-      iam = Aws::IAM::Client.new(
-        region: region,
-        credentials: Aws::Credentials.new(access_key, secret_key)
-      )
-
-      # list current keys
-
-      user_name = ''
-      age = 0
-      begin
-        response = iam.list_access_keys
-      rescue StandardError => e
-        puts("\tError listing access keys")
-        pp(e)
-        exit(1)
-      end
-
-      next if response.access_key_metadata.none?
-
-      response.access_key_metadata.each do |key_metadata|
-        if key_metadata.access_key_id == access_key
-          age = (Integer(Time.now - key_metadata.create_date) / (24 * 60 * 60))
-          user_name = key_metadata.user_name
-        end
-      end
-
-      cleanup_secondary_keys(iam, access_key, response.access_key_metadata)
-
-      # check username
-
-      if user_name != options[:username]
-        puts("\tUsername does not match: #{user_name}")
-        exit(1)
-      end
-
-      # check date
-
-      if age < 80 and options[:force].nil?
-        puts("\tSkipping, key is only #{age} day(s) old")
-        exit(0)
-      end
-
-      # create new key
-
-      new_access_key_id = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
-
-      rollback =
-        lambda do |error_context|
-          rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, access_key, secret_key, error_context)
-        end
-
-      disable_and_delete_old_key(iam, access_key, user_name, rollback)
-    end
+    run_cycle_keys(parse_cycle_keys_options)
   rescue StandardError => e
-    puts(e)
-    puts(e.backtrace)
+    warn(e)
+    warn(e.backtrace)
     exit(1)
   end
 end

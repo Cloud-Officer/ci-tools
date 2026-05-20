@@ -149,6 +149,84 @@ RSpec.describe(CycleKeys) do
     end
   end
 
+  describe '#find_primary_key_user' do
+    let(:now)      { Time.now }
+    let(:created)  { now - (45 * 24 * 60 * 60)                                                                                                   }
+    let(:other)    { instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: 'AKIAOTHER', user_name: 'other', create_date: created)   }
+    let(:matching) { instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: 'AKIAMATCH', user_name: 'matched', create_date: created) }
+
+    before { stub_const('Time', class_double(Time, now: now).as_stubbed_const) }
+
+    it 'returns [user_name, age_days] for the matching access key' do
+      expect(find_primary_key_user([other, matching], 'AKIAMATCH')).to(eq(['matched', 45]))
+    end
+
+    it 'returns [nil, 0] when no key matches' do
+      expect(find_primary_key_user([], 'AKIAMISSING')).to(eq([nil, 0]))
+    end
+  end
+
+  describe '#parse_cycle_keys_options' do
+    it 'parses required args', :aggregate_failures do
+      options = parse_cycle_keys_options(%w[--profile dev --username alice])
+      expect(options[:profile]).to(eq('dev'))
+      expect(options[:username]).to(eq('alice'))
+    end
+
+    it 'raises when missing args' do
+      expect { parse_cycle_keys_options(%w[--profile dev]) }
+        .to(raise_error(OptionParser::MissingArgument, /username/))
+    end
+  end
+
+  describe '#process_credential_profile' do
+    let(:iam)         { Aws::IAM::Client.new(stub_responses: true) }
+    let(:credentials) { instance_double(IniParse::Document)                                                           }
+    let(:cred_hash)   { %w[region aws_access_key_id aws_secret_access_key].zip(%w[us-east-1 AKIACURRENT secret]).to_h }
+    let(:options)     { { profile: 'dev', username: 'alice' }                                                         }
+
+    before do
+      allow(Aws::IAM::Client).to(receive(:new).and_return(iam))
+      allow(credentials).to(receive(:[]).with('dev').and_return(cred_hash))
+    end
+
+    context 'when list_access_keys raises' do
+      before { iam.stub_responses(:list_access_keys, 'ServiceError') }
+
+      it 'returns :error and does not propagate' do
+        expect(process_credential_profile(credentials, 'dev', options)).to(eq(:error))
+      end
+    end
+
+    context 'when no keys exist' do
+      before { iam.stub_responses(:list_access_keys, { access_key_metadata: [] }) }
+
+      it 'returns :no_keys' do
+        expect(process_credential_profile(credentials, 'dev', options)).to(eq(:no_keys))
+      end
+    end
+
+    context 'when the primary key user does not match' do
+      before do
+        iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'other', create_date: Time.now - (200 * 24 * 60 * 60), status: 'Active' }] })
+      end
+
+      it 'returns :username_mismatch' do
+        expect(process_credential_profile(credentials, 'dev', options)).to(eq(:username_mismatch))
+      end
+    end
+
+    context 'when the key is too young and --force is not set' do
+      before do
+        iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'alice', create_date: Time.now - (10 * 24 * 60 * 60), status: 'Active' }] })
+      end
+
+      it 'returns :too_young' do
+        expect(process_credential_profile(credentials, 'dev', options)).to(eq(:too_young))
+      end
+    end
+  end
+
   describe '#disable_and_delete_old_key' do
     let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
     let(:access_key) { 'AKIAOLDKEY123'       }
