@@ -49,16 +49,17 @@ if __FILE__ == $PROGRAM_NAME
     lock_file = Bundler::LockfileParser.new(Bundler.read_file('Gemfile.lock'))
 
     lock_file.specs.each do |spec|
-      response = HTTParty.get("https://rubygems.org/gems/#{spec.full_name}.gem")
+      url = "https://rubygems.org/gems/#{spec.full_name}.gem"
+      response = HTTParty.get(url)
 
-      raise(response.message) unless response.code == 200
+      raise("rubygems.org returned HTTP #{response.code} for #{url}: #{response.message} — #{response.body.to_s[0, 200]}") unless response.code == 200
 
       sha256 = Digest::SHA256.hexdigest(response.body)
       format_resource(spec, sha256).each { |line| puts(line) }
     end
   rescue StandardError => e
-    puts(e)
-    puts(e.backtrace)
+    warn(e)
+    warn(e.backtrace)
     exit(1)
   end
 end
