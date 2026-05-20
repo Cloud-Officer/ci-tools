@@ -212,8 +212,65 @@ RSpec.describe(CycleKeys) do
     end
   end
 
+  describe '#run_cycle_keys' do
+    let(:credentials_path) { "#{Dir.home}/.aws/credentials" }
+    let(:credentials)      { instance_double(IniParse::Document)                   }
+    let(:section)          { instance_double(IniParse::Lines::Section, key: 'dev') }
+
+    before do
+      allow(File).to(receive(:exist?).with(credentials_path).and_return(true))
+      allow(IniParse).to(receive(:open).with(credentials_path).and_return(credentials))
+      allow(credentials).to(receive(:each).and_yield(section))
+    end
+
+    context 'when no profile in credentials matches the --profile arg' do
+      let(:section) { instance_double(IniParse::Lines::Section, key: 'production') }
+
+      it 'returns without raising or exiting' do
+        expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
+          .not_to(raise_error)
+      end
+    end
+
+    context 'when the credentials file is missing' do
+      before { allow(File).to(receive(:exist?).with(credentials_path).and_return(false)) }
+
+      it 'raises a clear error' do
+        expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
+          .to(raise_error(RuntimeError, /AWS credentials file not found/))
+      end
+    end
+
+    context 'when process_credential_profile returns :error' do
+      before { allow(self).to(receive(:process_credential_profile).and_return(:error)) }
+
+      it 'exits with status 1', :aggregate_failures do
+        expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end
+    end
+
+    context 'when process_credential_profile returns :username_mismatch' do
+      before { allow(self).to(receive(:process_credential_profile).and_return(:username_mismatch)) }
+
+      it 'exits with status 1', :aggregate_failures do
+        expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end
+    end
+
+    context 'when process_credential_profile returns :too_young' do
+      before { allow(self).to(receive(:process_credential_profile).and_return(:too_young)) }
+
+      it 'exits with status 0 (success — nothing to rotate)', :aggregate_failures do
+        expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+      end
+    end
+  end
+
   describe '#process_credential_profile' do
-    let(:iam)         { Aws::IAM::Client.new(stub_responses: true) }
+    let(:iam)         { Aws::IAM::Client.new(stub_responses: true)                                                    }
     let(:credentials) { instance_double(IniParse::Document)                                                           }
     let(:cred_hash)   { %w[region aws_access_key_id aws_secret_access_key].zip(%w[us-east-1 AKIACURRENT secret]).to_h }
     let(:options)     { { profile: 'dev', username: 'alice' }                                                         }

@@ -5,6 +5,47 @@ module EncryptLogs
 end
 
 RSpec.describe(EncryptLogs) do
+  describe '#parse_encrypt_logs_options' do
+    it 'parses required args', :aggregate_failures do
+      options = parse_encrypt_logs_options(%w[--profile dev --retention_in_days 30])
+      expect(options[:profile]).to(eq('dev'))
+      expect(options[:retention_in_days]).to(eq(30))
+    end
+
+    it 'raises when a mandatory arg is missing' do
+      expect { parse_encrypt_logs_options(%w[--profile dev]) }
+        .to(raise_error(OptionParser::MissingArgument, /retention_in_days/))
+    end
+  end
+
+  describe '#run_encrypt_logs' do
+    let(:kms)  { Aws::KMS::Client.new(stub_responses: true)            }
+    let(:logs) { Aws::CloudWatchLogs::Client.new(stub_responses: true) }
+
+    before do
+      allow(Aws::KMS::Client).to(receive(:new).and_return(kms))
+      allow(Aws::CloudWatchLogs::Client).to(receive(:new).and_return(logs))
+      kms.stub_responses(:list_keys, { keys: [{ key_id: 'key-1' }, { key_id: 'key-2' }, { key_id: 'key-3' }] })
+      kms.stub_responses(
+        :describe_key,
+        [
+          { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:beta', description: 'beta encryption key' } },
+          { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:rc', description: 'rc encryption key' } },
+          { key_metadata: { key_id: 'key-3', arn: 'arn:aws:kms:prod', description: 'prod encryption key' } }
+        ]
+      )
+      logs.stub_responses(:describe_log_groups, { log_groups: [{ log_group_name: '/aws/beta/api', retention_in_days: 7, kms_key_id: nil }] })
+      allow(logs).to(receive(:put_retention_policy).and_call_original)
+      allow(logs).to(receive(:associate_kms_key).and_call_original)
+    end
+
+    it 'sets retention and encrypts the unencrypted log group with the right KMS key', :aggregate_failures do
+      run_encrypt_logs({ profile: 'dev', retention_in_days: 30 })
+      expect(logs).to(have_received(:put_retention_policy).with(hash_including(log_group_name: '/aws/beta/api', retention_in_days: 30)))
+      expect(logs).to(have_received(:associate_kms_key).with(hash_including(log_group_name: '/aws/beta/api', kms_key_id: 'arn:aws:kms:beta')))
+    end
+  end
+
   describe '#build_kms_key_map' do
     let(:kms) { Aws::KMS::Client.new(stub_responses: true) }
 
@@ -70,7 +111,7 @@ RSpec.describe(EncryptLogs) do
   end
 
   describe '#process_log_group' do
-    let(:logs) { Aws::CloudWatchLogs::Client.new(stub_responses: true) }
+    let(:logs)              { Aws::CloudWatchLogs::Client.new(stub_responses: true)            }
     let(:keys)              { { beta: 'arn:beta-key', rc: 'arn:rc-key', prod: 'arn:prod-key' } }
     let(:retention_in_days) { 30                                                               }
 

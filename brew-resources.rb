@@ -52,15 +52,19 @@ def format_resource(spec, sha256)
   lines
 end
 
+def run_brew_resources(lockfile_path = 'Gemfile.lock')
+  lock_file = Bundler::LockfileParser.new(Bundler.read_file(lockfile_path))
+
+  lock_file.specs.each do |spec|
+    sha256 = fetch_gem_sha256(spec)
+    format_resource(spec, sha256).each { |line| puts(line) }
+  end
+end
+
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
   CliMain.run! do
-    lock_file = Bundler::LockfileParser.new(Bundler.read_file('Gemfile.lock'))
-
-    lock_file.specs.each do |spec|
-      sha256 = fetch_gem_sha256(spec)
-      format_resource(spec, sha256).each { |line| puts(line) }
-    end
+    run_brew_resources
   end
 end
 # :nocov:
