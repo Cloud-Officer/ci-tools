@@ -174,13 +174,24 @@ done
 
 sort "${temp_file}" | uniq > "${temp_file}_unique"
 
+FAILED_ISSUES=()
+
 # shellcheck disable=SC2013
 for issue_key in $(cat "${temp_file}_unique"); do
   echo "Updating issue ${issue_key}..."
-  jira issue edit "${issue_key}" --no-input --fix-version "${3}" || true
+  if ! jira issue edit "${issue_key}" --no-input --fix-version "${3}"; then
+    echo "Warning: failed to update ${issue_key}" >&2
+    FAILED_ISSUES+=("${issue_key}")
+  fi
 done
 
 rm -f "${temp_file}" "${temp_file}_unique"
+
+if [ ${#FAILED_ISSUES[@]} -gt 0 ]; then
+  echo "" >&2
+  echo "Error: ${#FAILED_ISSUES[@]} issue(s) failed to update: ${FAILED_ISSUES[*]}" >&2
+  exit 1
+fi
 
 echo ""
 echo "Done! Opening release report for review..."
