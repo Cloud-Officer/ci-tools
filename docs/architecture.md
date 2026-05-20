@@ -374,12 +374,11 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 ### Operational Safety
 
-| Control              | Implementation                                | Location                                        |
-|----------------------|-----------------------------------------------|-------------------------------------------------|
-| Capacity Limits      | Respects ASG max_size constraints             | `deploy.rb` in ASG update section               |
-| Health Checks        | Waits for ELB target health before proceeding | `deploy.rb` in `wait_for_healthy_instances`     |
-| Warm-up Periods      | Configurable sleep times for cache warming    | `deploy.rb` in cache warm-up section            |
-| Deprecation Warnings | Clear warnings for deprecated tools           | N/A (no deprecated tools currently)             |
+| Control         | Implementation                                | Location                                    |
+|-----------------|-----------------------------------------------|---------------------------------------------|
+| Capacity Limits | Respects ASG max_size constraints             | `deploy.rb` in ASG update section           |
+| Health Checks   | Waits for ELB target health before proceeding | `deploy.rb` in `wait_for_healthy_instances` |
+| Warm-up Periods | Configurable sleep times for cache warming    | `deploy.rb` in cache warm-up section        |
 
 ### Logging and Monitoring
 

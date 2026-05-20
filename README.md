@@ -43,15 +43,26 @@ This is a collection of tools to run locally or on a CI pipeline. These tools ar
 
 ## Installation
 
-Prerequisites are Ruby >= 4.0 and Bundler.
+Required:
 
-Run `bundle install` to install dependencies, then run the commands.
+* Ruby >= 4.0 and Bundler — for `deploy.rb`, `cycle-keys.rb`, `encrypt-logs.rb`, `brew-resources.rb`
+
+Required by individual scripts:
+
+* [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — `ssm-jump`
+* [jq](https://jqlang.github.io/jq/) — `ssm-jump`
+* [GitHub CLI (`gh`)](https://cli.github.com/) — `sync-jira-release` (the `jira` CLI is auto-installed on first run)
+
+Run `bundle install` to install Ruby dependencies, then run the commands.
 
 ### Verification
 
 ```bash
 ruby --version
 bundle --version
+aws --version
+jq --version
+gh --version
 ```
 
 You can install via [Homebrew](https://github.com/Cloud-Officer/homebrew-ci).
