@@ -1,8 +1,5 @@
 #!/usr/bin/env ruby
 #
-# to install just run
-#     gem install aws-sdk
-#
 # https://docs.aws.amazon.com/sdk-for-ruby
 
 # frozen_string_literal: true
@@ -11,6 +8,12 @@ require 'aws-sdk-cloudwatchlogs'
 require 'aws-sdk-core'
 require 'aws-sdk-kms'
 require 'optparse'
+
+KMS_ENVIRONMENTS = %i[beta rc prod].freeze
+
+def infer_environment(string)
+  KMS_ENVIRONMENTS.find { |env| string.include?(env.to_s) }
+end
 
 def build_kms_key_map(kms)
   keys = {}
@@ -22,18 +25,12 @@ def build_kms_key_map(kms)
           key_id: key.key_id
         }
       )
-
-      if key_metadata[:key_metadata][:description].start_with?('beta')
-        keys[:beta] = key_metadata[:key_metadata][:arn]
-      elsif key_metadata[:key_metadata][:description].start_with?('rc')
-        keys[:rc] = key_metadata[:key_metadata][:arn]
-      elsif key_metadata[:key_metadata][:description].start_with?('prod')
-        keys[:prod] = key_metadata[:key_metadata][:arn]
-      end
+      env = KMS_ENVIRONMENTS.find { |candidate| key_metadata[:key_metadata][:description].start_with?(candidate.to_s) }
+      keys[env] = key_metadata[:key_metadata][:arn] if env
     end
   end
 
-  %i[beta rc prod].each do |env|
+  KMS_ENVIRONMENTS.each do |env|
     raise("KMS key not found for environment '#{env}'") if keys[env].nil?
   end
 
@@ -53,17 +50,10 @@ def process_log_group(logs, log_group, keys, retention_in_days)
 
   return if log_group[:kms_key_id]
 
-  key =
-    if log_group[:log_group_name].include?('beta')
-      keys[:beta]
-    elsif log_group[:log_group_name].include?('rc')
-      keys[:rc]
-    elsif log_group[:log_group_name].include?('prod')
-      keys[:prod]
-    else
-      raise("Cannot infer KMS environment from log group '#{log_group[:log_group_name]}'; expected name to contain 'beta', 'rc', or 'prod'")
-    end
+  env = infer_environment(log_group[:log_group_name])
+  raise("Cannot infer KMS environment from log group '#{log_group[:log_group_name]}'; expected name to contain one of #{KMS_ENVIRONMENTS.join(', ')}") if env.nil?
 
+  key = keys[env]
   puts("Encrypting #{log_group[:log_group_name]} with key = #{key}...")
   logs.associate_kms_key(
     {
@@ -113,8 +103,8 @@ if __FILE__ == $PROGRAM_NAME
       end
     end
   rescue StandardError => e
-    puts(e)
-    puts(e.backtrace)
+    warn(e)
+    warn(e.backtrace)
     exit(1)
   end
 end
