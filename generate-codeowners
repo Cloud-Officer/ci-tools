@@ -6,12 +6,12 @@ IGNORED_EXCLUDES="${GHB_IGNORED_EXCLUDES:-$(github-build --get_ignored_folders |
 
 function check_file()
 {
-  if [ -z "${1}" ]; then
+  if [ -z "${1:-}" ]; then
     echo "ERROR: extension cannot be empty!"
     return 1
   fi
 
-  if [ -z "${2}" ]; then
+  if [ -z "${2:-}" ]; then
     echo "ERROR: default owners cannot be empty!"
     exit 1
   fi
@@ -22,12 +22,12 @@ function check_file()
   fi
 }
 
-if [ -z "${1}" ]; then
+if [ -z "${1:-}" ]; then
   echo "ERROR: build files owners cannot be empty!"
   exit 1
 fi
 
-if [ -z "${2}" ]; then
+if [ -z "${2:-}" ]; then
   echo "ERROR: default owners cannot be empty!"
   exit 1
 fi
