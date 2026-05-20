@@ -63,45 +63,50 @@ def process_log_group(logs, log_group, keys, retention_in_days)
   )
 end
 
+def parse_encrypt_logs_options(argv = ARGV)
+  options = {}
+
+  OptionParser.new do |opts|
+    opts.banner = 'Usage: encrypt_logs.rb options'
+    opts.separator('')
+    opts.separator('options')
+
+    opts.on('--profile profile', String)
+    opts.on('--retention_in_days retention_in_days', Integer)
+    opts.on('-h', '--help') do
+      puts(opts)
+      exit(1)
+    end
+  end.parse!(argv, into: options)
+
+  mandatory = %i[profile retention_in_days]
+  missing = mandatory.select { |param| options[param].nil? }
+  raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
+
+  options
+end
+
+def run_encrypt_logs(options)
+  if options[:profile]
+    puts('Setting profile...')
+    Aws.config.update({ profile: options[:profile] })
+  end
+
+  kms = Aws::KMS::Client.new
+  keys = build_kms_key_map(kms)
+  logs = Aws::CloudWatchLogs::Client.new
+
+  logs.describe_log_groups.each_page do |page|
+    page.log_groups.each do |log_group|
+      process_log_group(logs, log_group, keys, options[:retention_in_days])
+    end
+  end
+end
+
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
   begin
-    # parse command line options
-
-    options = {}
-
-    OptionParser.new do |opts|
-      opts.banner = 'Usage: encrypt_logs.rb options'
-      opts.separator('')
-      opts.separator('options')
-
-      opts.on('--profile profile', String)
-      opts.on('--retention_in_days retention_in_days', Integer)
-      opts.on('-h', '--help') do
-        puts(opts)
-        exit(1)
-      end
-    end.parse!(into: options)
-
-    mandatory = %i[profile retention_in_days]
-    missing = mandatory.select { |param| options[param].nil? }
-    raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
-
-    if options[:profile]
-      puts('Setting profile...')
-      Aws.config.update({ profile: options[:profile] })
-    end
-
-    kms = Aws::KMS::Client.new
-    keys = build_kms_key_map(kms)
-
-    logs = Aws::CloudWatchLogs::Client.new
-
-    logs.describe_log_groups.each_page do |page|
-      page.log_groups.each do |log_group|
-        process_log_group(logs, log_group, keys, options[:retention_in_days])
-      end
-    end
+    run_encrypt_logs(parse_encrypt_logs_options)
   rescue StandardError => e
     warn(e)
     warn(e.backtrace)

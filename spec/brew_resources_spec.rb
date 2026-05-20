@@ -5,6 +5,37 @@ module BrewResources
 end
 
 RSpec.describe(BrewResources) do
+  describe '#run_brew_resources' do
+    let(:lockfile_path) { 'spec/fixtures/Gemfile.lock' }
+
+    before do
+      FileUtils.mkdir_p('spec/fixtures')
+      File.write(lockfile_path, <<~LOCK)
+        GEM
+          remote: https://rubygems.org/
+          specs:
+            example (1.2.3)
+
+        PLATFORMS
+          ruby
+
+        DEPENDENCIES
+          example
+
+        BUNDLED WITH
+           2.5.0
+      LOCK
+      allow(self).to(receive(:fetch_gem_sha256).and_return('deadbeef' * 8))
+    end
+
+    after { FileUtils.rm_rf('spec/fixtures') }
+
+    it 'parses the lockfile and prints a Homebrew resource block for each spec' do
+      expect { run_brew_resources(lockfile_path) }
+        .to(output(/resource 'example' do/).to_stdout)
+    end
+  end
+
   describe '#format_resource' do
     context 'with ruby platform' do
       let(:spec)   { instance_double(Gem::Specification, name: 'nokogiri', full_name: 'nokogiri-1.15.2', platform: 'ruby') }

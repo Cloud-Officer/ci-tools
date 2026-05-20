@@ -43,20 +43,27 @@ def format_resource(spec, sha256)
   lines
 end
 
+def fetch_gem_sha256(spec)
+  url = "https://rubygems.org/gems/#{spec.full_name}.gem"
+  response = HTTParty.get(url)
+  raise("rubygems.org returned HTTP #{response.code} for #{url}: #{response.message} — #{response.body.to_s[0, 200]}") unless response.code == 200
+
+  Digest::SHA256.hexdigest(response.body)
+end
+
+def run_brew_resources(lockfile_path = 'Gemfile.lock')
+  lock_file = Bundler::LockfileParser.new(Bundler.read_file(lockfile_path))
+
+  lock_file.specs.each do |spec|
+    sha256 = fetch_gem_sha256(spec)
+    format_resource(spec, sha256).each { |line| puts(line) }
+  end
+end
+
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
   begin
-    lock_file = Bundler::LockfileParser.new(Bundler.read_file('Gemfile.lock'))
-
-    lock_file.specs.each do |spec|
-      url = "https://rubygems.org/gems/#{spec.full_name}.gem"
-      response = HTTParty.get(url)
-
-      raise("rubygems.org returned HTTP #{response.code} for #{url}: #{response.message} — #{response.body.to_s[0, 200]}") unless response.code == 200
-
-      sha256 = Digest::SHA256.hexdigest(response.body)
-      format_resource(spec, sha256).each { |line| puts(line) }
-    end
+    run_brew_resources
   rescue StandardError => e
     warn(e)
     warn(e.backtrace)
