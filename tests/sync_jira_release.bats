@@ -96,3 +96,68 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"Required environment variables"* ]]
 }
+
+@test "exits with error when checksum verification fails on jira CLI download" {
+  # Force the auto-install path: pretend jira is not installed.
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "jira" ]; then return 1; fi
+    builtin command "$@"
+  }
+  export -f command
+
+  # Stub curl: first call returns a release-list JSON, second writes a junk
+  # archive, third writes a checksum file pointing at a known-wrong sha256.
+  CURL_CALL_FILE=$(mktemp)
+  export CURL_CALL_FILE
+  echo 0 > "${CURL_CALL_FILE}"
+
+  function curl() {
+    local call_number
+    call_number=$(cat "${CURL_CALL_FILE}")
+    call_number=$((call_number + 1))
+    echo "${call_number}" > "${CURL_CALL_FILE}"
+
+    # Find the -o argument (output file) if present
+    local out_file=""
+    while [ "$#" -gt 0 ]; do
+      if [ "${1}" = "-o" ]; then
+        out_file="${2}"
+        shift 2
+        continue
+      fi
+      shift
+    done
+
+    case "${call_number}" in
+      1)
+        # Release-list JSON (sed -E '...' will extract v1.5.0)
+        echo '"tag_name": "v1.5.0"'
+        ;;
+      2)
+        # The archive — junk bytes; its real sha256 will not match what we
+        # publish in the checksum file below.
+        printf 'tampered bytes' > "${out_file}"
+        ;;
+      3)
+        # Checksum file claiming a sha256 that does NOT match `printf 'tampered bytes'`.
+        printf '0000000000000000000000000000000000000000000000000000000000000000  jira_1.5.0_linux_x86_64.tar.gz\n' > "${out_file}"
+        ;;
+    esac
+  }
+  export -f curl
+
+  # Architecture/OS detection: force a supported pair so we reach the checksum step.
+  function uname() {
+    if [ "${1}" = "-s" ]; then echo "Linux"
+    elif [ "${1}" = "-m" ]; then echo "x86_64"
+    else builtin uname "$@"
+    fi
+  }
+  export -f uname
+
+  run sync-jira-release tag1 tag2 release1
+  rm -f "${CURL_CALL_FILE}"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Checksum verification failed"* ]]
+}
