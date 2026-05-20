@@ -582,6 +582,71 @@ RSpec.describe(Deploy) do
     end
   end
 
+  describe '#update_stack_with_ssm_rollback' do
+    let(:cfn)          { Aws::CloudFormation::Client.new(stub_responses: true) }
+    let(:ssm)          { Aws::SSM::Client.new(stub_responses: true)            }
+    let(:param_name)   { '/beta/1/APIImageId'                                  }
+    let(:ssm_snapshot) { { param_name => 'ami-old' }                           }
+
+    before do
+      allow(Aws::SSM::Client).to(receive(:new).and_return(ssm))
+      allow(ssm).to(receive(:put_parameter).and_call_original)
+    end
+
+    context 'when CloudFormation update succeeds' do
+      before do
+        allow(cfn).to(receive(:update_stack).and_call_original)
+        allow(self).to(receive(:sleep))
+        cfn.stub_responses(:describe_stacks, { stacks: [{ stack_name: 'test-stack', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] })
+      end
+
+      it 'does not restore SSM parameters' do
+        update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot)
+        expect(ssm).not_to(have_received(:put_parameter))
+      end
+    end
+
+    context 'when CloudFormation update fails with a generic error' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(StandardError.new('boom'))) }
+
+      it 'restores SSM parameters and re-raises', :aggregate_failures do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(StandardError, 'boom'))
+        expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+    end
+
+    context 'when CloudFormation returns "No updates are to be performed" (SystemExit 0)' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'No updates are to be performed'))) }
+
+      it 'does NOT restore SSM parameters (success path)', :aggregate_failures do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+        expect(ssm).not_to(have_received(:put_parameter))
+      end
+    end
+
+    context 'when CloudFormation returns a genuine ValidationError (SystemExit 1)' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'Template validation failed'))) }
+
+      it 'restores SSM parameters and re-raises SystemExit(1)', :aggregate_failures do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+        expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+    end
+
+    context 'with empty snapshot' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(StandardError.new('boom'))) }
+
+      it 'still re-raises but does not call put_parameter', :aggregate_failures do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', {}) }
+          .to(raise_error(StandardError, 'boom'))
+        expect(ssm).not_to(have_received(:put_parameter))
+      end
+    end
+  end
+
   describe '#capture_ssm_snapshot' do
     let(:ssm)        { Aws::SSM::Client.new(stub_responses: true)        }
     let(:asg)        { { min_size: 1, max_size: 4, desired_capacity: 2 } }

@@ -105,6 +105,50 @@ RSpec.describe(CycleKeys) do
     end
   end
 
+  describe '#rollback_key_change' do
+    let(:iam)         { Aws::IAM::Client.new(stub_responses: true) }
+    let(:credentials) { instance_double(IniParse::Document)        }
+    let(:cred_hash)   { {}                                         }
+    let(:lock_file)   { instance_double(File)                      }
+
+    def call_rollback
+      rollback_key_change(iam, credentials, 'test-profile', 'testuser', '/tmp/test-credentials', 'AKIANEWKEY123', 'AKIAOLDKEY123', 'oldsecret123', 'failed to disable old key')
+    end
+
+    before do
+      allow(iam).to(receive(:delete_access_key).and_call_original)
+      allow(credentials).to(receive(:[]).with('test-profile').and_return(cred_hash))
+      allow(credentials).to(receive(:save))
+      allow(File).to(receive(:open).with('/tmp/test-credentials.lock', anything, anything).and_yield(lock_file))
+      allow(lock_file).to(receive(:flock))
+    end
+
+    it 'deletes the new key and saves restored credentials under lock', :aggregate_failures do
+      call_rollback
+      expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIANEWKEY123', user_name: 'testuser')))
+      expect(lock_file).to(have_received(:flock).with(File::LOCK_EX))
+      expect(credentials).to(have_received(:save))
+    end
+
+    it 'restores the original access-key fields in the credentials hash', :aggregate_failures do
+      call_rollback
+      expect(cred_hash['aws_access_key_id']).to(eq('AKIAOLDKEY123'))
+      expect(cred_hash['aws_secret_access_key']).to(eq('oldsecret123'))
+    end
+
+    it 'swallows errors from delete_access_key without raising' do
+      allow(iam).to(receive(:delete_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'API error')))
+      expect { call_rollback }
+        .not_to(raise_error)
+    end
+
+    it 'swallows errors from credentials.save without raising' do
+      allow(credentials).to(receive(:save).and_raise(Errno::EACCES.new('permission denied')))
+      expect { call_rollback }
+        .not_to(raise_error)
+    end
+  end
+
   describe '#disable_and_delete_old_key' do
     let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
     let(:access_key) { 'AKIAOLDKEY123'       }

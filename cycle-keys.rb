@@ -52,6 +52,32 @@ def create_and_save_new_key(iam, credentials, profile, user_name, credentials_fi
   new_access_key_id
 end
 
+def rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, original_access_key, original_secret_key, error_context)
+  puts("\tRolling back due to: #{error_context}")
+  begin
+    puts("\tDeleting newly created key #{new_access_key_id}...")
+    iam.delete_access_key(
+      {
+        access_key_id: new_access_key_id,
+        user_name: user_name
+      }
+    )
+    puts("\tRollback: deleted new key")
+
+    credentials[profile]['aws_access_key_id'] = original_access_key
+    credentials[profile]['aws_secret_access_key'] = original_secret_key
+    File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
+      lock_file.flock(File::LOCK_EX)
+      credentials.save
+      puts("\tRollback: restored original credentials")
+    end
+  rescue StandardError => e
+    puts("\tWARNING: Rollback failed - manual cleanup required!")
+    puts("\tNew key #{new_access_key_id} may still be active")
+    pp(e)
+  end
+end
+
 def disable_and_delete_old_key(iam, access_key, user_name, rollback)
   puts("\tDisabling old access key")
   begin
@@ -170,33 +196,9 @@ if __FILE__ == $PROGRAM_NAME
 
       new_access_key_id = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
 
-      # Helper to rollback: delete new key and restore old credentials
       rollback =
         lambda do |error_context|
-          puts("\tRolling back due to: #{error_context}")
-          begin
-            puts("\tDeleting newly created key #{new_access_key_id}...")
-            iam.delete_access_key(
-              {
-                access_key_id: new_access_key_id,
-                user_name: user_name
-              }
-            )
-            puts("\tRollback: deleted new key")
-
-            # Restore original credentials
-            credentials[profile]['aws_access_key_id'] = access_key
-            credentials[profile]['aws_secret_access_key'] = secret_key
-            File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
-              lock_file.flock(File::LOCK_EX)
-              credentials.save
-              puts("\tRollback: restored original credentials")
-            end
-          rescue StandardError => e
-            puts("\tWARNING: Rollback failed - manual cleanup required!")
-            puts("\tNew key #{new_access_key_id} may still be active")
-            pp(e)
-          end
+          rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, access_key, secret_key, error_context)
         end
 
       disable_and_delete_old_key(iam, access_key, user_name, rollback)
