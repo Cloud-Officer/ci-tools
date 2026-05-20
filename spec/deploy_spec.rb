@@ -412,14 +412,28 @@ RSpec.describe(Deploy) do
       end
     end
 
-    context 'when parameter is in ignored list' do
-      it 'marks ignored parameters with use_previous_value', :aggregate_failures do
+    context 'when parameter is a known CFN secret' do
+      it 'does not call put_parameter on the secret' do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword')
-        allow(parameter).to(receive(:parameter_value=))
-        allow(parameter).to(receive(:use_previous_value=))
         update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, '/beta/1')
-        expect(parameter).to(have_received(:parameter_value=).with(nil))
+        expect(ssm).not_to(have_received(:put_parameter))
       end
+    end
+  end
+
+  describe '#mark_cfn_secrets_for_previous_value!' do
+    let(:secret)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword') }
+    let(:non_secret) { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId') }
+
+    before do
+      allow(secret).to(receive(:parameter_value=))
+      allow(secret).to(receive(:use_previous_value=))
+      mark_cfn_secrets_for_previous_value!([secret, non_secret])
+    end
+
+    it 'marks each known secret for previous-value reuse', :aggregate_failures do
+      expect(secret).to(have_received(:parameter_value=).with(nil))
+      expect(secret).to(have_received(:use_previous_value=).with(true))
     end
   end
 
@@ -578,6 +592,246 @@ RSpec.describe(Deploy) do
       it 'exits with code 1', :aggregate_failures do
         expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end
+    end
+  end
+
+  describe '#resolve_capacity_factors' do
+    it 'returns asg_increase=1, asg_multiplier=2 for beta', :aggregate_failures do
+      result = resolve_capacity_factors({ environment: 'beta' })
+      expect(result[:asg_increase]).to(eq(1))
+      expect(result[:asg_multiplier]).to(eq(2))
+    end
+
+    it 'returns asg_increase=3 for prod environments' do
+      expect(resolve_capacity_factors({ environment: 'prod1' })[:asg_increase]).to(eq(3))
+    end
+
+    it 'overrides to asg_increase=0, asg_multiplier=1 when preserve_desired_capacity', :aggregate_failures do
+      result = resolve_capacity_factors({ environment: 'prod1', preserve_desired_capacity: true })
+      expect(result[:asg_increase]).to(eq(0))
+      expect(result[:asg_multiplier]).to(eq(1))
+    end
+  end
+
+  describe '#compute_asg_capacity_plan' do
+    it 'computes new_capacity = (desired * multiplier) + increase' do
+      asg = { desired_capacity: 4, max_size: 10 }
+      expect(compute_asg_capacity_plan(asg, asg_increase: 1, asg_multiplier: 2)[:new_capacity]).to(eq(9))
+    end
+
+    it 'returns new_max=nil when max_size already exceeds new_capacity' do
+      asg = { desired_capacity: 2, max_size: 20 }
+      expect(compute_asg_capacity_plan(asg, asg_increase: 1, asg_multiplier: 2)[:new_max]).to(be_nil)
+    end
+
+    it 'returns scaled new_max when current max_size is below new_capacity' do
+      asg = { desired_capacity: 4, max_size: 4 }
+      expect(compute_asg_capacity_plan(asg, asg_increase: 1, asg_multiplier: 2)[:new_max]).to(eq(9))
+    end
+  end
+
+  describe '#resolve_ami_id' do
+    context 'when --ami is supplied' do
+      before { allow(Aws::EC2::Resource).to(receive(:new)) }
+
+      it 'returns it directly' do
+        expect(resolve_ami_id({ ami: 'ami-supplied' })).to(eq('ami-supplied'))
+      end
+
+      it 'does not call Aws::EC2::Resource.new' do
+        resolve_ami_id({ ami: 'ami-supplied' })
+        expect(Aws::EC2::Resource).not_to(have_received(:new))
+      end
+    end
+
+    context 'when --ami is not supplied' do
+      let(:ec2) { Aws::EC2::Resource.new(stub_responses: true) }
+
+      before do
+        allow(Aws::EC2::Resource).to(receive(:new).and_return(ec2))
+        ec2.client.stub_responses(:describe_instances, build_instance_response('i-abc', 'api-beta1-standalone'))
+        ec2.client.stub_responses(:create_image, { image_id: 'ami-new' })
+        allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_return(instance_double(Aws::EC2::Waiters::ImageAvailable, wait: nil)))
+      end
+
+      it 'discovers standalone and creates an AMI' do
+        expect(resolve_ami_id({ instance: 'api', environment: 'beta1' })).to(eq('ami-new'))
+      end
+    end
+  end
+
+  describe '#discover_cfn_stack_context' do
+    let(:cfn) { Aws::CloudFormation::Client.new(stub_responses: true) }
+
+    before do
+      cfn.stub_responses(:list_stacks, { stack_summaries: [{ stack_name: 'beta1-StackInstances-x', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] })
+      cfn.stub_responses(:describe_stacks, { stacks: [{ stack_name: 'beta1-StackInstances-x', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now, parameters: [{ parameter_key: 'APIImageId', parameter_value: 'ami-old' }] }] })
+    end
+
+    it 'returns environment, subnet, prefix and ssm_prefix derived from the stack name' do
+      ctx = discover_cfn_stack_context(cfn, { instance: 'api', environment: 'beta1' })
+      expect(ctx).to(include(environment: 'beta', subnet: 1, prefix: 'API', ssm_prefix: '/beta/1'))
+    end
+
+    it 'returns the stack parameters' do
+      ctx = discover_cfn_stack_context(cfn, { instance: 'api', environment: 'beta1' })
+      expect(ctx[:parameters].first.parameter_key).to(eq('APIImageId'))
+    end
+
+    it 'raises when no stack is found' do
+      cfn.stub_responses(:describe_stacks, { stacks: [] })
+      expect { discover_cfn_stack_context(cfn, { instance: 'api', environment: 'beta1' }) }
+        .to(raise_error(RuntimeError, /Unable to describe stack/))
+    end
+  end
+
+  describe '#discover_load_balancer' do
+    let(:elb) { Aws::ElasticLoadBalancingV2::Client.new(stub_responses: true) }
+
+    context 'when instance is load-balanced' do
+      before do
+        allow(Aws::ElasticLoadBalancingV2::Client).to(receive(:new).and_return(elb))
+        elb.stub_responses(:describe_target_groups, { target_groups: [{ target_group_arn: 'arn:beta1-80', target_group_name: 'beta1-80' }] })
+      end
+
+      it 'returns the ELB client and the target group arn', :aggregate_failures do
+        client, arn = discover_load_balancer({ instance: 'api', environment: 'beta1' })
+        expect(client).to(be(elb))
+        expect(arn).to(eq('arn:beta1-80'))
+      end
+    end
+
+    context 'when instance is not load-balanced' do
+      before { allow(Aws::ElasticLoadBalancingV2::Client).to(receive(:new)) }
+
+      it 'returns [nil, nil]' do
+        expect(discover_load_balancer({ instance: 'worker' })).to(eq([nil, nil]))
+      end
+
+      it 'does not instantiate an ELB client' do
+        discover_load_balancer({ instance: 'worker' })
+        expect(Aws::ElasticLoadBalancingV2::Client).not_to(have_received(:new))
+      end
+    end
+  end
+
+  describe '#parse_deploy_options' do
+    it 'parses mandatory and optional arguments', :aggregate_failures do
+      options = parse_deploy_options(%w[--environment beta1 --instance api --profile dev --ami ami-abc])
+      expect(options[:environment]).to(eq('beta1'))
+      expect(options[:instance]).to(eq('api'))
+      expect(options[:profile]).to(eq('dev'))
+      expect(options[:ami]).to(eq('ami-abc'))
+    end
+
+    it 'raises when a mandatory argument is missing' do
+      expect { parse_deploy_options(%w[--environment beta1 --instance api]) }
+        .to(raise_error(OptionParser::MissingArgument, /profile/))
+    end
+  end
+
+  describe '#warm_up_after_scale_up' do
+    let(:elb) { Aws::ElasticLoadBalancingV2::Client.new(stub_responses: true) }
+
+    before { allow(self).to(receive(:sleep)) }
+
+    context 'with grpc instance' do
+      before { elb.stub_responses(:describe_target_health, { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'healthy' } }] }) }
+
+      it 'sleeps WARMUP_SHORT then waits for healthy then sleeps WARMUP_LONG', :aggregate_failures do
+        warm_up_after_scale_up(elb, 'arn:tg', { instance: 'grpc' })
+        expect(self).to(have_received(:sleep).with(WARMUP_SHORT))
+        expect(self).to(have_received(:sleep).with(WARMUP_LONG))
+      end
+    end
+
+    context 'with worker instance (not load-balanced)' do
+      it 'skips ELB checks and sleeps WARMUP_SHORT', :aggregate_failures do
+        warm_up_after_scale_up(nil, nil, { instance: 'worker' })
+        expect(self).to(have_received(:sleep).with(WARMUP_SHORT))
+      end
+    end
+  end
+
+  describe '#scale_down_after_deploy' do
+    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
+    let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
+    let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
+    let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
+
+    before do
+      allow(self).to(receive(:sleep))
+      allow(asg_client).to(receive(:update_auto_scaling_group).and_call_original)
+    end
+
+    context 'when --skip_scale_down' do
+      it 'sets max_size and skips scale-down wait', :aggregate_failures do
+        scale_down_after_deploy(asg_resources, asg, mixed_params, 6, nil, nil, { instance: 'worker', skip_scale_down: true })
+        expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(max_size: 4)))
+      end
+    end
+
+    context 'with load-balanced instance' do
+      before do
+        asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2')]))
+      end
+
+      it 'restores desired capacity and waits for healthy + count', :aggregate_failures do
+        elb = Aws::ElasticLoadBalancingV2::Client.new(stub_responses: true)
+        elb.stub_responses(:describe_target_health, { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'healthy' } }] })
+        scale_down_after_deploy(asg_resources, asg, mixed_params, 6, elb, 'arn:tg', { instance: 'api' })
+        expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(desired_capacity: 2, max_size: 4)))
+      end
+    end
+  end
+
+  describe '#run_rolling_deploy' do
+    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
+    let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
+    let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
+    let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
+
+    before do
+      allow(self).to(receive(:sleep))
+      allow(asg_client).to(receive(:update_auto_scaling_group).and_call_original)
+      asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2')]))
+    end
+
+    it 'always restores the mixed-instances policy via ensure' do
+      captured_params = []
+      allow(asg_client).to(receive(:update_auto_scaling_group)) { |params| captured_params << params }
+      run_rolling_deploy(asg_resources, asg, mixed_params, 2, nil, nil, { instance: 'worker' })
+      expect(captured_params.last.dig(:mixed_instances_policy, :instances_distribution, :on_demand_percentage_above_base_capacity)).to(eq('50'))
+    end
+
+    it 'still restores policy when scale-up wait raises', :aggregate_failures do
+      stub_const('MAX_POLL_ATTEMPTS', 1)
+      asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg', instances: [build_asg_instance('i-1')]))
+      expect { run_rolling_deploy(asg_resources, asg, mixed_params, 6, nil, nil, { instance: 'worker' }) }
+        .to(raise_error(RuntimeError, /Timed out/))
+      expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(mixed_instances_policy: hash_including(instances_distribution: hash_including(on_demand_percentage_above_base_capacity: '50')))))
+    end
+  end
+
+  describe '#run_deployment' do
+    let(:lambda_client) { Aws::Lambda::Client.new(stub_responses: true)     }
+    let(:cloudfront)    { Aws::CloudFront::Client.new(stub_responses: true) }
+
+    context 'with --lambda_publish_version' do
+      before do
+        allow(Aws::Lambda::Client).to(receive(:new).and_return(lambda_client))
+        allow(Aws::CloudFront::Client).to(receive(:new).and_return(cloudfront))
+        allow(lambda_client).to(receive(:publish_version).and_call_original)
+        lambda_client.stub_responses(:publish_version, { function_arn: 'arn:aws:lambda:us-east-1:123:function:my-function:1' })
+        dist_item = build_distribution_item(default_cache_behavior: { target_origin_id: 'origin1', viewer_protocol_policy: 'redirect-to-https', allowed_methods: { quantity: 2, items: %w[GET HEAD] }, forwarded_values: { query_string: false, cookies: { forward: 'none' } }, min_ttl: 0, lambda_function_associations: { quantity: 0, items: [] } })
+        cloudfront.stub_responses(:list_distributions, build_distribution_list([dist_item]))
+        cloudfront.stub_responses(:get_distribution_config, build_cf_config)
+      end
+
+      it 'runs the lambda branch without touching ASG/CFN' do
+        run_deployment({ environment: 'beta', instance: 'api', profile: 'dev', lambda_publish_version: 'my-function' })
+        expect(lambda_client).to(have_received(:publish_version))
       end
     end
   end

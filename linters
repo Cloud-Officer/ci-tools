@@ -4,6 +4,38 @@ shopt -s globstar
 
 FAILED=0
 
+# Returns 0 (success) on macOS so callers can use `if is_darwin; then brew ... else <other> ; fi`.
+is_darwin() {
+  [ "$(uname -s)" = "Darwin" ]
+}
+
+# Emits "sudo" or "" depending on whether the named command's path is user-writable.
+# Usage: ${SUDO_FOR_NPM} npm install -g foo
+sudo_for_user_command() {
+  if command -v "${1}" | grep "${HOME}" &>/dev/null; then
+    echo ""
+  else
+    echo "sudo"
+  fi
+}
+
+# Common find filter used for files-to-lint discovery. Pass the -name pattern as $1.
+find_lintable() {
+  find . -name "${1}" \
+    -not -path "*/vendor/*" \
+    -not -path "*/node_modules/*" \
+    -not -path "*/Libraries/*" \
+    -not -path "*/Pods/*" \
+    -not -path "*/.build/*" \
+    -not -path "*/Carthage/*" \
+    -not -path "*/DerivedData/*" \
+    -not -path "*/venv/*" \
+    -not -path "*/.venv/*" \
+    -not -path "*/dist/*" \
+    -not -path "*/build/*" \
+    -not -path "*/target/*"
+}
+
 yml_files=(.github/workflows/*.yml)
 yaml_files=(.github/workflows/*.yaml)
 
@@ -11,7 +43,7 @@ if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
   echo "Checking GitHub Actions workflow files..."
 
   if ! command -v actionlint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install actionlint
     else
       go install github.com/rhysd/actionlint/cmd/actionlint@latest
@@ -26,16 +58,10 @@ if [ -f .markdownlint-cli2.yaml ]; then
   echo "Checking Markdown..."
 
   if ! command -v markdownlint-cli2 &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install markdownlint-cli2
     elif command -v npm &>/dev/null; then
-      if command -v npm | grep "${HOME}" &>/dev/null; then
-        SUDO=""
-      else
-        SUDO="sudo"
-      fi
-
-      ${SUDO} npm install -g markdownlint-cli2
+      $(sudo_for_user_command npm) npm install -g markdownlint-cli2
     fi
   fi
 
@@ -46,7 +72,7 @@ if [ -f .yamllint.yml ]; then
   echo "Checking YAML..."
 
   if ! command -v yamllint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install yamllint
     else
       sudo apt-get --yes install --no-install-recommends yamllint
@@ -60,7 +86,7 @@ if [ -f .shellcheckrc ]; then
   echo "Checking shell scripts..."
 
   if ! command -v shellcheck &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install shellcheck
     else
       sudo apt-get --yes install --no-install-recommends shellcheck
@@ -68,14 +94,14 @@ if [ -f .shellcheckrc ]; then
   fi
 
   # shellcheck disable=SC2046
-  shellcheck --external-sources $(find . -name "*.sh" -not -path "*/vendor/*" -not -path "*/node_modules/*" -not -path "*/Libraries/*" -not -path "*/Pods/*" -not -path "*/.build/*" -not -path "*/Carthage/*" -not -path "*/DerivedData/*" -not -path "*/venv/*" -not -path "*/.venv/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/target/*") || FAILED=1
+  shellcheck --external-sources $(find_lintable "*.sh") || FAILED=1
 fi
 
 if [ -f .hadolint.yaml ]; then
   echo "Checking Dockerfiles..."
 
   if ! command -v hadolint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install hadolint
     else
       wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
@@ -100,14 +126,14 @@ if [ -f .hadolint.yaml ]; then
   fi
 
   # shellcheck disable=SC2046
-  hadolint $(find . -name Dockerfile -not -path "*/vendor/*" -not -path "*/node_modules/*" -not -path "*/Libraries/*" -not -path "*/Pods/*" -not -path "*/.build/*" -not -path "*/Carthage/*" -not -path "*/DerivedData/*" -not -path "*/venv/*" -not -path "*/.venv/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/target/*") || FAILED=1
+  hadolint $(find_lintable "Dockerfile") || FAILED=1
 fi
 
 if [ -f .cfnlintrc ]; then
   echo "Checking CloudFormation templates..."
 
   if ! command -v cfn-lint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install cfn-lint
     else
       pip3 install cfn-lint
@@ -121,7 +147,7 @@ if [ -f .golangci.yml ]; then
   echo "Checking Go..."
 
   if ! command -v golangci-lint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install golangci-lint
     else
       go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -161,20 +187,14 @@ if [ -f .eslintrc.json ]; then
   fi
 
   if [ ${INSTALL_ESLINT} -eq 1 ]; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       npm install -g eslint@8
     else
       if ! command -v npm &>/dev/null; then
         sudo apt-get --yes install --no-install-recommends npm
       fi
 
-      if command -v npm | grep "${HOME}" &>/dev/null; then
-        SUDO=""
-      else
-        SUDO="sudo"
-      fi
-
-      ${SUDO} npm install -g eslint@8
+      $(sudo_for_user_command npm) npm install -g eslint@8
     fi
   fi
 
@@ -185,7 +205,7 @@ if [ -f .editorconfig ]; then
   echo "Checking Kotlin with ktlint..."
 
   if ! command -v ktlint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install ktlint
     else
       sudo apt-get --yes install --no-install-recommends ktlint
@@ -199,7 +219,7 @@ if [ -f .bandit ]; then
   echo "Checking Python with bandit..."
 
   if ! command -v bandit &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install bandit
     else
       sudo apt-get --yes install --no-install-recommends python3-bandit
@@ -214,16 +234,12 @@ if [ -f .flake8 ]; then
   echo "Checking Python with flake8..."
 
   if ! command -v flake8 &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install flake8
     else
       sudo apt-get --yes install --no-install-recommends flake8
     fi
   fi
-
-  #if ! pip3 list | grep flake8-docstrings &>/dev/null; then
-  #  pip3 install --upgrade flake8-docstrings
-  #fi
 
   flake8 . || FAILED=1
 fi
@@ -232,7 +248,7 @@ if [ -f .protolint.yaml ]; then
   echo "Checking Protocol Buffer with protolint..."
 
   if ! command -v protolint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew tap yoheimuta/protolint
       brew install protolint
     else
@@ -248,16 +264,10 @@ if [ -f .rubocop.yml ]; then
   echo "Checking Ruby..."
 
   if ! rubocop --version &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
     else
-      if command -v gem | grep "${HOME}" &>/dev/null; then
-        SUDO=""
-      else
-        SUDO="sudo"
-      fi
-
-      ${SUDO} gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
+      $(sudo_for_user_command gem) gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
     fi
   fi
 
@@ -269,7 +279,7 @@ if [ -f .semgrepignore ]; then
   echo "Checking with semgrep..."
 
   if ! command -v semgrep &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install semgrep
     else
       pip3 install semgrep
@@ -283,7 +293,7 @@ if [ -f .trivyignore ]; then
   echo "Checking with trivy..."
 
   if ! command -v trivy &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install trivy
     else
       curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
@@ -325,7 +335,7 @@ if [ -f .swiftlint.yml ]; then
   echo "Checking Swift..."
 
   if ! command -v swiftlint &>/dev/null; then
-    if uname -s | grep Darwin &>/dev/null; then
+    if is_darwin; then
       brew install swiftlint
     else
       echo "Error: only supported on MacOS!"
