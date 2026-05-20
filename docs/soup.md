@@ -2,6 +2,7 @@
 
 | **Language** | **Package** | **Version** | **License** | **Description** | **Website** | **Last Verified** | **Risk Level** | **Requirements** | **Verification Reasoning** |
 | :---: | :--- | :---: | :---: | :--- | :--- | :---: | :---: | :--- | :--- |
+| Ruby | addressable | 2.9.0 | Apache-2.0 | Addressable is an alternative implementation to the URI implementation that is | <https://github.com/sporkmonger/addressable> | 2026-05-20 | Low | Dependency | Dependency |
 | Ruby | ast | 2.4.3 | MIT | A library for working with Abstract Syntax Trees. | <https://whitequark.github.io/ast/> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | aws-eventstream | 1.4.0 | Apache-2.0 | Amazon Web Services event stream library | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | aws-partitions | 1.1250.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
@@ -19,9 +20,11 @@
 | Ruby | aws-sigv4 | 1.12.1 | Apache-2.0 | Amazon Web Services Signature Version 4 signing library | <https://github.com/aws/aws-sdk-ruby> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | base64 | 0.3.0 | Ruby | Support for encoding and decoding binary data using a Base64 representation. | <https://github.com/ruby/base64> | 2025-01-08 | Low | Dependency | Dependency |
 | Ruby | bigdecimal | 4.1.2 | Ruby | This library provides arbitrary-precision decimal floating-point number class. | <https://github.com/ruby/bigdecimal> | 2024-04-30 | Low | Dependency | Dependency |
+| Ruby | crack | 1.0.1 | MIT | Really simple JSON and XML parsing, ripped from Merb and Rails. | <https://github.com/jnunemaker/crack> | 2026-05-20 | Low | Dependency | Dependency |
 | Ruby | csv | 3.3.5 | Ruby | The CSV library provides a complete interface to CSV files and data | <https://github.com/ruby/csv> | 2024-04-29 | Low | Dependency | Dependency |
 | Ruby | diff-lcs | 1.6.2 | MIT | Diff::LCS computes the difference between two Enumerable sequences using the | <https://github.com/halostatue/diff-lcs> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | docile | 1.4.1 | MIT | Docile treats the methods of a given ruby object as a DSL (domain specific language) within a given block | <https://ms-ati.github.io/docile/> | 2026-02-24 | Low | Dependency | Dependency |
+| Ruby | hashdiff | 1.2.1 | MIT | Hashdiff is a diff lib to compute the smallest difference between two hashes | <https://github.com/liufengyun/hashdiff> | 2026-05-20 | Low | Dependency | Dependency |
 | Ruby | httparty | 0.24.2 | MIT | Makes http fun! Also, makes consuming restful web services dead easy. | <https://github.com/jnunemaker/httparty> | 2026-02-24 | Medium | HTTP client for downloading gems from RubyGems API | Widely adopted Ruby HTTP client with active maintenance and security updates |
 | Ruby | iniparse | 1.5.0 | MIT | A pure Ruby library for parsing INI documents | <http://github.com/antw/iniparse> | 2026-02-24 | Medium | Parse AWS credentials INI files for key rotation | Actively maintained Ruby INI file parser used for reading and writing AWS credentials |
 | Ruby | jmespath | 1.6.2 | Apache-2.0 | Implements JMESPath for Ruby | <http://github.com/trevorrowe/jmespath.rb> | 2026-02-24 | Low | Dependency | Dependency |
@@ -36,9 +39,11 @@
 | Ruby | parallel | 2.1.0 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | parser | 3.3.11.1 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | prism | 1.9.0 | MIT | Prism Ruby parser | <https://github.com/ruby/prism> | 2025-03-31 | Low | Dependency | Dependency |
+| Ruby | public_suffix | 7.0.5 | MIT | PublicSuffix can parse and decompose a domain name into top level domain, domain and subdomains. | <https://simonecarletti.com/code/publicsuffix-ruby> | 2026-05-20 | Low | Dependency | Dependency |
 | Ruby | racc | 1.8.1 | Ruby | Racc is an LALR(1) parser generator. | <https://github.com/ruby/racc> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | rainbow | 3.1.1 | MIT | Colorize printed text on ANSI terminals | <https://github.com/sickill/rainbow> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | regexp_parser | 2.12.0 | MIT | A library for tokenizing, lexing, and parsing Ruby regular expressions. | <https://github.com/ammar/regexp_parser> | 2024-06-02 | Low | Dependency | Dependency |
+| Ruby | rexml | 3.4.4 | BSD-2-Clause | An XML toolkit for Ruby | <https://github.com/ruby/rexml> | 2026-05-20 | Low | Dependency | Dependency |
 | Ruby | rspec | 3.13.2 | MIT | BDD for Ruby | <https://rspec.info> | 2026-02-24 | Low | Test framework for unit testing Ruby scripts | Most popular Ruby testing framework with active maintenance |
 | Ruby | rspec-core | 3.13.6 | MIT | BDD for Ruby | <https://rspec.info> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | rspec-expectations | 3.13.5 | MIT | rspec-expectations provides a simple, readable API to express expected outcomes of a code example. | <https://rspec.info> | 2026-02-24 | Low | Dependency | Dependency |
@@ -58,3 +63,4 @@
 | Ruby | simplecov_json_formatter | 0.1.4 | MIT | JSON formatter for SimpleCov | <https://github.com/fede-moya/simplecov_json_formatter> | 2026-02-24 | Low | Dependency | Dependency |
 | Ruby | unicode-display_width | 3.2.0 | MIT | [Unicode 17.0.0] Determines the monospace display width of a string using EastAsianWidth.txt, Unicode general category, Emoji specification, and other data. | <https://github.com/janlelis/unicode-display_width> | 2024-06-02 | Low | Dependency | Dependency |
 | Ruby | unicode-emoji | 4.2.0 | MIT | [Emoji 17.0] Provides Unicode Emoji data and regexes, incorporating the latest Unicode and Emoji standards | <https://github.com/janlelis/unicode-emoji> | 2024-11-27 | Low | Dependency | Dependency |
+| Ruby | webmock | 3.26.2 | MIT | WebMock allows stubbing HTTP requests and setting expectations on HTTP requests. | <https://github.com/bblimke/webmock> | 2026-05-20 | Low | Dependency | Dependency |
