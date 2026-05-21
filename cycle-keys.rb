@@ -76,6 +76,23 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
     )
     puts("\tRollback: deleted new key")
 
+    # The disable step may already have flipped the original key to Inactive.
+    # Re-Activate it before restoring credentials on disk so the user is not
+    # left holding a credentials file that points at a disabled key.
+    begin
+      iam.update_access_key(
+        {
+          access_key_id: original_access_key,
+          status: 'Active',
+          user_name: user_name
+        }
+      )
+      puts("\tRollback: re-activated original key #{original_access_key}")
+    rescue StandardError => e
+      puts("\tWARNING: failed to re-activate original key #{original_access_key} - manual intervention required")
+      pp(e)
+    end
+
     credentials[profile]['aws_access_key_id'] = original_access_key
     credentials[profile]['aws_secret_access_key'] = original_secret_key
     File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
@@ -127,7 +144,6 @@ def process_credential_profile(credentials, profile, options)
   return :no_keys if response.access_key_metadata.none?
 
   user_name, age_days = find_primary_key_user(response.access_key_metadata, access_key)
-  cleanup_secondary_keys(iam, access_key, response.access_key_metadata)
 
   if user_name != options[:username]
     puts("\tUsername does not match: #{user_name}")
@@ -139,6 +155,9 @@ def process_credential_profile(credentials, profile, options)
     return :too_young
   end
 
+  # Cleanup runs only after the guards above - it is destructive (deletes
+  # any non-primary keys) and must not fire on no-op paths.
+  cleanup_secondary_keys(iam, access_key, response.access_key_metadata)
   new_access_key_id = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
 
   rollback =

@@ -15,6 +15,19 @@ RSpec.describe(CliMain) do
       end.to(output(/boom/).to_stderr)
     end
 
+    def raise_with_cause
+      raise(StandardError, 'inner')
+    rescue StandardError
+      raise(StandardError, 'outer')
+    end
+
+    it 'walks the cause chain and prints both messages via full_message', :aggregate_failures do
+      expect do
+        expect { described_class.run! { raise_with_cause } }
+          .to(raise_error(SystemExit))
+      end.to(output(/outer.*inner/m).to_stderr)
+    end
+
     it 'does not catch SystemExit or other non-StandardError errors', :aggregate_failures do
       expect { described_class.run! { raise(SystemExit, 0) } }
         .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })

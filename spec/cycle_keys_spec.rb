@@ -169,6 +169,19 @@ RSpec.describe(CycleKeys) do
       expect(cred_hash['aws_secret_access_key']).to(eq('oldsecret123'))
     end
 
+    it 're-activates the original key so the restored credentials are usable' do
+      allow(iam).to(receive(:update_access_key).and_call_original)
+      call_rollback
+      expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: 'AKIAOLDKEY123', status: 'Active', user_name: 'testuser')))
+    end
+
+    it 'still restores credentials when re-activate fails', :aggregate_failures do
+      allow(iam).to(receive(:update_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'reactivate failed')))
+      expect { call_rollback }
+        .not_to(raise_error)
+      expect(credentials).to(have_received(:save))
+    end
+
     it 'swallows errors from delete_access_key without raising' do
       allow(iam).to(receive(:delete_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'API error')))
       expect { call_rollback }
@@ -299,20 +312,34 @@ RSpec.describe(CycleKeys) do
     context 'when the primary key user does not match' do
       before do
         iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'other', create_date: Time.now - (200 * 24 * 60 * 60), status: 'Active' }] })
+        allow(iam).to(receive(:delete_access_key))
+        allow(iam).to(receive(:update_access_key))
       end
 
       it 'returns :username_mismatch' do
         expect(process_credential_profile(credentials, 'dev', options)).to(eq(:username_mismatch))
+      end
+
+      it 'does not delete any keys (guards run before destructive cleanup)' do
+        process_credential_profile(credentials, 'dev', options)
+        expect(iam).not_to(have_received(:delete_access_key))
       end
     end
 
     context 'when the key is too young and --force is not set' do
       before do
         iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'alice', create_date: Time.now - (10 * 24 * 60 * 60), status: 'Active' }] })
+        allow(iam).to(receive(:delete_access_key))
+        allow(iam).to(receive(:update_access_key))
       end
 
       it 'returns :too_young' do
         expect(process_credential_profile(credentials, 'dev', options)).to(eq(:too_young))
+      end
+
+      it 'does not delete any keys (guards run before destructive cleanup)' do
+        process_credential_profile(credentials, 'dev', options)
+        expect(iam).not_to(have_received(:delete_access_key))
       end
     end
   end
