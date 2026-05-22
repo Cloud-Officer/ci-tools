@@ -11,4 +11,5 @@
 .rubocop.yml             @Cloud-Officer/Maintainers
 .ruby-version            @Cloud-Officer/Maintainers
 .yamllint.yml            @Cloud-Officer/Maintainers
+lib/                     @Cloud-Officer/Maintainers
 Dockerfile               @Cloud-Officer/Maintainers

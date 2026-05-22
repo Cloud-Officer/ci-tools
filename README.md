@@ -166,6 +166,13 @@ encrypt-logs.rb --profile myprofile --retention_in_days 90
 
 Detect file types and run the appropriate linter. The linters are installed if not available on the system. The script will stop at the first linter reporting error to ease error fixing.
 
+When a `.shellcheckrc` is present, shell scripts are checked with `shellcheck` and then with built-in rules that shellcheck does not cover:
+
+* **SL0001** - prefer `${var}` over `$var`.
+* **SL0002** - prefer `==` over a single `=` inside `[ ... ]`.
+
+These rules ignore single-quoted spans, escaped `\$` and comments, and a `# shellcheck disable=all` directive skips the rest of the file.
+
 #### Examples linters
 
 ```bash

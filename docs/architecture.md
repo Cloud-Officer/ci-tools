@@ -76,6 +76,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 ### Component Interactions
 
 - **Ruby scripts** interact with AWS services through the official AWS SDK for Ruby
+- **Ruby scripts** share `lib/cli_main.rb` (the `CliMain` module) for top-level error handling and command-line option parsing
 - **Bash scripts** utilize external CLI tools (AWS CLI, GitHub CLI, Jira CLI) for service integration
 - **Linters script** orchestrates multiple language-specific linting tools
 - **Distribution** is supported via Docker containers, Homebrew formulas, or direct Ruby bundler installation
@@ -106,9 +107,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Publishes Lambda versions and updates CloudFront distributions
 - Supports spot instance deployments with mixed instance policies
 
-**Internal Dependencies:** None
+**Internal Dependencies:** lib/cli_main.rb (CliMain)
 
-**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-lambda, aws-sdk-ssm, optparse
+**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-lambda, aws-sdk-ssm
 
 ### cycle-keys.rb
 
@@ -133,9 +134,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Disables and deletes old keys after successful rotation
 - Updates credentials file with new key material
 
-**Internal Dependencies:** None
+**Internal Dependencies:** lib/cli_main.rb (CliMain)
 
-**External Dependencies:** aws-sdk-iam, date, iniparse, optparse
+**External Dependencies:** aws-sdk-iam, date, iniparse
 
 ### encrypt-logs.rb
 
@@ -155,9 +156,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Associates KMS keys based on environment naming conventions
 - Sets log retention policies
 
-**Internal Dependencies:** None
+**Internal Dependencies:** lib/cli_main.rb (CliMain)
 
-**External Dependencies:** aws-sdk-cloudwatchlogs, aws-sdk-core, aws-sdk-kms, optparse
+**External Dependencies:** aws-sdk-cloudwatchlogs, aws-sdk-core, aws-sdk-kms
 
 ### linters
 
@@ -269,9 +270,29 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Downloads gems from RubyGems to compute SHA256 checksums
 - Outputs Homebrew formula resource blocks with platform-specific handling
 
-**Internal Dependencies:** None
+**Internal Dependencies:** lib/cli_main.rb (CliMain)
 
 **External Dependencies:** bundler, digest, httparty
+
+### lib/cli_main.rb
+
+**Purpose:** Shared helpers used by the top-level Ruby scripts for consistent error handling and command-line option parsing.
+
+**Location:** `lib/cli_main.rb`
+
+**Key Components:**
+
+- `CliMain.run!`: Wraps a script's main block; rescues uncaught `StandardError`, prints the full message and backtrace (including the cause chain) to STDERR, and exits with status 1
+- `CliMain.parse_options!`: Builds an `OptionParser` (with banner and caller-supplied `opts.on` definitions), parses argv into an options hash, then raises `OptionParser::MissingArgument` if any mandatory keys are absent
+
+**Functionality:**
+
+- Centralizes the top-level rescue/exit logic previously repeated at the bottom of every Ruby script
+- Provides a single mandatory-argument check shared across all option parsers
+
+**Internal Dependencies:** None
+
+**External Dependencies:** optparse
 
 ## Software of Unknown Provenance
 
@@ -356,7 +377,7 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 | Control                 | Implementation                                | Location                                   |
 |-------------------------|-----------------------------------------------|--------------------------------------------|
-| Required Parameters     | OptionParser with mandatory argument checking | All Ruby scripts                           |
+| Required Parameters     | OptionParser with mandatory argument checking | `parse_options!` in `lib/cli_main.rb`      |
 | Target Validation       | Regex validation for instance identifiers     | `ssm-jump` in target lookup section        |
 | Git Tag Verification    | Validates tags exist before processing        | `sync-jira-release` in git tag validation  |
 | Release Existence Check | Verifies Jira release exists before updates   | `sync-jira-release` in release check       |
@@ -365,7 +386,7 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 | Control                | Implementation                                    | Location                                     |
 |------------------------|---------------------------------------------------|----------------------------------------------|
-| Exception Wrapping     | Top-level rescue blocks with stack traces         | All Ruby scripts                             |
+| Exception Wrapping     | Top-level rescue blocks with stack traces         | `CliMain.run!` in `lib/cli_main.rb`          |
 | Validation Errors      | CloudFormation validation error handling          | `deploy.rb` in CloudFormation update section |
 | Stack State Monitoring | Checks for failed stack states                    | `deploy.rb` in stack status check            |
 | SSM Parameter Rollback | Restores SSM snapshot when CFN update fails       | `deploy.rb` in `restore_ssm_parameters`      |

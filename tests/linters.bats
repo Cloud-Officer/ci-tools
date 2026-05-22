@@ -140,3 +140,97 @@ stub_all_linters() {
   [[ "$output" == *"Checking Ruby"* ]]
   [[ "$output" == *"Some checks failed"* ]]
 }
+
+@test "runs the built-in shell rules after shellcheck" {
+  skip_unless_globstar
+  touch .shellcheckrc
+  cat > clean.sh <<'SH'
+#!/usr/bin/env bash
+echo "${ok}"
+SH
+
+  function shellcheck() { echo "shellcheck invoked"; }
+  export -f shellcheck
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Checking shell scripts..."* ]]
+  [[ "$output" == *"shellcheck invoked"* ]]
+  [[ "$output" == *"Checking shell scripts (custom rules)..."* ]]
+  [[ "$output" == *"All checks passed"* ]]
+}
+
+@test "SL0001 flags an unbraced \$var" {
+  skip_unless_globstar
+  touch .shellcheckrc
+  cat > script.sh <<'SH'
+#!/usr/bin/env bash
+echo $foo
+SH
+
+  function shellcheck() { :; }
+  export -f shellcheck
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SL0001"* ]]
+  [[ "$output" == *"script.sh line 2"* ]]
+  [[ "$output" == *"Some checks failed"* ]]
+}
+
+@test "SL0002 flags a single = inside [ ... ]" {
+  skip_unless_globstar
+  touch .shellcheckrc
+  cat > script.sh <<'SH'
+#!/usr/bin/env bash
+if [ "${x}" = "y" ]; then :; fi
+SH
+
+  function shellcheck() { :; }
+  export -f shellcheck
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SL0002"* ]]
+  [[ "$output" == *"Some checks failed"* ]]
+}
+
+@test "built-in shell rules ignore quotes, escapes and comments" {
+  skip_unless_globstar
+  touch .shellcheckrc
+  cat > script.sh <<'SH'
+#!/usr/bin/env bash
+echo '$single'
+echo \$escaped
+# a $commented var
+echo "${braced}"
+if [ "${x}" == "y" ]; then :; fi
+SH
+
+  function shellcheck() { :; }
+  export -f shellcheck
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"SL0001"* ]]
+  [[ "$output" != *"SL0002"* ]]
+  [[ "$output" == *"All checks passed"* ]]
+}
+
+@test "built-in shell rules honor # shellcheck disable=all" {
+  skip_unless_globstar
+  touch .shellcheckrc
+  cat > script.sh <<'SH'
+#!/usr/bin/env bash
+# shellcheck disable=all
+echo $foo
+SH
+
+  function shellcheck() { :; }
+  export -f shellcheck
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"SL0001"* ]]
+  [[ "$output" == *"All checks passed"* ]]
+}
