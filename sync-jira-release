@@ -144,11 +144,21 @@ fi
 
 echo "Git tags '${1}' and '${2}' found."
 
-# Extract Jira project key from PR template
-PR_TEMPLATE=".github/pull_request_template.md"
+# Locate the PR template. GitHub treats the filename case-insensitively and
+# accepts it in .github/ or the repository root, so check the common variants.
+PR_TEMPLATE=""
 
-if [ ! -f "${PR_TEMPLATE}" ]; then
-  echo "Error: PR template not found at ${PR_TEMPLATE}"
+for candidate in \
+  ".github/pull_request_template.md" ".github/PULL_REQUEST_TEMPLATE.md" \
+  "pull_request_template.md" "PULL_REQUEST_TEMPLATE.md"; do
+  if [ -f "${candidate}" ]; then
+    PR_TEMPLATE="${candidate}"
+    break
+  fi
+done
+
+if [ -z "${PR_TEMPLATE}" ]; then
+  echo "Error: PR template not found (looked for pull_request_template.md in .github/ and repo root)."
   exit 1
 fi
 

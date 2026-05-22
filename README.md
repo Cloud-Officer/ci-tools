@@ -25,6 +25,8 @@
   * [sync-jira-release](#sync-jira-release)
     * [Usage sync-jira-release](#usage-sync-jira-release)
     * [Examples sync-jira-release](#examples-sync-jira-release)
+  * [brew-resources](#brew-resources)
+    * [Examples brew-resources](#examples-brew-resources)
 * [Contributing](#contributing)
 
 ## Introduction
@@ -40,6 +42,7 @@ This is a collection of tools to run locally or on a CI pipeline. These tools ar
 * **linters** - Auto-detect file types and run appropriate linters with automatic installation
 * **ssm-jump** - Open SSM connections to EC2 instances without VPN using instance name, ID, or IP
 * **sync-jira-release** - Synchronize Jira releases with GitHub pull requests between git tags
+* **brew-resources** - Generate Homebrew formula `resource` blocks with SHA256 checksums from a `Gemfile.lock`
 
 ## Installation
 
@@ -314,6 +317,20 @@ sync-jira-release v1.0.0 v1.1.0 "Release 1.1.0"
 
 # Sync issues from all PRs between two recent tags
 sync-jira-release v2023.10.01 v2023.11.01 "November 2023 Release"
+```
+
+### brew-resources
+
+Generate Homebrew formula `resource` blocks from a `Gemfile.lock`. For every gem in the lockfile it downloads the gem from rubygems.org, computes its SHA256, and prints the matching `resource` stanza — wrapping platform-specific gems in `on_macos`/`on_linux` and `on_intel`/`on_arm` blocks. Run it from a directory containing a `Gemfile.lock`.
+
+#### Examples brew-resources
+
+```bash
+# Print resource blocks for the current Gemfile.lock
+brew-resources.rb
+
+# Capture them to paste into a Homebrew formula
+brew-resources.rb > resources.rb
 ```
 
 ## Contributing
