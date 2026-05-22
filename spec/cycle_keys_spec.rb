@@ -342,6 +342,82 @@ RSpec.describe(CycleKeys) do
         expect(iam).not_to(have_received(:delete_access_key))
       end
     end
+
+    context 'when the key is old enough and the username matches (rotation happy path)' do
+      let(:lock_file) { instance_double(File) }
+
+      before do
+        iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'alice', create_date: Time.now - (100 * 24 * 60 * 60), status: 'Active' }, { access_key_id: 'AKIASECONDARY', user_name: 'alice', create_date: Time.now - (100 * 24 * 60 * 60), status: 'Active' }] })
+        iam.stub_responses(:create_access_key, { access_key: { access_key_id: 'AKIANEWKEY123', secret_access_key: 'newsecret', user_name: 'alice', status: 'Active' } })
+        allow(iam).to(receive(:create_access_key).and_call_original)
+        allow(iam).to(receive(:update_access_key).and_call_original)
+        allow(iam).to(receive(:delete_access_key).and_call_original)
+        allow(credentials).to(receive(:save))
+        allow(File).to(receive(:open).with("#{Dir.home}/.aws/credentials.lock", anything, anything).and_yield(lock_file))
+        allow(lock_file).to(receive(:flock))
+      end
+
+      it 'returns :rotated' do
+        expect(process_credential_profile(credentials, 'dev', options)).to(eq(:rotated))
+      end
+
+      it 'cleans up the secondary key and persists a new one', :aggregate_failures do
+        process_credential_profile(credentials, 'dev', options)
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIASECONDARY')))
+        expect(iam).to(have_received(:create_access_key).with(hash_including(user_name: 'alice')))
+        expect(credentials).to(have_received(:save))
+      end
+
+      it 'disables then deletes the old key', :aggregate_failures do
+        process_credential_profile(credentials, 'dev', options)
+        expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: 'AKIACURRENT', status: 'Inactive')))
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIACURRENT')))
+      end
+    end
+
+    context 'when disabling the old key fails after a new key was created' do
+      let(:lock_file) { instance_double(File) }
+
+      # Run the rotation and swallow the propagated error so examples can assert the rollback side effects.
+      def run_failed_rotation
+        process_credential_profile(credentials, 'dev', options)
+      rescue Aws::IAM::Errors::ServiceError
+        nil
+      end
+
+      before do
+        iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'alice', create_date: Time.now - (100 * 24 * 60 * 60), status: 'Active' }] })
+        iam.stub_responses(:create_access_key, { access_key: { access_key_id: 'AKIANEWKEY123', secret_access_key: 'newsecret', user_name: 'alice', status: 'Active' } })
+        allow(iam).to(receive(:create_access_key).and_call_original)
+        allow(iam).to(receive(:delete_access_key).and_call_original)
+        # Fail the disable step (status Inactive) so the captured rollback lambda fires; re-activate (Active) succeeds.
+        allow(iam).to(receive(:update_access_key)) { |args| raise(Aws::IAM::Errors::ServiceError.new(nil, 'disable failed')) if args[:status] == 'Inactive' }
+        allow(credentials).to(receive(:save))
+        allow(File).to(receive(:open).with("#{Dir.home}/.aws/credentials.lock", anything, anything).and_yield(lock_file))
+        allow(lock_file).to(receive(:flock))
+      end
+
+      it 'propagates the error after rolling back' do
+        expect { process_credential_profile(credentials, 'dev', options) }
+          .to(raise_error(Aws::IAM::Errors::ServiceError))
+      end
+
+      it 'deletes the newly created key during rollback' do
+        run_failed_rotation
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIANEWKEY123', user_name: 'alice')))
+      end
+
+      it 're-activates the original key during rollback' do
+        run_failed_rotation
+        expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: 'AKIACURRENT', status: 'Active')))
+      end
+
+      it 'restores the original credentials during rollback', :aggregate_failures do
+        run_failed_rotation
+        expect(cred_hash['aws_access_key_id']).to(eq('AKIACURRENT'))
+        expect(cred_hash['aws_secret_access_key']).to(eq('secret'))
+      end
+    end
   end
 
   describe '#disable_and_delete_old_key' do
