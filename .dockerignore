@@ -1,0 +1,6 @@
+# Keep the Git metadata and local cruft out of the image (ADD <git-url> previously dropped .git automatically)
+.git
+.gitignore
+.idea
+coverage
+*.local

@@ -68,8 +68,8 @@ RUN \
 # Add user/group citools and add ubuntu user to that group
 RUN useradd -m -s /bin/bash citools && echo 'citools ALL=(ALL) NOPASSWD:ALL' >>/etc/sudoers && adduser ubuntu citools
 
-# Clone the soup repository
-ADD https://github.com/Cloud-Officer/ci-tools.git /home/citools/ci-tools
+# Copy the checked-out source (build context is the tagged commit; .git excluded via .dockerignore)
+COPY . /home/citools/ci-tools
 
 # Install ci-tools dependencies and create a symlink
 USER root
