@@ -36,6 +36,75 @@ find_lintable() {
     -not -path "*/target/*"
 }
 
+# Custom shell-script rules that shellcheck doesn't cover, ported from the
+# historical shell_linter.rb. Runs after shellcheck over the same *.sh files:
+#   SL0001 - prefer ${var} over $var
+#   SL0002 - prefer == over a single = inside [ ... ]
+# Single-quoted spans, escaped \$ and comments are ignored; a
+# `# shellcheck disable=all` directive skips the rest of that file.
+shell_lint_custom() {
+  local sh_files=()
+  mapfile -t sh_files < <(find_lintable "*.sh")
+
+  if [ ${#sh_files[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  # shellcheck disable=SC2016
+  awk '
+    function report(file, line_num, col, code, line,    pad) {
+      pad = sprintf("%*s", col, "")
+      print "In " file " line " line_num ":"
+      print "    " line
+      print "    " pad "^-- " code " (" sev[code] "): " msg[code]
+      print "    " hint[code]
+      print ""
+    }
+    BEGIN {
+      quote = sprintf("%c", 39)
+      sev["SL0001"]  = "warning"
+      msg["SL0001"]  = "Use ${var} with braces instead of $var for readability and to avoid ambiguity with adjacent text."
+      hint["SL0001"] = "Replace $var with ${var}."
+      sev["SL0002"]  = "warning"
+      msg["SL0002"]  = "Inside [ ... ], use '\''=='\'' for string equality; a single '\''='\'' looks like assignment."
+      hint["SL0002"] = "Replace '\''='\'' with '\''=='\''."
+    }
+    FNR == 1 { inside_quotes = 0 }
+    skip[FILENAME] { next }
+    index($0, "# shellcheck disable=all") { skip[FILENAME] = 1; next }
+    {
+      line = $0
+      prev = ""
+
+      for (i = 1; i <= length(line); i++) {
+        c = substr(line, i, 1)
+
+        if (!inside_quotes && c == "#" && (prev == "" || prev == " " || prev == "\t")) {
+          break
+        }
+
+        if (c == quote) {
+          inside_quotes = !inside_quotes
+        } else if (c == "$" && !inside_quotes && prev != "\\") {
+          if (substr(line, i) ~ /^\$[a-zA-Z_][a-zA-Z0-9_]*/) {
+            report(FILENAME, FNR, i - 1, "SL0001", line)
+            rc = 1
+          }
+        }
+
+        prev = c
+      }
+
+      if (index(line, "[") && index(line, "]") && line ~ /\[.* = .*\]/ && line !~ /\[.*==.*\]/) {
+        pos = index(line, " = ")
+        report(FILENAME, FNR, pos ? pos : 0, "SL0002", line)
+        rc = 1
+      }
+    }
+    END { exit rc }
+  ' "${sh_files[@]}"
+}
+
 yml_files=(.github/workflows/*.yml)
 yaml_files=(.github/workflows/*.yaml)
 
@@ -95,6 +164,9 @@ if [ -f .shellcheckrc ]; then
 
   # shellcheck disable=SC2046
   shellcheck --external-sources $(find_lintable "*.sh") || FAILED=1
+
+  echo "Checking shell scripts (custom rules)..."
+  shell_lint_custom || FAILED=1
 fi
 
 if [ -f .hadolint.yaml ]; then
@@ -212,7 +284,7 @@ if [ -f .editorconfig ]; then
     fi
   fi
 
-  ktlint --verbose || FAILED=1
+  ktlint || FAILED=1
 fi
 
 if [ -f .bandit ]; then
