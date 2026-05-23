@@ -171,6 +171,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - File type detection based on configuration files
 - Linter installation for missing tools
 - Multi-linter execution with failure tracking
+- Built-in custom shell-script rules (`shell_lint_custom`) that run after shellcheck
 
 **Supported Linters:**
 
@@ -191,6 +192,15 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - semgrep: Security scanning
 - trivy: Vulnerability, secret, and misconfiguration scanning
 - swiftlint: Swift code
+
+**Built-in Shell Rules:**
+
+Beyond shellcheck, the script applies custom shell-script rules (`shell_lint_custom`) to every `*.sh` file:
+
+- SL0001: prefer `${var}` over `$var` for variable references
+- SL0002: prefer `==` over a single `=` for string comparison inside `[ ... ]`
+
+Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck disable=all` directive skips the rest of that file.
 
 **Internal Dependencies:** None
 
