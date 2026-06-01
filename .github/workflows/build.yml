@@ -19,7 +19,7 @@ permissions:
   contents: read
   pull-requests: read
 env:
-  RUBY-BUNDLER-CACHE: 'true'
+  RUBY_BUNDLER_CACHE: 'true'
 concurrency:
   group: build-${{github.ref}}
   cancel-in-progress: true
@@ -223,7 +223,7 @@ jobs:
       uses: cloud-officer/ci-actions/setup@v2
       if: "${{needs.variables.outputs.SKIP_LICENSES != '1' || needs.variables.outputs.SKIP_TESTS != '1'}}"
       with:
-        ruby-bundler-cache: "${{env.RUBY-BUNDLER-CACHE}}"
+        ruby-bundler-cache: "${{env.RUBY_BUNDLER_CACHE}}"
         ssh-key: "${{secrets.SSH_KEY}}"
         aws-access-key-id: "${{secrets.AWS_ACCESS_KEY_ID}}"
         aws-secret-access-key: "${{secrets.AWS_SECRET_ACCESS_KEY}}"
