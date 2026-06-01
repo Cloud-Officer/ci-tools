@@ -2,7 +2,7 @@
 
 setup() {
   export PATH="${BATS_TEST_DIRNAME}/../:${PATH}"
-  export GHB_IGNORED_EXCLUDES="-not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.build/*' -not -path '*/Pods/*' -not -path '*/Carthage/*' -not -path '*/DerivedData/*'"
+  export GHB_IGNORED_EXCLUDES="-not -path */node_modules/* -not -path */vendor/* -not -path */.build/* -not -path */Pods/* -not -path */Carthage/* -not -path */DerivedData/*"
   TEST_DIR=$(mktemp -d)
   cd "${TEST_DIR}"
 }
@@ -48,6 +48,21 @@ teardown() {
   mkdir -p .github
   generate-codeowners "@build-team" "@default-team"
   ! grep -q ".golangci.yml" .github/CODEOWNERS
+}
+
+@test "includes shell files outside ignored folders" {
+  mkdir -p .github
+  touch script.sh
+  generate-codeowners "@build-team" "@default-team"
+  grep -qE '^\*\.sh' .github/CODEOWNERS
+}
+
+@test "excludes files located only inside ignored folders" {
+  mkdir -p .github node_modules
+  touch node_modules/dep.sh
+  generate-codeowners "@build-team" "@default-team"
+  # The only *.sh file lives in an ignored folder, so no *.sh ownership line should appear.
+  ! grep -qE '^\*\.sh' .github/CODEOWNERS
 }
 
 @test "preserves custom lines between markers" {

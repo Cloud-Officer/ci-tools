@@ -2,7 +2,20 @@
 set -euo pipefail
 
 CODEOWNERS=".github/CODEOWNERS"
-IGNORED_EXCLUDES="${GHB_IGNORED_EXCLUDES:-$(github-build --get_ignored_folders | jq -r '.ignored_folders[]' | sed 's|.*|-not -path "*/&/*"|' | tr '\n' ' ')}"
+
+# Folders to exclude from the file search, built as an array so each "-not -path …"
+# token reaches find verbatim — no word-splitting and no literal quote characters
+# (a quoted glob like "*/coverage/*" would never match). Tests can override the
+# github-build lookup via GHB_IGNORED_EXCLUDES (a space-separated find expression).
+if [ -n "${GHB_IGNORED_EXCLUDES:-}" ]; then
+  read -ra IGNORED_EXCLUDES <<< "${GHB_IGNORED_EXCLUDES}"
+else
+  IGNORED_EXCLUDES=()
+
+  while IFS= read -r folder; do
+    [ -n "${folder}" ] && IGNORED_EXCLUDES+=(-not -path "*/${folder}/*")
+  done < <(github-build --get_ignored_folders | jq -r '.ignored_folders[]')
+fi
 
 function check_file()
 {
@@ -16,8 +29,7 @@ function check_file()
     exit 1
   fi
 
-  # shellcheck disable=SC2086
-  if find . -name "${1}" -not -path "./*-scripts/*" -not -path "./codedeploy/*" -not -path "./bin/*" -not -path "./sbin/*" ${IGNORED_EXCLUDES} | grep -E '.*' &> /dev/null; then
+  if find . -name "${1}" -not -path "./*-scripts/*" -not -path "./codedeploy/*" -not -path "./bin/*" -not -path "./sbin/*" "${IGNORED_EXCLUDES[@]}" | grep -E '.*' &> /dev/null; then
     printf "%-24s %s\n" "${1}" "${2}" >> "./${CODEOWNERS}"
   fi
 }
