@@ -19,6 +19,21 @@ sudo_for_user_command() {
   fi
 }
 
+# Installs a Python CLI tool in its own isolated environment via pipx, on Linux.
+# pipx is used instead of a bare `pip3 install` because Debian 12+/Ubuntu 23.04+
+# mark the system Python externally managed (PEP 668), so pip3 refuses to install
+# into it. pipx is bootstrapped through apt when absent (mirroring how the npm
+# branch installs npm), and its bin dir is added to PATH (like the go branches).
+# Usage: pipx_install cfn-lint
+pipx_install() {
+  if ! command -v pipx &>/dev/null; then
+    sudo apt-get --yes install --no-install-recommends pipx
+  fi
+
+  pipx install "${1}"
+  export PATH="${PATH}:${HOME}/.local/bin"
+}
+
 # Common find filter used for files-to-lint discovery. Pass the -name pattern as $1.
 find_lintable() {
   find . -name "${1}" \
@@ -208,7 +223,7 @@ if [ -f .cfnlintrc ]; then
     if is_darwin; then
       brew install cfn-lint
     else
-      pip3 install cfn-lint
+      pipx_install cfn-lint
     fi
   fi
 
@@ -354,7 +369,7 @@ if [ -f .semgrepignore ]; then
     if is_darwin; then
       brew install semgrep
     else
-      pip3 install semgrep
+      pipx_install semgrep
     fi
   fi
 

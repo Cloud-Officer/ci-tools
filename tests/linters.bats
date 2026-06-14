@@ -122,6 +122,72 @@ EOF
   [[ "$output" == *"golangci-lint invoked: run"* ]]
 }
 
+@test "installs cfn-lint via pipx (not bare pip3) on Linux" {
+  skip_unless_globstar
+  touch .cfnlintrc
+
+  # Isolate HOME and trim PATH (same rationale as the golangci-lint test) so the
+  # auto-install branch runs and a host-installed cfn-lint/pipx can't short-circuit it.
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/.local/bin" "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  # Force the non-Darwin (Linux) install branch.
+  function uname() { echo "Linux"; }
+  export -f uname
+
+  # Stub pipx: record the install request and drop a runnable cfn-lint into the
+  # pipx bin dir so the subsequent `cfn-lint ...` call succeeds. Its presence as
+  # a function also satisfies `command -v pipx`, so the apt bootstrap is skipped.
+  function pipx() {
+    echo "pipx invoked: $*"
+    cat > "${HOME}/.local/bin/cfn-lint" <<'EOF'
+#!/usr/bin/env bash
+echo "cfn-lint invoked: $*"
+EOF
+    chmod +x "${HOME}/.local/bin/cfn-lint"
+  }
+  export -f pipx
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Checking CloudFormation templates..."* ]]
+  [[ "$output" == *"pipx invoked: install cfn-lint"* ]]
+  [[ "$output" == *"cfn-lint invoked: --non-zero-exit-code error"* ]]
+  [[ "$output" != *"pip3 install"* ]]
+}
+
+@test "installs semgrep via pipx (not bare pip3) on Linux" {
+  skip_unless_globstar
+  touch .semgrepignore
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/.local/bin" "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  function uname() { echo "Linux"; }
+  export -f uname
+
+  function pipx() {
+    echo "pipx invoked: $*"
+    cat > "${HOME}/.local/bin/semgrep" <<'EOF'
+#!/usr/bin/env bash
+echo "semgrep invoked: $*"
+EOF
+    chmod +x "${HOME}/.local/bin/semgrep"
+  }
+  export -f pipx
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Checking with semgrep..."* ]]
+  [[ "$output" == *"pipx invoked: install semgrep"* ]]
+  [[ "$output" == *"semgrep invoked: scan"* ]]
+  [[ "$output" != *"pip3 install"* ]]
+}
+
 @test "runs rubocop when its config is present" {
   skip_unless_globstar
   touch .rubocop.yml
