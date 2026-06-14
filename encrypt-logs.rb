@@ -67,10 +67,6 @@ def parse_encrypt_logs_options(argv = ARGV)
   CliMain.parse_options!(banner: 'Usage: encrypt_logs.rb options', mandatory: %i[profile retention_in_days], argv: argv) do |opts|
     opts.on('--profile profile', String)
     opts.on('--retention_in_days retention_in_days', Integer)
-    opts.on('-h', '--help') do
-      puts(opts)
-      exit(1)
-    end
   end
 end
 

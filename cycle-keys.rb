@@ -207,10 +207,6 @@ def parse_cycle_keys_options(argv = ARGV)
     opts.on('--profile profile', String)
     opts.on('--username username', String)
     opts.on('--force')
-    opts.on('-h', '--help') do
-      puts(opts)
-      exit(1)
-    end
   end
 end
 
