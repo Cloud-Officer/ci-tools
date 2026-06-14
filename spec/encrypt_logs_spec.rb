@@ -174,6 +174,33 @@ RSpec.describe(EncryptLogs) do
       end
     end
 
+    context 'with a prod log group whose name contains "rc" inside a word' do
+      let(:log_group) { { log_group_name: '/ecs/prod-search', retention_in_days: 30, kms_key_id: nil } }
+
+      it 'encrypts with the prod key and not the rc key' do
+        process_log_group(logs, log_group, keys, retention_in_days)
+        expect(logs).to(have_received(:associate_kms_key).with(hash_including(kms_key_id: 'arn:prod-key')))
+      end
+    end
+
+    context 'with a log group whose name only contains "rc" inside a word' do
+      let(:log_group) { { log_group_name: '/aws/lambda/resource-cleaner', retention_in_days: 30, kms_key_id: nil } }
+
+      it 'raises rather than binding to the rc KMS key on a substring match' do
+        expect { process_log_group(logs, log_group, keys, retention_in_days) }
+          .to(raise_error(RuntimeError, /Cannot infer KMS environment/))
+      end
+    end
+
+    context 'with a delimited rc log group' do
+      let(:log_group) { { log_group_name: '/ecs/rc-search', retention_in_days: 30, kms_key_id: nil } }
+
+      it 'still encrypts with the rc key' do
+        process_log_group(logs, log_group, keys, retention_in_days)
+        expect(logs).to(have_received(:associate_kms_key).with(hash_including(kms_key_id: 'arn:rc-key')))
+      end
+    end
+
     context 'with already encrypted log group' do
       let(:log_group) { { log_group_name: '/aws/beta/api', retention_in_days: 30, kms_key_id: 'existing-key' } }
 
