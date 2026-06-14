@@ -833,6 +833,12 @@ RSpec.describe(Deploy) do
         run_deployment({ environment: 'beta', instance: 'api', profile: 'dev', lambda_publish_version: 'my-function' })
         expect(lambda_client).to(have_received(:publish_version))
       end
+
+      it 'builds a function_name without spaces so AWS accepts it', :aggregate_failures do
+        run_deployment({ environment: 'beta', instance: 'api', profile: 'dev', lambda_publish_version: 'my-function' })
+        expect(lambda_client).to(have_received(:publish_version).with(hash_including(function_name: 'beta-my-function')))
+        expect(lambda_client).not_to(have_received(:publish_version).with(hash_including(function_name: a_string_matching(/\s/))))
+      end
     end
   end
 
