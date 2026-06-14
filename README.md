@@ -53,8 +53,10 @@ Required:
 Required by individual scripts:
 
 * [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — `ssm-jump`
-* [jq](https://jqlang.github.io/jq/) — `ssm-jump`
+* [jq](https://jqlang.github.io/jq/) — `ssm-jump`, `generate-codeowners`
 * [GitHub CLI (`gh`)](https://cli.github.com/) — `sync-jira-release` (the `jira` CLI is auto-installed on first run)
+* [`github-build`](https://github.com/Cloud-Officer/ci-actions) — `generate-codeowners` (used to resolve ignored folders; not installed in the Docker image, so run `generate-codeowners` with `GHB_IGNORED_EXCLUDES` set instead)
+* Go and `pip3`/`python3` — `linters` (only when it self-installs Go- or pip-based linters such as actionlint, golangci-lint, protolint, cfn-lint, semgrep)
 
 Run `bundle install` to install Ruby dependencies, then run the commands.
 
