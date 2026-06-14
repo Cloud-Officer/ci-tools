@@ -63,9 +63,15 @@ def wait_for_asg_instance_count(asg_client, asg_name, target_count)
 end
 
 def find_matching_distribution(cloudfront, environment)
-  cloudfront.list_distributions.distribution_list.items.find do |distribution|
-    distribution.aliases.items.any? { |a| a.include?(environment) }
+  cloudfront.list_distributions.each do |page|
+    match =
+      page.distribution_list.items.find do |distribution|
+        distribution.aliases.items.any? { |a| a.include?(environment) }
+      end
+    return match unless match.nil?
   end
+
+  nil
 end
 
 def update_distribution_lambda(cloudfront, distribution, function_arn)
@@ -158,11 +164,13 @@ end
 
 def find_cloudformation_stack(cfn, options)
   puts('Checking cloudformation stacks...')
-  cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).stack_summaries.each do |stack|
-    next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
+  cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).each do |page|
+    page.stack_summaries.each do |stack|
+      next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
 
-    puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
-    return stack.stack_name
+      puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
+      return stack.stack_name
+    end
   end
 
   raise('Unable to find cloudformation stack')
