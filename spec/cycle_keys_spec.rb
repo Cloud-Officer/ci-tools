@@ -239,9 +239,9 @@ RSpec.describe(CycleKeys) do
     context 'when no profile in credentials matches the --profile arg' do
       let(:section) { instance_double(IniParse::Lines::Section, key: 'production') }
 
-      it 'returns without raising or exiting' do
+      it 'raises a clear error naming the missing profile (so cron rotation does not silently stop)' do
         expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
-          .not_to(raise_error)
+          .to(raise_error(RuntimeError, /Profile 'dev' not found in/))
       end
     end
 

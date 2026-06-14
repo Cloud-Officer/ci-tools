@@ -12,7 +12,7 @@ require_relative 'lib/cli_main'
 KMS_ENVIRONMENTS = %i[beta rc prod].freeze
 
 def infer_environment(string)
-  KMS_ENVIRONMENTS.find { |env| string.include?(env.to_s) }
+  KMS_ENVIRONMENTS.find { |env| string.match?(%r{(?:^|[/_-])#{env}(?:[/_-]|$)}) }
 end
 
 def build_kms_key_map(kms)

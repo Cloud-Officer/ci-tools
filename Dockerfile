@@ -24,11 +24,14 @@ RUN \
 		gcc \
 		git \
 		git-lfs \
+		golang \
 		intltool \
+		jq \
 		libtool \
 		libtool-bin \
 		make \
 		pkg-config \
+		python3-pip \
 		ruby \
 		ruby-all-dev \
 		ruby-build \
