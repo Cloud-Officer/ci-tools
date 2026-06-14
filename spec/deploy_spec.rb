@@ -48,8 +48,10 @@ RSpec.describe(Deploy) do
     { instance_id: id, lifecycle_state: 'InService', availability_zone: 'us-east-1a', health_status: 'Healthy', protected_from_scale_in: false }
   end
 
-  def build_distribution_list(items)
-    { distribution_list: { marker: '', max_items: 100, is_truncated: false, quantity: items.length, items: items } }
+  def build_distribution_list(items, is_truncated: false, next_marker: nil)
+    list = { marker: '', max_items: 100, is_truncated: is_truncated, quantity: items.length, items: items }
+    list[:next_marker] = next_marker unless next_marker.nil?
+    { distribution_list: list }
   end
 
   def build_cf_config(lambda_assoc = { quantity: 0, items: [] })
@@ -369,6 +371,18 @@ RSpec.describe(Deploy) do
           .to(raise_error(RuntimeError, 'Unable to find cloudformation stack'))
       end
     end
+
+    context 'when matching stack is on a later page' do
+      before do
+        page1 = { stack_summaries: [{ stack_name: 'other1-StackInstances-abc', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }], next_token: 'page2' }
+        page2 = { stack_summaries: [{ stack_name: 'beta1-StackInstances-abc', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] }
+        cfn.stub_responses(:list_stacks, [page1, page2])
+      end
+
+      it 'scans past the first page to find the stack' do
+        expect(find_cloudformation_stack(cfn, options)).to(eq('beta1-StackInstances-abc'))
+      end
+    end
   end
 
   describe '#find_matching_distribution' do
@@ -425,6 +439,19 @@ RSpec.describe(Deploy) do
       it 'raises an error' do
         expect { find_matching_distribution(cloudfront, 'rc') }
           .to(raise_error(RuntimeError, /Multiple cloudfront distributions match environment 'rc'/))
+      end
+    end
+
+    context 'when matching distribution is on a later page' do
+      before do
+        first = build_distribution_item(id: 'DIST456', arn: 'arn:aws:cloudfront::123:distribution/DIST456', domain_name: 'd456.cloudfront.net', aliases: { quantity: 1, items: ['prod.example.com'] })
+        page1 = build_distribution_list([first], is_truncated: true, next_marker: 'DIST456')
+        page2 = build_distribution_list([build_distribution_item])
+        cloudfront.stub_responses(:list_distributions, [page1, page2])
+      end
+
+      it 'scans past the first page to find the distribution' do
+        expect(find_matching_distribution(cloudfront, 'beta').id).to(eq('DIST123'))
       end
     end
   end

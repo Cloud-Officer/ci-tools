@@ -64,8 +64,10 @@ end
 
 def find_matching_distribution(cloudfront, environment)
   matches =
-    cloudfront.list_distributions.distribution_list.items.select do |distribution|
-      distribution.aliases.items.any? { |a| a == environment || a.start_with?("#{environment}.") }
+    cloudfront.list_distributions.flat_map do |page|
+      page.distribution_list.items.select do |distribution|
+        distribution.aliases.items.any? { |a| a == environment || a.start_with?("#{environment}.") }
+      end
     end
 
   raise("Multiple cloudfront distributions match environment '#{environment}': #{matches.map(&:id).join(', ')}") if matches.length > 1
@@ -163,11 +165,13 @@ end
 
 def find_cloudformation_stack(cfn, options)
   puts('Checking cloudformation stacks...')
-  cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).stack_summaries.each do |stack|
-    next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
+  cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).each do |page|
+    page.stack_summaries.each do |stack|
+      next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
 
-    puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
-    return stack.stack_name
+      puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
+      return stack.stack_name
+    end
   end
 
   raise('Unable to find cloudformation stack')
