@@ -63,9 +63,14 @@ def wait_for_asg_instance_count(asg_client, asg_name, target_count)
 end
 
 def find_matching_distribution(cloudfront, environment)
-  cloudfront.list_distributions.distribution_list.items.find do |distribution|
-    distribution.aliases.items.any? { |a| a.include?(environment) }
-  end
+  matches =
+    cloudfront.list_distributions.distribution_list.items.select do |distribution|
+      distribution.aliases.items.any? { |a| a == environment || a.start_with?("#{environment}.") }
+    end
+
+  raise("Multiple cloudfront distributions match environment '#{environment}': #{matches.map(&:id).join(', ')}") if matches.length > 1
+
+  matches.first
 end
 
 def update_distribution_lambda(cloudfront, distribution, function_arn)

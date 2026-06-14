@@ -392,6 +392,41 @@ RSpec.describe(Deploy) do
         expect(find_matching_distribution(cloudfront, 'beta')).to(be_nil)
       end
     end
+
+    context 'when an alias only contains the environment as a substring' do
+      before do
+        item = build_distribution_item(id: 'DIST456', arn: 'arn:aws:cloudfront::123:distribution/DIST456', domain_name: 'd456.cloudfront.net', aliases: { quantity: 1, items: ['search.example.com'] })
+        cloudfront.stub_responses(:list_distributions, build_distribution_list([item]))
+      end
+
+      it 'does not match on the substring' do
+        expect(find_matching_distribution(cloudfront, 'rc')).to(be_nil)
+      end
+    end
+
+    context 'when the alias equals the environment' do
+      before do
+        item = build_distribution_item(aliases: { quantity: 1, items: ['rc'] })
+        cloudfront.stub_responses(:list_distributions, build_distribution_list([item]))
+      end
+
+      it 'returns the distribution' do
+        expect(find_matching_distribution(cloudfront, 'rc').id).to(eq('DIST123'))
+      end
+    end
+
+    context 'when multiple distributions match the environment' do
+      before do
+        item1 = build_distribution_item(id: 'DIST1', arn: 'arn:aws:cloudfront::123:distribution/DIST1', domain_name: 'd1.cloudfront.net', aliases: { quantity: 1, items: ['rc.example.com'] })
+        item2 = build_distribution_item(id: 'DIST2', arn: 'arn:aws:cloudfront::123:distribution/DIST2', domain_name: 'd2.cloudfront.net', aliases: { quantity: 1, items: ['rc.example.org'] })
+        cloudfront.stub_responses(:list_distributions, build_distribution_list([item1, item2]))
+      end
+
+      it 'raises an error' do
+        expect { find_matching_distribution(cloudfront, 'rc') }
+          .to(raise_error(RuntimeError, /Multiple cloudfront distributions match environment 'rc'/))
+      end
+    end
   end
 
   describe '#update_ssm_parameters' do
