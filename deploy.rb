@@ -90,7 +90,7 @@ end
 def publish_lambda_and_update_cloudfront(options)
   puts("Publishing lambda version for function #{options[:lambda_publish_version]}...")
   lambda_client = Aws::Lambda::Client.new
-  version = lambda_client.publish_version({ function_name: "#{options[:environment]} - #{options[:lambda_publish_version]}" })
+  version = lambda_client.publish_version({ function_name: "#{options[:environment]}-#{options[:lambda_publish_version]}" })
   puts("Publish completed successfully for function ARN = #{version.function_arn}.")
   puts('Checking cloudfront distributions...')
   cloudfront = Aws::CloudFront::Client.new
