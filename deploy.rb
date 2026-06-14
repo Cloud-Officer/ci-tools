@@ -258,6 +258,14 @@ def update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
   puts("Update completed successfully for cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}.")
 end
 
+def update_ssm_parameters_with_rollback(parameters, prefix, ami_id, asg, options, ssm_prefix, ssm_snapshot)
+  update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
+rescue StandardError
+  puts('SSM parameter update failed, rolling back SSM parameters...')
+  restore_ssm_parameters(ssm_snapshot)
+  raise
+end
+
 def update_stack_with_ssm_rollback(cfn, stack_name, parameters, prefix, ami_id, ssm_snapshot)
   update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
 rescue SystemExit => e
@@ -430,7 +438,7 @@ def run_deployment(options)
   ctx = discover_cfn_stack_context(cfn, options)
 
   ssm_snapshot = capture_ssm_snapshot(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix])
-  update_ssm_parameters(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix])
+  update_ssm_parameters_with_rollback(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix], ssm_snapshot)
   mark_cfn_secrets_for_previous_value!(ctx[:parameters])
 
   update_stack_with_ssm_rollback(cfn, ctx[:stack_name], ctx[:parameters], ctx[:prefix], ami_id, ssm_snapshot)

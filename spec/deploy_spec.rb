@@ -840,6 +840,41 @@ RSpec.describe(Deploy) do
         expect(lambda_client).not_to(have_received(:publish_version).with(hash_including(function_name: a_string_matching(/\s/))))
       end
     end
+
+    context 'with the standard ASG/CFN deploy path' do
+      let(:ctx) do
+        { stack_name: 'beta1-StackInstances-x', parameters: [], environment: 'beta', subnet: 1, prefix: 'API', ssm_prefix: '/beta/1' }
+      end
+      let(:snapshot) { { snapshot_name => 'ami-old' } }
+      let(:snapshot_name) { '/beta/1/APIImageId' }
+
+      before do
+        allow(Aws::AutoScaling::Resource).to(receive(:new).and_return(instance_double(Aws::AutoScaling::Resource, client: nil)))
+        allow(Aws::CloudFormation::Client).to(receive(:new).and_return(instance_double(Aws::CloudFormation::Client)))
+        allow(self).to(
+          receive_messages(
+            resolve_ami_id: 'ami-new',
+            resolve_capacity_factors: { asg_increase: 1, asg_multiplier: 2 },
+            find_auto_scaling_group: { name: 'asg', min_size: 1, max_size: 4, desired_capacity: 2 },
+            discover_load_balancer: [nil, nil],
+            discover_cfn_stack_context: ctx,
+            capture_ssm_snapshot: snapshot,
+            fetch_asg_mixed_parameters: { base_capacity: 0, percent_above: 100 },
+            compute_asg_capacity_plan: { new_capacity: 4, new_max: 8 }
+          )
+        )
+        allow(self).to(receive(:mark_cfn_secrets_for_previous_value!))
+        allow(self).to(receive(:update_stack_with_ssm_rollback))
+        allow(self).to(receive(:update_asg_capacity))
+        allow(self).to(receive(:run_rolling_deploy))
+        allow(self).to(receive(:update_ssm_parameters_with_rollback))
+      end
+
+      it 'routes the SSM parameter update through the rollback-protected path with the snapshot' do
+        run_deployment({ environment: 'beta', instance: 'api', profile: nil })
+        expect(self).to(have_received(:update_ssm_parameters_with_rollback).with([], 'API', 'ami-new', anything, anything, '/beta/1', snapshot))
+      end
+    end
   end
 
   describe '#update_stack_with_ssm_rollback' do
@@ -903,6 +938,57 @@ RSpec.describe(Deploy) do
         expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', {}) }
           .to(raise_error(StandardError, 'boom'))
         expect(ssm).not_to(have_received(:put_parameter))
+      end
+    end
+  end
+
+  describe '#update_ssm_parameters_with_rollback' do
+    let(:ssm)          { Aws::SSM::Client.new(stub_responses: true) }
+    let(:param_name)   { '/beta/1/APIImageId'                                                                }
+    let(:ssm_snapshot) { { param_name => 'ami-old' }                                                         }
+    let(:parameter)    { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId') }
+    let(:asg)          { { min_size: 1, max_size: 4, desired_capacity: 2 }                                   }
+
+    # asg/options are irrelevant for the APIImageId path (resolve_parameter_value returns ami_id),
+    # so options is passed inline rather than memoized to keep the helper count within RuboCop limits.
+    before { allow(Aws::SSM::Client).to(receive(:new).and_return(ssm)) }
+
+    context 'when the parameter writes succeed' do
+      before { allow(ssm).to(receive(:put_parameter).and_call_original) }
+
+      it 'writes the new values and does NOT restore the snapshot', :aggregate_failures do
+        update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot)
+        expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-new')))
+        expect(ssm).not_to(have_received(:put_parameter).with(hash_including(value: 'ami-old')))
+      end
+    end
+
+    context 'when put_parameter fails mid-loop' do
+      # Fail the new-value write (the update), but let the snapshot restore succeed.
+      before do
+        allow(ssm).to(receive(:put_parameter)) do |args|
+          raise(Aws::SSM::Errors::ThrottlingException.new(nil, 'throttled')) if args[:value] == 'ami-new'
+        end
+      end
+
+      it 'restores the snapshot and re-raises', :aggregate_failures do
+        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+          .to(raise_error(Aws::SSM::Errors::ThrottlingException))
+        expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+    end
+
+    context 'with an empty snapshot' do
+      before do
+        allow(ssm).to(receive(:put_parameter)) do |args|
+          raise(Aws::SSM::Errors::ThrottlingException.new(nil, 'throttled')) if args[:value] == 'ami-new'
+        end
+      end
+
+      it 're-raises but performs no restore writes', :aggregate_failures do
+        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', {}) }
+          .to(raise_error(Aws::SSM::Errors::ThrottlingException))
+        expect(ssm).not_to(have_received(:put_parameter).with(hash_including(value: 'ami-old')))
       end
     end
   end
