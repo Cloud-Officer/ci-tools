@@ -30,8 +30,8 @@ RUN \
 		libtool \
 		libtool-bin \
 		make \
+		pipx \
 		pkg-config \
-		python3-pip \
 		ruby \
 		ruby-all-dev \
 		ruby-build \

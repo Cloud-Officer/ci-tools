@@ -11,8 +11,8 @@ setup() {
   grep -qE '^[[:space:]]*jq[[:space:]]*\\?$' "${DOCKERFILE}"
 }
 
-@test "installs python3-pip (required by linters cfn-lint/semgrep self-install)" {
-  grep -qE '^[[:space:]]*python3-pip[[:space:]]*\\?$' "${DOCKERFILE}"
+@test "installs pipx (required by linters cfn-lint/semgrep self-install)" {
+  grep -qE '^[[:space:]]*pipx[[:space:]]*\\?$' "${DOCKERFILE}"
 }
 
 @test "installs golang (required by linters actionlint/golangci-lint/protolint self-install)" {
