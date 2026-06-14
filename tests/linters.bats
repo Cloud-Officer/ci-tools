@@ -85,6 +85,43 @@ stub_all_linters() {
   [[ "$output" == *"Checking YAML"* ]]
 }
 
+@test "installs golangci-lint from the v2 module path on Linux" {
+  skip_unless_globstar
+  touch .golangci.yml
+
+  # Isolate HOME so the install branch writes into the temp dir, and trim PATH
+  # to system dirs so a host-installed golangci-lint can't satisfy `command -v`
+  # and skip the auto-install branch we want to exercise. Keep a modern bash
+  # (linters needs globstar, absent from macOS /bin/bash 3.2) by symlinking the
+  # current interpreter into a private bin dir that holds no golangci-lint.
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/go/bin" "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  # Force the non-Darwin (Linux) install branch.
+  function uname() { echo "Linux"; }
+  export -f uname
+
+  # Capture the module path `go install` is asked to fetch, and drop a runnable
+  # golangci-lint into HOME/go/bin so the subsequent `golangci-lint run` succeeds.
+  function go() {
+    echo "go invoked: $*"
+    cat > "${HOME}/go/bin/golangci-lint" <<'EOF'
+#!/usr/bin/env bash
+echo "golangci-lint invoked: $*"
+EOF
+    chmod +x "${HOME}/go/bin/golangci-lint"
+  }
+  export -f go
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Checking Go..."* ]]
+  [[ "$output" == *"github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"* ]]
+  [[ "$output" == *"golangci-lint invoked: run"* ]]
+}
+
 @test "runs rubocop when its config is present" {
   skip_unless_globstar
   touch .rubocop.yml
