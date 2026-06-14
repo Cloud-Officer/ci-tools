@@ -221,15 +221,20 @@ def run_cycle_keys(options)
   puts("Reading #{credentials_file_name}")
   credentials = IniParse.open(credentials_file_name)
 
+  profile_found = false
+
   credentials.each do |section|
     next if section.key != options[:profile]
 
+    profile_found = true
     result = process_credential_profile(credentials, section.key, options)
     case result
     when :error, :username_mismatch then exit(1)
     when :too_young then exit(0)
     end
   end
+
+  raise("Profile '#{options[:profile]}' not found in #{credentials_file_name}") unless profile_found
 end
 
 # :nocov:
