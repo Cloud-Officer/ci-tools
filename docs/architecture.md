@@ -228,6 +228,30 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **External Dependencies:** AWS CLI, jq
 
+### ssm-jump.install.bat
+
+**Purpose:** Windows installer that provisions the prerequisites for `ssm-jump` and generates a desktop connection shortcut.
+
+**Location:** `ssm-jump.install.bat`
+
+**Key Components:**
+
+- Interactive prompts for AWS profile, instance name, forward host, SSM document, and shortcut name
+- Prerequisite installation via `winget`
+- AWS authentication check with fallback to `aws configure`
+- Desktop shortcut (`.bat`) generation that invokes `ssm-jump` through Git-for-Windows bash
+
+**Functionality:**
+
+- Installs the AWS CLI, Session Manager plugin, and Git for Windows using `winget`
+- Verifies AWS credentials with `sts get-caller-identity`, running `aws configure` and re-checking if authentication fails
+- Downloads the `ssm-jump` script from GitHub into `%USERPROFILE%\.ssm-jump`
+- Writes a per-instance launcher shortcut on the Desktop that runs `ssm-jump` via `bash.exe` with the chosen profile, document, instance, and forward host
+
+**Internal Dependencies:** None
+
+**External Dependencies:** winget, Git-for-Windows bash, AWS CLI, Session Manager plugin, curl
+
 ### sync-jira-release
 
 **Purpose:** Synchronizes Jira releases with GitHub pull requests by extracting issue keys from PRs.
