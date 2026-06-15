@@ -16,6 +16,21 @@ RSpec.describe(EncryptLogs) do
       expect { parse_encrypt_logs_options(%w[--profile dev]) }
         .to(raise_error(OptionParser::MissingArgument, /retention_in_days/))
     end
+
+    %w[-h --help].each do |flag|
+      it "exits 0 for #{flag}", :aggregate_failures do
+        expect do
+          expect { parse_encrypt_logs_options([flag]) }
+            .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+        end.to(output.to_stdout)
+      end
+    end
+
+    it 'derives the help banner from the program basename, not a nonexistent encrypt_logs.rb', :aggregate_failures do
+      output = help_output_with_program_name('/usr/local/bin/encrypt-logs') { parse_encrypt_logs_options(%w[--help]) }
+      expect(output).to(include('Usage: encrypt-logs options'))
+      expect(output).not_to(include('encrypt_logs'))
+    end
   end
 
   describe '#run_encrypt_logs' do

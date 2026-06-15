@@ -58,5 +58,24 @@ RSpec.describe(CliMain) do
       end
       expect(argv).to(eq(%w[unconsumed]))
     end
+
+    def expect_help_exit(flag)
+      expect { parse_with_help(flag) }
+        .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+    end
+
+    def parse_with_help(flag)
+      described_class.parse_options!(banner: 'Usage: x', mandatory: %i[name], argv: [flag]) do |opts|
+        opts.on('--name name', String)
+      end
+    end
+
+    %w[-h --help].each do |flag|
+      it "prints usage and exits 0 for #{flag}", :aggregate_failures do
+        expect do
+          expect_help_exit(flag)
+        end.to(output(/Usage: x/).to_stdout)
+      end
+    end
   end
 end

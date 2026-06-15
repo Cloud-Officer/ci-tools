@@ -107,7 +107,7 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
   end
 end
 
-KEY_AGE_DAYS_THRESHOLD = 80 # AWS rotates at 90; this provides a 10-day buffer for cron schedules.
+KEY_AGE_DAYS_THRESHOLD = 80 # Compliance policy requires rotation every 90 days (CIS / access-keys-rotated rule); rotate at 80 to leave a 10-day buffer for cron schedules.
 
 def build_iam_client(region, access_key, secret_key)
   Aws::IAM::Client.new(
@@ -207,10 +207,6 @@ def parse_cycle_keys_options(argv = ARGV)
     opts.on('--profile profile', String)
     opts.on('--username username', String)
     opts.on('--force')
-    opts.on('-h', '--help') do
-      puts(opts)
-      exit(1)
-    end
   end
 end
 

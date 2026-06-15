@@ -29,6 +29,13 @@ module CliMain
       opts.separator('')
       opts.separator('options')
       yield(opts)
+      # Provide a uniform -h/--help handler for every CLI so they all print
+      # usage and exit 0 (an explicitly requested help is a success, not an
+      # error). Tools must not redefine -h/--help themselves.
+      opts.on('-h', '--help', 'Print this help message') do
+        puts(opts)
+        exit(0)
+      end
     end.parse!(argv, into: options)
 
     missing = mandatory.select { |param| options[param].nil? }
