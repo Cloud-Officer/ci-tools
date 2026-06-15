@@ -64,7 +64,7 @@ def process_log_group(logs, log_group, keys, retention_in_days)
 end
 
 def parse_encrypt_logs_options(argv = ARGV)
-  CliMain.parse_options!(banner: 'Usage: encrypt_logs.rb options', mandatory: %i[profile retention_in_days], argv: argv) do |opts|
+  CliMain.parse_options!(banner: "Usage: #{File.basename($PROGRAM_NAME)} options", mandatory: %i[profile retention_in_days], argv: argv) do |opts|
     opts.on('--profile profile', String)
     opts.on('--retention_in_days retention_in_days', Integer)
   end
