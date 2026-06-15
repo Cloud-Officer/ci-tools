@@ -791,6 +791,15 @@ RSpec.describe(Deploy) do
       expect { parse_deploy_options(%w[--environment beta1 --instance api]) }
         .to(raise_error(OptionParser::MissingArgument, /profile/))
     end
+
+    %w[-h --help].each do |flag|
+      it "exits 0 for #{flag}", :aggregate_failures do
+        expect do
+          expect { parse_deploy_options([flag]) }
+            .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+        end.to(output.to_stdout)
+      end
+    end
   end
 
   describe '#warm_up_after_scale_up' do

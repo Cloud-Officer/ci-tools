@@ -476,10 +476,6 @@ def parse_deploy_options(argv = ARGV)
     opts.on('--preserve_desired_capacity')
     opts.on('--skip_scale_down')
     opts.on('--spot_target_capacity spot_target_capacity', Integer)
-    opts.on('-h', '--help') do
-      puts(opts)
-      exit(0)
-    end
   end
 end
 

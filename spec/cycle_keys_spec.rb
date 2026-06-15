@@ -223,6 +223,15 @@ RSpec.describe(CycleKeys) do
       expect { parse_cycle_keys_options(%w[--profile dev]) }
         .to(raise_error(OptionParser::MissingArgument, /username/))
     end
+
+    %w[-h --help].each do |flag|
+      it "exits 0 for #{flag}", :aggregate_failures do
+        expect do
+          expect { parse_cycle_keys_options([flag]) }
+            .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
+        end.to(output.to_stdout)
+      end
+    end
   end
 
   describe '#run_cycle_keys' do
