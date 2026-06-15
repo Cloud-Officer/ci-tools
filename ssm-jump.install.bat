@@ -8,6 +8,14 @@ SET /P SHORTCUT_NAME=Enter desktop shortcut name (e.g. my-project-prod):
 
 IF "%SSM_DOCUMENT%"=="" SET SSM_DOCUMENT=AWS-StartPortForwardingSessionToRemoteHost
 
+IF "%SHORTCUT_NAME%"=="" (
+	ECHO .
+	ECHO Desktop shortcut name cannot be empty. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
 ECHO Install AWS CLI and session manager
 winget install --exact --id Amazon.AWSCLI --accept-package-agreements --accept-source-agreements
 winget install --exact --id Amazon.SessionManagerPlugin
@@ -53,6 +61,6 @@ curl.exe -SL --fail --progress-bar https://raw.githubusercontent.com/Cloud-Offic
 ECHO Generate connect helper on desktop
 SET CMD_COMMON="C:\Program Files\Git\bin\bash.exe" "%USERPROFILE%\.ssm-jump\ssm-jump.sh" --profile %AWS_PROFILE% --document %SSM_DOCUMENT%
 CD "%USERPROFILE%\Desktop"
-IF NOT EXIST %SHORTCUT_NAME%.bat ECHO %CMD_COMMON% %AWS_INSTANCE% --forward %FORWARD_HOST% >%SHORTCUT_NAME%.bat
+IF NOT EXIST "%SHORTCUT_NAME%.bat" ECHO %CMD_COMMON% "%AWS_INSTANCE%" --forward "%FORWARD_HOST%" >"%SHORTCUT_NAME%.bat"
 
 PAUSE
