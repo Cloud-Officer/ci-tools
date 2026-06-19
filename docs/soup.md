@@ -9,13 +9,13 @@
 | Ruby | aws-sdk-autoscaling | 1.161.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudformation | 1.154.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.150.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-cloudwatchlogs | 1.155.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-cloudwatchlogs | 1.156.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.252.0 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-ec2 | 1.623.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-ec2 | 1.624.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.153.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.148.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | High | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-kms | 1.129.0 | Apache-2.0 | Official AWS Ruby gem for AWS Key Management Service (KMS) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | High | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-lambda | 1.183.0 | Apache-2.0 | Official AWS Ruby gem for AWS Lambda | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-lambda | 1.184.0 | Apache-2.0 | Official AWS Ruby gem for AWS Lambda | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-ssm | 1.216.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sigv4 | 1.12.1 | Apache-2.0 | Amazon Web Services Signature Version 4 signing library | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | base64 | 0.3.0 | Ruby | Support for encoding and decoding binary data using a Base64 representation. | <https://github.com/ruby/base64> | 2026-05-22 | Low | Dependency | Dependency |
@@ -34,7 +34,7 @@
 | Ruby | logger | 1.7.0 | Ruby | Provides a simple logging utility for outputting messages. | <https://github.com/ruby/logger> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | mini_mime | 1.1.5 | MIT | A minimal mime type library | <https://github.com/discourse/mini_mime> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | multi_xml | 0.9.1 | MIT | Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML. | <https://github.com/sferik/multi_xml> | 2026-05-22 | Low | Dependency | Dependency |
-| Ruby | nokogiri | 1.19.3 | MIT | Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby | <https://nokogiri.org> | 2026-05-22 | Medium | XML parser | Industry-standard Ruby XML/HTML parser with active security maintenance |
+| Ruby | nokogiri | 1.19.4 | MIT | Nokogiri (鋸) makes it easy and painless to work with XML and HTML from Ruby | <https://nokogiri.org> | 2026-05-22 | Medium | XML parser | Industry-standard Ruby XML/HTML parser with active security maintenance |
 | Ruby | optparse | 0.8.1 | Ruby | OptionParser is a class for command-line option analysis | <https://github.com/ruby/optparse> | 2026-05-22 | Low | Parse command line options | Most popular gem on rubygems |
 | Ruby | parallel | 2.1.0 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | parser | 3.3.11.1 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2026-05-22 | Low | Dependency | Dependency |
