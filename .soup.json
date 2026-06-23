@@ -38,7 +38,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1261.0",
+    "version": "1.1262.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.156.0",
+    "version": "1.157.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -110,7 +110,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.624.0",
+    "version": "1.625.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -158,7 +158,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.184.0",
+    "version": "1.185.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -314,9 +314,9 @@
   "json": {
     "language": "Ruby",
     "package": "json",
-    "version": "2.19.9",
+    "version": "2.20.0",
     "license": "Ruby",
-    "description": "This is a JSON implementation as a Ruby extension in C.",
+    "description": "A JSON implementation as a JRuby extension.",
     "website": "https://github.com/ruby/json",
     "last_verified_at": "2026-05-22",
     "risk_level": "Low",
