@@ -5,17 +5,17 @@
 | Ruby | addressable | 2.9.0 | Apache-2.0 | Addressable is an alternative implementation to the URI implementation that is | <https://github.com/sporkmonger/addressable> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | ast | 2.4.3 | MIT | A library for working with Abstract Syntax Trees. | <https://whitequark.github.io/ast/> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | aws-eventstream | 1.4.0 | Apache-2.0 | Amazon Web Services event stream library | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Dependency | Dependency |
-| Ruby | aws-partitions | 1.1262.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Dependency | Dependency |
-| Ruby | aws-sdk-autoscaling | 1.161.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-cloudformation | 1.154.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-partitions | 1.1265.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Dependency | Dependency |
+| Ruby | aws-sdk-autoscaling | 1.162.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-cloudformation | 1.155.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.150.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudwatchlogs | 1.157.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.252.0 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-ec2 | 1.625.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-ec2 | 1.628.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.153.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.148.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | High | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-kms | 1.129.0 | Apache-2.0 | Official AWS Ruby gem for AWS Key Management Service (KMS) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | High | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-lambda | 1.185.0 | Apache-2.0 | Official AWS Ruby gem for AWS Lambda | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-lambda | 1.186.0 | Apache-2.0 | Official AWS Ruby gem for AWS Lambda | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-ssm | 1.216.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sigv4 | 1.12.1 | Apache-2.0 | Amazon Web Services Signature Version 4 signing library | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | base64 | 0.3.0 | Ruby | Support for encoding and decoding binary data using a Base64 representation. | <https://github.com/ruby/base64> | 2026-05-22 | Low | Dependency | Dependency |
@@ -29,7 +29,7 @@
 | Ruby | iniparse | 1.5.0 | MIT | A pure Ruby library for parsing INI documents | <http://github.com/antw/iniparse> | 2026-05-22 | Medium | Parse AWS credentials INI files for key rotation | Actively maintained Ruby INI file parser used for reading and writing AWS credentials |
 | Ruby | jmespath | 1.6.2 | Apache-2.0 | Implements JMESPath for Ruby | <http://github.com/trevorrowe/jmespath.rb> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | json | 2.20.0 | Ruby | A JSON implementation as a JRuby extension. | <https://github.com/ruby/json> | 2026-05-22 | Low | Dependency | Dependency |
-| Ruby | language_server-protocol | 3.17.0.5 | MIT | A Language Server Protocol SDK | <https://github.com/mtsmfm/language_server-protocol-ruby> | 2026-05-22 | Low | Dependency | Dependency |
+| Ruby | language_server-protocol | 3.17.0.6 | MIT | A Language Server Protocol SDK | <https://github.com/mtsmfm/language_server-protocol-ruby> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | lint_roller | 1.1.0 | MIT | A plugin specification for linter and formatter rulesets | <https://github.com/standardrb/lint_roller> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | logger | 1.7.0 | Ruby | Provides a simple logging utility for outputting messages. | <https://github.com/ruby/logger> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | mini_mime | 1.1.5 | MIT | A minimal mime type library | <https://github.com/discourse/mini_mime> | 2026-05-22 | Low | Dependency | Dependency |
@@ -49,7 +49,7 @@
 | Ruby | rspec-expectations | 3.13.5 | MIT | rspec-expectations provides a simple, readable API to express expected outcomes of a code example. | <https://rspec.info> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | rspec-mocks | 3.13.8 | MIT | RSpec's 'test double' framework, with support for stubbing and mocking | <https://rspec.info> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | rspec-support | 3.13.7 | MIT | Support utilities for RSpec gems | <https://rspec.info> | 2026-05-22 | Low | Dependency | Dependency |
-| Ruby | rubocop | 1.88.0 | MIT | RuboCop is a Ruby code style checking and code formatting tool. | <https://rubocop.org/> | 2026-05-22 | Low | Ruby linter | Most popular gem on rubygems |
+| Ruby | rubocop | 1.88.1 | MIT | RuboCop is a Ruby code style checking and code formatting tool. | <https://rubocop.org/> | 2026-05-22 | Low | Ruby linter | Most popular gem on rubygems |
 | Ruby | rubocop-ast | 1.49.1 | MIT | RuboCop's Node and NodePattern classes. | <https://www.rubocop.org/> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | rubocop-capybara | 3.0.0 | MIT | Code style checking for Capybara test files (RSpec, Cucumber, Minitest). | <https://github.com/rubocop/rubocop-capybara> | 2026-05-22 | Low | Ruby linter | Most popular gem |
 | Ruby | rubocop-graphql | 1.6.0 | MIT | A collection of RuboCop cops to improve GraphQL-related code | <https://github.com/DmitryTsepelev/rubocop-graphql> | 2026-05-22 | Low | Ruby linter | Most popular gem |
