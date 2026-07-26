@@ -91,10 +91,14 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Key Components:**
 
+- `poll_until`: Shared polling helper that raises after `MAX_POLL_ATTEMPTS` (120) attempts at `POLL_INTERVAL` (15 s) spacing
 - `wait_for_healthy_instances`: Polls ELB target group health status until all instances are healthy
 - `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count
 - `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
 - `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
+- `mark_cfn_secrets_for_previous_value!`: Flags the parameters listed in `CFN_SECRET_PARAMETERS` as `use_previous_value` so secrets are never re-sent to CloudFormation
+- `create_ami`: Creates an AMI from the standalone instance and waits on `Aws::EC2::Waiters::ImageAvailable`
+- `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
 
 **Functionality:**
@@ -102,6 +106,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Creates EC2 AMIs from standalone instances
 - Updates CloudFormation stack parameters via SSM
 - Captures SSM parameter snapshots and restores them if the CloudFormation update fails
+- Preserves existing values for secret CloudFormation parameters instead of transmitting them
 - Manages ASG desired capacity with blue/green deployment pattern
 - Restores ASG mixed-instances policy via an `ensure` block even if scaling fails
 - Publishes Lambda versions and updates CloudFront distributions
@@ -216,12 +221,14 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 - Instance lookup by IP, instance ID, or Name tag
 - Port forwarding and SSH proxy support
+- Configurable SSM document name (`--document`, default `AWS-StartPortForwardingSessionToRemoteHost`)
 
 **Functionality:**
 
 - Resolves EC2 instances by private IP, instance ID, or Name tag
-- Supports TCP tunneling via port forwarding
-- Can be used as SSH ProxyCommand for seamless SSH integration
+- Supports TCP tunneling via port forwarding (`--forward host:remote_port:local_port`)
+- Can be used as SSH ProxyCommand for seamless SSH integration (switches to `AWS-StartSSHSession`)
+- Builds the SSM `--parameters` payload with `jq` to prevent JSON injection
 - Interactive instance selection when multiple matches found
 
 **Internal Dependencies:** None
@@ -328,6 +335,38 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **External Dependencies:** optparse
 
+### Dockerfile
+
+**Purpose:** Builds the container image that ships the toolkit and its runtime prerequisites.
+
+**Location:** `Dockerfile`
+
+**Functionality:**
+
+- Based on `ubuntu:26.04`, installs build toolchains, Ruby/bundler, Go, `jq`, `pipx`, and SSH
+- Installs the AWS CLI and the Session Manager plugin (repackaging the upstream `.deb` to fix missing shebangs, permissions, and `seelog.xml`)
+- Creates the unprivileged `citools` user, runs `bundle install`, and symlinks each executable into `/usr/local/bin`
+
+**Internal Dependencies:** All top-level scripts, `Gemfile`/`Gemfile.lock`
+
+**External Dependencies:** Ubuntu packages, AWS CLI, Session Manager plugin
+
+### Test suites
+
+**Purpose:** Verifies the Ruby and shell tooling.
+
+**Location:** `spec/` (RSpec), `tests/` (Bats)
+
+**Key Components:**
+
+- `spec/spec_helper.rb`: Loads every Ruby script, configures SimpleCov with an 80% line and branch coverage minimum, and provides `capture_stdout`
+- `spec/*_spec.rb`: Unit specs for `brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`, and `lib/cli_main.rb`
+- `tests/*.bats`: Bats suites for `Dockerfile`, `generate-codeowners`, `linters`, `ssm-jump`, `ssm-jump.install.bat`, and `sync-jira-release`
+
+**Internal Dependencies:** All top-level scripts, `lib/cli_main.rb`
+
+**External Dependencies:** rspec, simplecov, webmock, bats
+
 ## Software of Unknown Provenance
 
 For the complete and detailed SOUP documentation, see [soup.md](soup.md).
@@ -403,18 +442,21 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 | Control               | Implementation                                     | Location                              |
 |-----------------------|----------------------------------------------------|---------------------------------------|
 | AWS Profile Selection | All scripts require explicit `--profile` parameter | All Ruby/Bash scripts                 |
-| Credential Isolation  | Uses AWS SDK profile-based authentication          | `deploy.rb` in `Aws.config.update`    |
+| Credential Isolation  | AWS SDK profile-based auth via `Aws.config.update` | `deploy.rb`, `encrypt-logs.rb`        |
 | Username Validation   | Key rotation validates username matches expected   | `cycle-keys.rb` in username check     |
 | Environment Variables | Sensitive tokens passed via environment            | `sync-jira-release` in env var check  |
 
 ### Input Validation
 
-| Control                 | Implementation                                | Location                                   |
-|-------------------------|-----------------------------------------------|--------------------------------------------|
-| Required Parameters     | OptionParser with mandatory argument checking | `parse_options!` in `lib/cli_main.rb`      |
-| Target Validation       | Regex validation for instance identifiers     | `ssm-jump` in target lookup section        |
-| Git Tag Verification    | Validates tags exist before processing        | `sync-jira-release` in git tag validation  |
-| Release Existence Check | Verifies Jira release exists before updates   | `sync-jira-release` in release check       |
+| Control                 | Implementation                                        | Location                                    |
+|-------------------------|-------------------------------------------------------|---------------------------------------------|
+| Required Parameters     | OptionParser with mandatory argument checking         | `parse_options!` in `lib/cli_main.rb`       |
+| Target Validation       | Regex validation for instance identifiers             | `ssm-jump` in target lookup section         |
+| Document Name Validation| SSM document name restricted to `[A-Za-z0-9_-]+`      | `ssm-jump` in argument validation section   |
+| Forward String Checks   | Requires exactly three parts and numeric ports        | `ssm-jump` in forward validation section    |
+| Injection-safe Payload  | SSM `--parameters` JSON built with `jq -n --arg`      | `ssm-jump` in port-forwarding section       |
+| Git Tag Verification    | Validates tags exist before processing                | `sync-jira-release` in git tag validation   |
+| Release Existence Check | Verifies Jira release exists before updates           | `sync-jira-release` in release check        |
 
 ### Error Handling
 
@@ -429,11 +471,13 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 ### Operational Safety
 
-| Control         | Implementation                                | Location                                    |
-|-----------------|-----------------------------------------------|---------------------------------------------|
-| Capacity Limits | Respects ASG max_size constraints             | `deploy.rb` in ASG update section           |
-| Health Checks   | Waits for ELB target health before proceeding | `deploy.rb` in `wait_for_healthy_instances` |
-| Warm-up Periods | Configurable sleep times for cache warming    | `deploy.rb` in cache warm-up section        |
+| Control             | Implementation                                     | Location                                              |
+|---------------------|----------------------------------------------------|-------------------------------------------------------|
+| Capacity Limits     | Respects ASG max_size constraints                  | `deploy.rb` in ASG update section                     |
+| Health Checks       | Waits for ELB target health before proceeding      | `deploy.rb` in `wait_for_healthy_instances`           |
+| Warm-up Periods     | Configurable sleep times for cache warming         | `deploy.rb` in `WARMUP_SHORT` / `WARMUP_LONG`         |
+| Polling Timeouts    | Wait loops raise after a bounded attempt count     | `deploy.rb` in `poll_until`                           |
+| Secret Preservation | CFN secrets updated with `use_previous_value`      | `deploy.rb` in `mark_cfn_secrets_for_previous_value!` |
 
 ### Logging and Monitoring
 
@@ -456,6 +500,7 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 ### Security Considerations
 
 - **No hardcoded credentials**: All authentication via AWS profiles or environment variables
+- **Secret parameters never retransmitted**: `DbPassword`, `MqPassword`, and `SendGridApiKey` are updated with `use_previous_value` rather than being read and resent
 - **Least privilege**: Scripts request only necessary AWS permissions
 - **Audit trail**: CloudFormation and SSM operations are logged by AWS
 - **Key lifecycle**: Automatic key rotation prevents credential staleness
