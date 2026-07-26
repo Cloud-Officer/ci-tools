@@ -56,6 +56,7 @@ Required by individual scripts:
 * [jq](https://jqlang.github.io/jq/) — `ssm-jump`, `generate-codeowners`
 * [GitHub CLI (`gh`)](https://cli.github.com/) — `sync-jira-release` (the `jira` CLI is auto-installed on first run)
 * [`github-build`](https://github.com/Cloud-Officer/ci-actions) — `generate-codeowners` (used to resolve ignored folders; not installed in the Docker image, so run `generate-codeowners` with `GHB_IGNORED_EXCLUDES` set instead)
+* Bash >= 4 — `linters` (macOS ships Bash 3.2; the script re-execs under a newer Bash if one is installed, otherwise install it with `brew install bash`)
 * Go and `pip3`/`python3` — `linters` (only when it self-installs Go- or pip-based linters such as actionlint, golangci-lint, protolint, cfn-lint, semgrep)
 
 Run `bundle install` to install Ruby dependencies, then run the commands.
@@ -65,6 +66,7 @@ Run `bundle install` to install Ruby dependencies, then run the commands.
 ```bash
 ruby --version
 bundle --version
+bash --version
 aws --version
 jq --version
 gh --version

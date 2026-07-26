@@ -173,8 +173,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Key Components:**
 
+- Bash 4+ bootstrap: the script uses `mapfile`, so it checks `BASH_VERSINFO` and re-execs under `/opt/homebrew/bin/bash`, `/usr/local/bin/bash`, or `/usr/bin/bash` when started by macOS's system Bash 3.2; it exits with an install hint if no Bash 4+ is found
 - File type detection based on configuration files
-- Linter installation for missing tools
+- Linter installation for missing tools (`is_darwin` selects Homebrew vs. apt/go/npm/gem, `pipx_install` isolates Python tools such as cfn-lint and semgrep because Debian 12+/Ubuntu 23.04+ mark the system Python externally managed under PEP 668)
 - Multi-linter execution with failure tracking
 - Built-in custom shell-script rules (`shell_lint_custom`) that run after shellcheck
 
@@ -209,7 +210,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **Internal Dependencies:** None
 
-**External Dependencies:** Various external linting tools (auto-installed)
+**External Dependencies:** Bash 4 or newer, plus various external linting tools (auto-installed via Homebrew, apt, pipx, npm, gem, or `go install`)
 
 ### ssm-jump
 
@@ -496,6 +497,7 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 | Key rotation failure        | Credentials unchanged | Exclusive file lock, rollback to original key       |
 | Instance lookup failure     | Connection blocked    | Clear error messages with valid alternatives        |
 | Linter installation failure | Build blocked         | Auto-installation with platform detection           |
+| Bash 3.2 on macOS           | `linters` cannot run  | Re-exec under a Bash 4+, else explicit error        |
 
 ### Security Considerations
 
