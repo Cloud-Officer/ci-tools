@@ -10,10 +10,18 @@ teardown() {
   rm -rf "${TEST_DIR}"
 }
 
-skip_unless_globstar() {
-  if ! bash -c 'shopt -s globstar' 2>/dev/null; then
-    skip "bash 4+ required for globstar support"
-  fi
+# `linters` re-execs itself under a newer bash when the ambient one predates 4.0
+# (macOS ships 3.2), so these tests don't care which bash is first on PATH -- only
+# that a modern one exists somewhere for the re-exec to land on.
+skip_unless_bash4() {
+  for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash /usr/bin/bash; do
+    # shellcheck disable=SC2016
+    if [ -x "${candidate}" ] && [ "$("${candidate}" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]; then
+      return 0
+    fi
+  done
+
+  skip "bash 4+ required (none found for linters to re-exec into)"
 }
 
 # Stubs each linter binary as a no-op shell function so the script can be
@@ -28,7 +36,7 @@ stub_all_linters() {
 }
 
 @test "passes when no config files are present" {
-  skip_unless_globstar
+  skip_unless_bash4
   run linters
   [ "$status" -eq 0 ]
   [[ "$output" == *"All checks passed"* ]]
@@ -46,7 +54,7 @@ stub_all_linters() {
 }
 
 @test "runs actionlint when workflow files are present" {
-  skip_unless_globstar
+  skip_unless_bash4
   mkdir -p .github/workflows
   echo "---" > .github/workflows/build.yml
 
@@ -60,7 +68,7 @@ stub_all_linters() {
 }
 
 @test "runs markdownlint-cli2 when its config is present" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .markdownlint-cli2.yaml
 
   function markdownlint-cli2() { echo "markdownlint invoked: $*"; }
@@ -73,7 +81,7 @@ stub_all_linters() {
 }
 
 @test "runs yamllint when its config is present" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .yamllint.yml
 
   function yamllint() { echo "yamllint invoked: $*"; }
@@ -86,14 +94,14 @@ stub_all_linters() {
 }
 
 @test "installs golangci-lint from the v2 module path on Linux" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .golangci.yml
 
   # Isolate HOME so the install branch writes into the temp dir, and trim PATH
   # to system dirs so a host-installed golangci-lint can't satisfy `command -v`
-  # and skip the auto-install branch we want to exercise. Keep a modern bash
-  # (linters needs globstar, absent from macOS /bin/bash 3.2) by symlinking the
-  # current interpreter into a private bin dir that holds no golangci-lint.
+  # and skip the auto-install branch we want to exercise. Symlink the current
+  # interpreter into a private bin dir that holds no golangci-lint so the trimmed
+  # PATH still resolves a bash for the script's shebang.
   export HOME="${TEST_DIR}/home"
   mkdir -p "${HOME}/go/bin" "${HOME}/bin"
   ln -s "$(command -v bash)" "${HOME}/bin/bash"
@@ -123,7 +131,7 @@ EOF
 }
 
 @test "installs cfn-lint via pipx (not bare pip3) on Linux" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .cfnlintrc
 
   # Isolate HOME and trim PATH (same rationale as the golangci-lint test) so the
@@ -159,7 +167,7 @@ EOF
 }
 
 @test "installs semgrep via pipx (not bare pip3) on Linux" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .semgrepignore
 
   export HOME="${TEST_DIR}/home"
@@ -189,7 +197,7 @@ EOF
 }
 
 @test "runs rubocop when its config is present" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .rubocop.yml
 
   function rubocop() { echo "rubocop invoked: $*"; }
@@ -202,7 +210,7 @@ EOF
 }
 
 @test "reports failure when a linter exits non-zero" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .yamllint.yml
 
   function yamllint() { return 1; }
@@ -214,7 +222,7 @@ EOF
 }
 
 @test "runs multiple linters when multiple configs are present" {
-  skip_unless_globstar
+  skip_unless_bash4
   mkdir -p .github/workflows
   echo "---" > .github/workflows/build.yml
   touch .yamllint.yml .rubocop.yml
@@ -230,11 +238,14 @@ EOF
 }
 
 @test "aggregates failures across linters and still reports each" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .yamllint.yml .rubocop.yml
 
   function yamllint() { return 1; }
-  function rubocop() { return 1; }
+  # rubocop is probed with `rubocop --version`, not `command -v`, so the stub has
+  # to answer that probe before failing the real run -- otherwise linters takes the
+  # auto-install branch and shells out to a real `gem install`.
+  function rubocop() { [ "${1:-}" == "--version" ] && return 0; return 1; }
   export -f yamllint rubocop
 
   run linters
@@ -245,7 +256,7 @@ EOF
 }
 
 @test "runs the built-in shell rules after shellcheck" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .shellcheckrc
   cat > clean.sh <<'SH'
 #!/usr/bin/env bash
@@ -264,7 +275,7 @@ SH
 }
 
 @test "SL0001 flags an unbraced \$var" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .shellcheckrc
   cat > script.sh <<'SH'
 #!/usr/bin/env bash
@@ -282,7 +293,7 @@ SH
 }
 
 @test "SL0002 flags a single = inside [ ... ]" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .shellcheckrc
   cat > script.sh <<'SH'
 #!/usr/bin/env bash
@@ -299,7 +310,7 @@ SH
 }
 
 @test "built-in shell rules ignore quotes, escapes and comments" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .shellcheckrc
   cat > script.sh <<'SH'
 #!/usr/bin/env bash
@@ -321,7 +332,7 @@ SH
 }
 
 @test "built-in shell rules honor # shellcheck disable=all" {
-  skip_unless_globstar
+  skip_unless_bash4
   touch .shellcheckrc
   cat > script.sh <<'SH'
 #!/usr/bin/env bash

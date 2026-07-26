@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
-shopt -s globstar
+
+# This script uses bash 4+ features (mapfile). `#!/usr/bin/env bash` resolves to
+# the first bash on PATH, which on macOS is often Apple's bash 3.2 -- /bin comes
+# before /opt/homebrew/bin whenever /usr/libexec/path_helper runs after the
+# shell profile (login sh/bash, /etc/profile, some GUI-launched tools). Re-exec
+# under a newer bash rather than failing with an obscure syntax error.
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+  for candidate in /opt/homebrew/bin/bash /usr/local/bin/bash /usr/bin/bash; do
+    # shellcheck disable=SC2016
+    if [ -x "${candidate}" ] && [ "$("${candidate}" -c 'echo ${BASH_VERSINFO[0]}')" -ge 4 ]; then
+      # ${@+"${@}"} rather than "${@}": bash 3.2 treats the braced form as an
+      # unset variable under `set -u` when there are no positional parameters.
+      exec "${candidate}" "${0}" ${@+"${@}"}
+    fi
+  done
+
+  echo "linters requires bash 4 or newer (running ${BASH_VERSION}); install it with 'brew install bash'" >&2
+  exit 1
+fi
 
 FAILED=0
 
