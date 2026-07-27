@@ -166,6 +166,107 @@ EOF
   [[ "$output" != *"pip3 install"* ]]
 }
 
+# Shared scaffolding for the hadolint Linux install branch. Stubs the download so
+# no network is touched, and makes any attempt to write under /usr/local fail the
+# way it does for a non-root user, so an unprivileged install path is required.
+stub_hadolint_download() {
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  # Force the non-Darwin (Linux) install branch.
+  function uname() { echo "Linux"; }
+
+  # The bytes the fake release download hands back: a runnable hadolint stub.
+  function write_hadolint_payload() {
+    cat > "${1}" <<'EOF'
+#!/usr/bin/env bash
+echo "hadolint invoked: $*"
+EOF
+  }
+
+  function hadolint_payload_sha() {
+    local tmp
+    tmp=$(mktemp)
+    write_hadolint_payload "${tmp}"
+
+    if command -v sha256sum &>/dev/null; then
+      sha256sum "${tmp}" | awk '{print $1}'
+    else
+      shasum -a 256 "${tmp}" | awk '{print $1}'
+    fi
+
+    rm -f "${tmp}"
+  }
+
+  # `wget -qO <dest> <url>` for the binary, `wget -qO - <url>` for the checksum.
+  # The trace goes to stderr (which bats folds into $output) so it can't pollute
+  # the checksum the script reads off this stub's stdout.
+  function wget() {
+    echo "wget invoked: $*" >&2
+
+    if [ "${2}" == "-" ]; then
+      echo "${PUBLISHED_CHECKSUM:-$(hadolint_payload_sha)}  hadolint-Linux-x86_64"
+      return 0
+    fi
+
+    case "${2}" in
+      /usr/local/*)
+        echo "wget: ${2}: Permission denied" >&2
+        return 1
+        ;;
+    esac
+
+    write_hadolint_payload "${2}"
+  }
+
+  # Record the elevated call and land the binary somewhere writable instead of
+  # /usr/local/bin, so the test never needs real root.
+  function sudo() {
+    echo "sudo invoked: $*"
+
+    if [ "${1}" == "install" ]; then
+      cp "${4}" "${HOME}/bin/hadolint"
+      chmod 0755 "${HOME}/bin/hadolint"
+    fi
+  }
+
+  export -f uname write_hadolint_payload hadolint_payload_sha wget sudo
+}
+
+@test "installs hadolint via sudo instead of writing to /usr/local/bin directly" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  stub_hadolint_download
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Checking Dockerfiles..."* ]]
+  # The download must land in a user-writable temp file, never straight into /usr/local/bin.
+  [[ "$output" != *"wget invoked: -qO /usr/local/bin/hadolint"* ]]
+  [[ "$output" == *"sudo invoked: install -m 0755"* ]]
+  [[ "$output" == *"/usr/local/bin/hadolint"* ]]
+  [[ "$output" != *"Permission denied"* ]]
+  [[ "$output" == *"hadolint invoked: ./Dockerfile"* ]]
+  [[ "$output" == *"All checks passed"* ]]
+}
+
+@test "aborts the hadolint install when the published checksum does not match" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  stub_hadolint_download
+  export PUBLISHED_CHECKSUM="0000000000000000000000000000000000000000000000000000000000000000"
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Checksum verification failed for hadolint"* ]]
+  [[ "$output" == *"Expected: ${PUBLISHED_CHECKSUM}"* ]]
+  # Nothing is elevated or executed once verification fails.
+  [[ "$output" != *"sudo invoked: install"* ]]
+  [[ "$output" != *"hadolint invoked"* ]]
+}
+
 @test "installs semgrep via pipx (not bare pip3) on Linux" {
   skip_unless_bash4
   touch .semgrepignore

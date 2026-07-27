@@ -209,24 +209,30 @@ if [ -f .hadolint.yaml ]; then
     if is_darwin; then
       brew install hadolint
     else
-      wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
+      # Download to a temp file the current user can always write, verify it, then
+      # elevate only for the move into /usr/local/bin -- writing there directly
+      # fails for every non-root user (the project image runs as `citools`), and
+      # the other Linux branches elevate the same way (sudo apt-get, sudo sh -s).
+      HADOLINT_TMP=$(mktemp)
+      wget -qO "${HADOLINT_TMP}" https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
       EXPECTED_CHECKSUM=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64.sha256 | awk '{print $1}')
 
       if command -v sha256sum &> /dev/null; then
-        ACTUAL_CHECKSUM=$(sha256sum /usr/local/bin/hadolint | awk '{print $1}')
+        ACTUAL_CHECKSUM=$(sha256sum "${HADOLINT_TMP}" | awk '{print $1}')
       else
-        ACTUAL_CHECKSUM=$(shasum -a 256 /usr/local/bin/hadolint | awk '{print $1}')
+        ACTUAL_CHECKSUM=$(shasum -a 256 "${HADOLINT_TMP}" | awk '{print $1}')
       fi
 
       if [ "${EXPECTED_CHECKSUM}" != "${ACTUAL_CHECKSUM}" ]; then
         echo "Error: Checksum verification failed for hadolint!"
         echo "Expected: ${EXPECTED_CHECKSUM}"
         echo "Actual:   ${ACTUAL_CHECKSUM}"
-        rm -f /usr/local/bin/hadolint
+        rm -f "${HADOLINT_TMP}"
         exit 1
       fi
 
-      chmod +x /usr/local/bin/hadolint
+      sudo install -m 0755 "${HADOLINT_TMP}" /usr/local/bin/hadolint
+      rm -f "${HADOLINT_TMP}"
     fi
   fi
 
