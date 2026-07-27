@@ -465,7 +465,7 @@ def run_deployment(options)
 end
 
 def parse_deploy_options(argv = ARGV)
-  CliMain.parse_options!(banner: 'Usage: deploy.rb options', mandatory: %i[environment instance profile], argv: argv) do |opts|
+  CliMain.parse_options!(mandatory: %i[environment instance profile], argv: argv) do |opts|
     opts.on('--ami ami', String)
     opts.on('--create_ami_only')
     opts.on('--environment environment', String)

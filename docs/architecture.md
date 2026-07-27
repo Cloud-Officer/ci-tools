@@ -326,6 +326,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 - `CliMain.run!`: Wraps a script's main block; rescues uncaught `StandardError`, prints the full message and backtrace (including the cause chain) to STDERR, and exits with status 1
 - `CliMain.parse_options!`: Builds an `OptionParser` (with banner and caller-supplied `opts.on` definitions), parses argv into an options hash, then raises `OptionParser::MissingArgument` if any mandatory keys are absent
+- `CliMain.default_banner`: Derives the usage banner from `File.basename($PROGRAM_NAME)` so `--help` names the command as invoked (including the suffix-less `/usr/local/bin` symlinks created by the Dockerfile); scripts omit `banner:` and inherit it
 
 **Functionality:**
 

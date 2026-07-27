@@ -77,5 +77,47 @@ RSpec.describe(CliMain) do
         end.to(output(/Usage: x/).to_stdout)
       end
     end
+
+    def parse_with_default_banner(argv)
+      described_class.parse_options!(mandatory: %i[name], argv: argv) do |opts|
+        opts.on('--name name', String)
+      end
+    end
+
+    it 'defaults the banner to the invoked command name', :aggregate_failures do
+      output = help_output_with_program_name('/usr/local/bin/deploy') { parse_with_default_banner(%w[--help]) }
+      expect(output).to(include('Usage: deploy options'))
+      expect(output).not_to(include('deploy.rb'))
+    end
+
+    it 'follows the program name of a symlink without the .rb suffix' do
+      output = help_output_with_program_name('/usr/local/bin/cycle-keys') { parse_with_default_banner(%w[--help]) }
+      expect(output).to(include('Usage: cycle-keys options'))
+    end
+
+    def parse_with_banner_override(argv)
+      described_class.parse_options!(banner: 'Usage: custom banner', mandatory: %i[name], argv: argv) do |opts|
+        opts.on('--name name', String)
+      end
+    end
+
+    it 'still honours an explicit banner override' do
+      output = help_output_with_program_name('/usr/local/bin/deploy') { parse_with_banner_override(%w[--help]) }
+      expect(output).to(include('Usage: custom banner'))
+    end
+
+    it 'parses normally when the banner is omitted' do
+      expect(parse_with_default_banner(%w[--name foo])).to(eq(name: 'foo'))
+    end
+  end
+
+  describe '.default_banner' do
+    it 'renders the basename of the running program' do
+      original = $PROGRAM_NAME
+      $PROGRAM_NAME = '/opt/ci-tools/encrypt-logs.rb'
+      expect(described_class.default_banner).to(eq('Usage: encrypt-logs.rb options'))
+    ensure
+      $PROGRAM_NAME = original
+    end
   end
 end

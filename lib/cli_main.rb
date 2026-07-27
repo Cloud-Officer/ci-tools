@@ -18,10 +18,20 @@ module CliMain
     exit(1)
   end
 
+  # Usage banner derived from the name the CLI was actually invoked as. The
+  # Dockerfile symlinks the scripts into /usr/local/bin without their .rb
+  # suffix, so a hardcoded banner would name a command that does not exist on
+  # PATH; $PROGRAM_NAME follows the invoked symlink and stays correct in every
+  # install mode.
+  def self.default_banner
+    "Usage: #{File.basename($PROGRAM_NAME)} options"
+  end
+
   # Builds an OptionParser, hands it to the caller's block for script-specific
   # opts.on calls, parses argv, then enforces a mandatory-keys check. Returns
-  # the parsed options hash.
-  def self.parse_options!(banner:, mandatory:, argv: ARGV)
+  # the parsed options hash. Scripts should omit banner: and take the dynamic
+  # default; pass one only for a CLI whose usage line is not "<command> options".
+  def self.parse_options!(mandatory:, argv: ARGV, banner: default_banner)
     options = {}
 
     OptionParser.new do |opts|
