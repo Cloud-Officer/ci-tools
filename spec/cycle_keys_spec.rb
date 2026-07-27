@@ -232,6 +232,12 @@ RSpec.describe(CycleKeys) do
         end.to(output.to_stdout)
       end
     end
+
+    it 'derives the help banner from the program basename, not a hardcoded cycle-keys.rb', :aggregate_failures do
+      output = help_output_with_program_name('/usr/local/bin/cycle-keys') { parse_cycle_keys_options(%w[--help]) }
+      expect(output).to(include('Usage: cycle-keys options'))
+      expect(output).not_to(include('cycle-keys.rb'))
+    end
   end
 
   describe '#run_cycle_keys' do

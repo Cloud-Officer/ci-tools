@@ -800,6 +800,12 @@ RSpec.describe(Deploy) do
         end.to(output.to_stdout)
       end
     end
+
+    it 'derives the help banner from the program basename, not a hardcoded deploy.rb', :aggregate_failures do
+      output = help_output_with_program_name('/usr/local/bin/deploy') { parse_deploy_options(%w[--help]) }
+      expect(output).to(include('Usage: deploy options'))
+      expect(output).not_to(include('deploy.rb'))
+    end
   end
 
   describe '#warm_up_after_scale_up' do

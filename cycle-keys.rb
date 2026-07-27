@@ -203,7 +203,7 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback)
 end
 
 def parse_cycle_keys_options(argv = ARGV)
-  CliMain.parse_options!(banner: 'Usage: cycle-keys.rb options', mandatory: %i[profile username], argv: argv) do |opts|
+  CliMain.parse_options!(mandatory: %i[profile username], argv: argv) do |opts|
     opts.on('--profile profile', String)
     opts.on('--username username', String)
     opts.on('--force')
