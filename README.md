@@ -108,8 +108,8 @@ options
 #### Examples cycle-keys
 
 ```bash
-cycle-keys.rb --profile in --username tommy.lacroix@innodemneurosciences.com
-cycle-keys.rb --profile in --username tommy.lacroix@innodemneurosciences.com --force
+cycle-keys.rb --profile in --username user@example.com
+cycle-keys.rb --profile in --username user@example.com --force
 ```
 
 ### deploy
@@ -219,20 +219,20 @@ Options:
 
 ```bash
 ssm-jump --profile ugm worker-prod3-spot
-1     i-05a1299ac6942915a    10.3.150.60     worker-prod3-spot
-2     i-0767bc8d4f0505ef8    10.3.114.146    worker-prod3-spot
-3     i-08faa37782eb6a279    10.3.126.153    worker-prod3-spot
-4     i-091454d577ed6c632    10.3.127.49     worker-prod3-spot
-5     i-09adac7717d3122f9    10.3.159.203    worker-prod3-spot
-6     i-0a3ed31cc89a39e4d    10.3.114.233    worker-prod3-spot
-7     i-0a9c1e2d785dcc596    10.3.151.75     worker-prod3-spot
-8     i-0c94fdc1b712d263d    10.3.158.156    worker-prod3-spot
-9     i-0dcf7c304f2683112    10.3.113.9      worker-prod3-spot
+1     i-0123456789abcdef0    10.0.0.1        worker-prod3-spot
+2     i-0123456789abcdef1    10.0.0.2        worker-prod3-spot
+3     i-0123456789abcdef2    10.0.0.3        worker-prod3-spot
+4     i-0123456789abcdef3    10.0.0.4        worker-prod3-spot
+5     i-0123456789abcdef4    10.0.0.5        worker-prod3-spot
+6     i-0123456789abcdef5    10.0.0.6        worker-prod3-spot
+7     i-0123456789abcdef6    10.0.0.7        worker-prod3-spot
+8     i-0123456789abcdef7    10.0.0.8        worker-prod3-spot
+9     i-0123456789abcdef8    10.0.0.9        worker-prod3-spot
 Connect to what line ?
 ```
 
 ```bash
-ssm-jump --profile ugm worker-prod3-standalone --forward "api-db-slave-prod3.portablenorthpole.com:6033:6033"
+ssm-jump --profile ugm worker-prod3-standalone --forward "db.example.com:6033:6033"
 ```
 
 ##### Use as an SSH ProxyCommand
