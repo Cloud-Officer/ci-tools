@@ -79,7 +79,7 @@ if ! echo "${document}" | grep -qE '^[A-Za-z0-9_-]+$'; then
   fatal "Invalid document name: ${document}"
 fi
 
-if [ ! -z "${forward}" ]; then
+if [ -n "${forward}" ]; then
   IFS=":" read -a forward_array <<< "${forward}"
   if [ ${#forward_array[@]} -ne 3 ]; then
     fatal "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
@@ -102,7 +102,7 @@ if [ -n "${filter}" ]; then
   instances="$(aws --profile "${profile}" ec2 describe-instances --filters "Name=instance-state-name,Values=running" "${filter}" --query "Reservations[*].Instances[*].{a: InstanceId, b: PrivateIpAddress, c: Tags[?Key=='Name'] | [0].Value}" --output text | sort -n)"
 
   if [ -z "${instances}" ]; then
-	fatal "Unable to detect any instance for target ${target}"
+    fatal "Unable to detect any instance for target ${target}"
   fi
 fi
 
