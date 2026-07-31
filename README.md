@@ -102,7 +102,7 @@ options
         --profile profile
         --username username
         --force
-    -h, --help
+    -h, --help                       Print this help message
 ```
 
 #### Examples cycle-keys
@@ -132,7 +132,7 @@ options
         --preserve_desired_capacity
         --skip_scale_down
         --spot_target_capacity spot_target_capacity
-    -h, --help
+    -h, --help                       Print this help message
 ```
 
 #### Examples deploy
@@ -157,7 +157,7 @@ Usage: encrypt-logs.rb options
 options
         --profile profile
         --retention_in_days retention_in_days
-    -h, --help
+    -h, --help                       Print this help message
 ```
 
 #### Examples encrypt-logs
@@ -302,7 +302,7 @@ Prerequisites:
 
 * Both git tags must exist in the repository
 * The Jira release must already exist in Jira
-* Repository must have a `.github/pull_request_template.md` file containing the Jira project key pattern (e.g., `[DEV-XXXX]`)
+* Repository must have a pull request template containing the Jira project key pattern (e.g., `[DEV-XXXX]`) — `pull_request_template.md` or `PULL_REQUEST_TEMPLATE.md`, in `.github/` or at the repository root
 * Pull request descriptions should contain Jira issue keys in the format `PROJECT-NUMBER`
 
 The tool will:
