@@ -176,6 +176,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Bash 4+ bootstrap: the script uses `mapfile`, so it checks `BASH_VERSINFO` and re-execs under `/opt/homebrew/bin/bash`, `/usr/local/bin/bash`, or `/usr/bin/bash` when started by macOS's system Bash 3.2; it exits with an install hint if no Bash 4+ is found
 - File type detection based on configuration files
 - Linter installation for missing tools (`is_darwin` selects Homebrew vs. apt/go/npm/gem, `pipx_install` isolates Python tools such as cfn-lint and semgrep because Debian 12+/Ubuntu 23.04+ mark the system Python externally managed under PEP 668)
+- Checksum-verified binary install for hadolint on Linux: the release binary is downloaded to a temporary file, compared against the published `.sha256`, and only then moved into `/usr/local/bin` with `sudo install -m 0755` (the container runs as the unprivileged `citools` user, so a direct write would fail)
 - Multi-linter execution with failure tracking
 - Built-in custom shell-script rules (`shell_lint_custom`) that run after shellcheck
 
@@ -274,6 +275,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **Functionality:**
 
+- Installs the Jira CLI when missing, resolving the latest release, downloading the platform archive, and verifying its SHA256 against the published `checksums.txt` before extraction
 - Extracts Jira project key from PR template
 - Finds all PRs between two git tags
 - Extracts Jira issue keys from PR descriptions
@@ -325,7 +327,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 **Key Components:**
 
 - `CliMain.run!`: Wraps a script's main block; rescues uncaught `StandardError`, prints the full message and backtrace (including the cause chain) to STDERR, and exits with status 1
-- `CliMain.parse_options!`: Builds an `OptionParser` (with banner and caller-supplied `opts.on` definitions), parses argv into an options hash, then raises `OptionParser::MissingArgument` if any mandatory keys are absent
+- `CliMain.parse_options!`: Builds an `OptionParser` (with banner and caller-supplied `opts.on` definitions), registers a uniform `-h`/`--help` handler that prints usage and exits 0 (scripts must not redefine it), parses argv into an options hash, then raises `OptionParser::MissingArgument` if any mandatory keys are absent
 - `CliMain.default_banner`: Derives the usage banner from `File.basename($PROGRAM_NAME)` so `--help` names the command as invoked (including the suffix-less `/usr/local/bin` symlinks created by the Dockerfile); scripts omit `banner:` and inherit it
 
 **Functionality:**
@@ -347,7 +349,9 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 - Based on `ubuntu:26.04`, installs build toolchains, Ruby/bundler, Go, `jq`, `pipx`, and SSH
 - Installs the AWS CLI and the Session Manager plugin (repackaging the upstream `.deb` to fix missing shebangs, permissions, and `seelog.xml`)
-- Creates the unprivileged `citools` user, runs `bundle install`, and symlinks each executable into `/usr/local/bin`
+- Creates the unprivileged `citools` user with a pinned uid/gid of 1001 (the base image already ships `ubuntu` at 1000, so an unpinned `useradd` could drift), grants it passwordless sudo, and adds `ubuntu` to the `citools` group
+- Runs `bundle install` and symlinks each executable into `/usr/local/bin` without its `.rb` suffix
+- Declares a `HEALTHCHECK` in JSON form with an explicit `/bin/sh -c` (hadolint DL3025) and runs as the numeric uid `1001` rather than the name `citools` (hadolint DL3066), so a host or orchestrator matching by uid can resolve it
 
 **Internal Dependencies:** All top-level scripts, `Gemfile`/`Gemfile.lock`
 
@@ -363,7 +367,8 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 - `spec/spec_helper.rb`: Loads every Ruby script, configures SimpleCov with an 80% line and branch coverage minimum, and provides `capture_stdout`
 - `spec/*_spec.rb`: Unit specs for `brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`, and `lib/cli_main.rb`
-- `tests/*.bats`: Bats suites for `Dockerfile`, `generate-codeowners`, `linters`, `ssm-jump`, `ssm-jump.install.bat`, and `sync-jira-release`
+- `tests/*.bats`: Bats suites for `Dockerfile`, `generate-codeowners`, `linters`, `README.md`, `ssm-jump`, `ssm-jump.install.bat`, and `sync-jira-release`
+- `tests/readme.bats`: Guards the publicly published README against real email addresses, EC2 instance ids, and hostnames, which would leak personal data and client infrastructure
 
 **Internal Dependencies:** All top-level scripts, `lib/cli_main.rb`
 
@@ -460,6 +465,15 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 | Git Tag Verification    | Validates tags exist before processing                | `sync-jira-release` in git tag validation   |
 | Release Existence Check | Verifies Jira release exists before updates           | `sync-jira-release` in release check        |
 
+### Supply Chain Integrity
+
+| Control                | Implementation                                                                | Location                                   |
+|------------------------|-------------------------------------------------------------------------------|--------------------------------------------|
+| hadolint Checksum      | Compares the download against the published `.sha256`, aborts on mismatch     | `linters` in the hadolint install branch   |
+| Jira CLI Checksum      | Verifies the release archive SHA256 against `checksums.txt`                   | `sync-jira-release` in the install section |
+| Session Manager Plugin | Repackages the upstream `.deb` to fix shebangs, permissions, and `seelog.xml` | `Dockerfile` in the AWS dependencies stage |
+| Least-privilege Image  | Container runs as the pinned numeric uid `1001`, not root                     | `Dockerfile` in the final `USER` directive |
+
 ### Error Handling
 
 | Control                | Implementation                                    | Location                                     |
@@ -508,3 +522,5 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 - **Audit trail**: CloudFormation and SSM operations are logged by AWS
 - **Key lifecycle**: Automatic key rotation prevents credential staleness
 - **Encryption at rest**: KMS encryption for CloudWatch logs
+- **Verified downloads**: Third-party binaries fetched at install time (hadolint, Jira CLI) are SHA256-verified against publisher-provided checksums before being placed on `PATH`
+- **No production identifiers in published docs**: `tests/readme.bats` fails the build if the README contains real emails, instance ids, or hostnames
