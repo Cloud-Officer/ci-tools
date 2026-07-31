@@ -18,3 +18,20 @@ setup() {
 @test "installs golang (required by linters actionlint/golangci-lint/protolint self-install)" {
   grep -qE '^[[:space:]]*golang[[:space:]]*\\?$' "${DOCKERFILE}"
 }
+
+# hadolint 2.15 turned two long-standing spellings in this file into build
+# failures, and the Docker Linter job runs at LEVEL=info with FAIL_LEVEL=any, so
+# either one reappearing blocks every PR in the repo. These pin the fixed form.
+
+@test "every USER is a numeric uid (hadolint DL3066)" {
+  ! grep -qE '^USER[[:space:]]+[^0-9]' "${DOCKERFILE}"
+}
+
+@test "the citools uid is pinned so the numeric USER cannot drift" {
+  grep -qE 'useradd .*-u 1001' "${DOCKERFILE}"
+  grep -qE '^USER 1001$' "${DOCKERFILE}"
+}
+
+@test "HEALTHCHECK uses JSON notation (hadolint DL3025)" {
+  grep -qE '^HEALTHCHECK .* CMD \[' "${DOCKERFILE}"
+}
