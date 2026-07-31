@@ -68,20 +68,26 @@ RUN \
 	dpkg -i session-manager-plugin.patched.deb && \
 	rm -rf ./aws/ awscliv2.zip session-manager-plugin*deb
 
-# Add user/group citools and add ubuntu user to that group
-RUN useradd -m -s /bin/bash citools && echo 'citools ALL=(ALL) NOPASSWD:ALL' >>/etc/sudoers && adduser ubuntu citools
+# Add user/group citools and add ubuntu user to that group. The uid/gid are
+# pinned so the numeric USER below cannot drift: ubuntu:26.04 already ships an
+# `ubuntu` user at 1000, so an unpinned useradd lands on 1001 today, but that is
+# a property of the base image's account list rather than a guarantee.
+RUN groupadd -g 1001 citools && useradd -m -u 1001 -g 1001 -s /bin/bash citools && echo 'citools ALL=(ALL) NOPASSWD:ALL' >>/etc/sudoers && adduser ubuntu citools
 
 # Copy the checked-out source (build context is the tagged commit; .git excluded via .dockerignore)
 COPY . /home/citools/ci-tools
 
-# Install ci-tools dependencies and create a symlink
-USER root
+# Install ci-tools dependencies and create a symlink. Numeric uid (DL3066).
+USER 0
 WORKDIR /home/citools/ci-tools
 RUN chown -R citools:citools . && bundle install && ln -s "/home/citools/ci-tools/brew-resources.rb" "/usr/local/bin/brew-resources" && ln -s "/home/citools/ci-tools/cycle-keys.rb" "/usr/local/bin/cycle-keys" && ln -s "/home/citools/ci-tools/deploy.rb" "/usr/local/bin/deploy" && ln -s "/home/citools/ci-tools/encrypt-logs.rb" "/usr/local/bin/encrypt-logs" && ln -s "/home/citools/ci-tools/generate-codeowners" "/usr/local/bin/generate-codeowners" && ln -s "/home/citools/ci-tools/linters" "/usr/local/bin/linters" && ln -s "/home/citools/ci-tools/ssm-jump" "/usr/local/bin/ssm-jump"
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD pgrep -x sleep || exit 1
+# Healthcheck. JSON notation with an explicit shell (DL3025): the `||` makes
+# this a shell expression, and naming /bin/sh is what the bare form did anyway.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD ["/bin/sh", "-c", "pgrep -x sleep || exit 1"]
 
-# Entrypoint
-USER citools
+# Entrypoint. Numeric uid (DL3066): a name resolves only against this image's
+# /etc/passwd, so a host or orchestrator matching by uid cannot resolve
+# `citools`. 1001 is the uid created above.
+USER 1001
 CMD ["bash", "-c", "sleep 86400"]
