@@ -76,6 +76,8 @@ You can install via [Homebrew](https://github.com/Cloud-Officer/homebrew-ci).
 
 You can use the [Docker images](https://hub.docker.com/r/ydesgagne/ci-tools).
 
+The examples below invoke the Ruby scripts by file name (`brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`), which is how they are run from a source checkout. The Homebrew formula and the Docker image put them on `PATH` without the `.rb` suffix, so use `brew-resources`, `cycle-keys`, `deploy` and `encrypt-logs` there.
+
 ## Usage
 
 ### generate-codeowners
