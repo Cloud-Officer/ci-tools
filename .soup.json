@@ -38,7 +38,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1277.0",
+    "version": "1.1279.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -50,7 +50,7 @@
   "aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.163.0",
+    "version": "1.164.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -86,7 +86,7 @@
   "aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.160.0",
+    "version": "1.161.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -98,7 +98,7 @@
   "aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.254.0",
+    "version": "3.254.1",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -110,7 +110,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.633.0",
+    "version": "1.636.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.150.0",
+    "version": "1.151.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -554,7 +554,7 @@
   "rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.88.2",
+    "version": "1.89.0",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
