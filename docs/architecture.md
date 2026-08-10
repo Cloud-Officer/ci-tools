@@ -24,13 +24,14 @@
 │  │  └─────┬─────┘  └─────┬──────┘  └──────┬──────┘  └───────┬───────┘  │   │
 │  │        │              │                │                 │          │   │
 │  │        └──────────────┴────────────────┴─────────────────┘          │   │
-│  │                              │                                      │   │
-│  │                     ┌────────▼────────┐                             │   │
-│  │                     │   AWS SDK Ruby  │                             │   │
-│  │                     │  (EC2, ASG, CF, │                             │   │
-│  │                     │  IAM, KMS, SSM, │                             │   │
-│  │                     │ Lambda, ELB,CW) │                             │   │
-│  │                     └────────┬────────┘                             │   │
+│  │                              ├──────────────────────┐               │   │
+│  │                              │                      │               │   │
+│  │                     ┌────────▼────────┐    ┌────────▼──────────┐    │   │
+│  │                     │   AWS SDK Ruby  │    │  lib/cli_main.rb  │    │   │
+│  │                     │  (EC2, ASG, CF, │    │     (CliMain)     │    │   │
+│  │                     │  IAM, KMS, SSM, │    │  shared errors +  │    │   │
+│  │                     │ Lambda, ELB,CW) │    │  option parsing   │    │   │
+│  │                     └────────┬────────┘    └───────────────────┘    │   │
 │  └──────────────────────────────┼──────────────────────────────────────┘   │
 │                                 │                                          │
 │  ┌──────────────────────────────┼──────────────────────────────────────┐   │
@@ -224,6 +225,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 - Instance lookup by IP, instance ID, or Name tag
 - Port forwarding and SSH proxy support
 - Configurable SSM document name (`--document`, default `AWS-StartPortForwardingSessionToRemoteHost`)
+- Non-interactive match selection via `--autoselect-first`, which takes the first matching instance instead of prompting
 
 **Functionality:**
 
@@ -350,7 +352,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 - Based on `ubuntu:26.04`, installs build toolchains, Ruby/bundler, Go, `jq`, `pipx`, and SSH
 - Installs the AWS CLI and the Session Manager plugin (repackaging the upstream `.deb` to fix missing shebangs, permissions, and `seelog.xml`)
 - Creates the unprivileged `citools` user with a pinned uid/gid of 1001 (the base image already ships `ubuntu` at 1000, so an unpinned `useradd` could drift), grants it passwordless sudo, and adds `ubuntu` to the `citools` group
-- Runs `bundle install` and symlinks each executable into `/usr/local/bin` without its `.rb` suffix
+- Runs `bundle install` and symlinks seven executables into `/usr/local/bin` without their `.rb` suffix (`brew-resources`, `cycle-keys`, `deploy`, `encrypt-logs`, `generate-codeowners`, `linters`, `ssm-jump`); `sync-jira-release` is copied into the image but is not placed on `PATH`
 - Declares a `HEALTHCHECK` in JSON form with an explicit `/bin/sh -c` (hadolint DL3025) and runs as the numeric uid `1001` rather than the name `citools` (hadolint DL3066), so a host or orchestrator matching by uid can resolve it
 
 **Internal Dependencies:** All top-level scripts, `Gemfile`/`Gemfile.lock`
@@ -437,8 +439,9 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 1. If target matches `i-*` pattern, use as instance ID directly
 2. If target matches IP address pattern, query by `private-ip-address`
-3. Otherwise, query by `tag:Name`
-4. Return sorted list of matching instances
+3. If target matches `^[a-z0-9\-]+$`, query by `tag:Name`
+4. Otherwise, reject the target with a fatal error
+5. Return sorted list of matching instances
 
 **Complexity:** O(n) where n is the number of matching instances
 
