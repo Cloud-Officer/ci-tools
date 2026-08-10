@@ -3,7 +3,9 @@
 ## Table of Contents
 
 * [Introduction](#introduction)
+  * [Features](#features)
 * [Installation](#installation)
+  * [Verification](#verification)
 * [Usage](#usage)
   * [generate-codeowners](#generate-codeowners)
     * [Examples](#examples)
@@ -21,6 +23,7 @@
   * [ssm-jump](#ssm-jump)
     * [Usage ssm-jump](#usage-ssm-jump)
     * [Examples ssm-jump](#examples-ssm-jump)
+      * [Use as an SSH ProxyCommand](#use-as-an-ssh-proxycommand)
     * [Windows Installation](#windows-installation)
   * [sync-jira-release](#sync-jira-release)
     * [Usage sync-jira-release](#usage-sync-jira-release)
