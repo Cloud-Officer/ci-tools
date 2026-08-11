@@ -449,12 +449,12 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 ### Authentication and Authorization
 
-| Control               | Implementation                                     | Location                              |
-|-----------------------|----------------------------------------------------|---------------------------------------|
-| AWS Profile Selection | All scripts require explicit `--profile` parameter | All Ruby/Bash scripts                 |
-| Credential Isolation  | AWS SDK profile-based auth via `Aws.config.update` | `deploy.rb`, `encrypt-logs.rb`        |
-| Username Validation   | Key rotation validates username matches expected   | `cycle-keys.rb` in username check     |
-| Environment Variables | Sensitive tokens passed via environment            | `sync-jira-release` in env var check  |
+| Control               | Implementation                                     | Location                                                    |
+|-----------------------|----------------------------------------------------|-------------------------------------------------------------|
+| AWS Profile Selection | AWS-facing scripts require an explicit `--profile` | `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`, `ssm-jump` |
+| Credential Isolation  | AWS SDK profile-based auth via `Aws.config.update` | `deploy.rb`, `encrypt-logs.rb`                              |
+| Username Validation   | Key rotation validates username matches expected   | `cycle-keys.rb` in username check                           |
+| Environment Variables | Sensitive tokens passed via environment            | `sync-jira-release` in env var check                        |
 
 ### Input Validation
 
