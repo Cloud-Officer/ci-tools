@@ -173,7 +173,7 @@ encrypt-logs.rb --profile myprofile --retention_in_days 90
 
 ### linters
 
-Detect file types and run the appropriate linter. The linters are installed if not available on the system. The script will stop at the first linter reporting error to ease error fixing.
+Detect file types and run the appropriate linter. The linters are installed if not available on the system. The script runs every applicable linter, prints `Some checks failed.` and exits with status 1 if any of them reported an error.
 
 When a `.shellcheckrc` is present, shell scripts are checked with `shellcheck` and then with built-in rules that shellcheck does not cover:
 
