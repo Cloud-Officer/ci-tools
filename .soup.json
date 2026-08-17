@@ -38,7 +38,7 @@
   "aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1279.0",
+    "version": "1.1281.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -50,7 +50,7 @@
   "aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.164.0",
+    "version": "1.165.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -134,7 +134,7 @@
   "aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.151.0",
+    "version": "1.152.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -614,7 +614,7 @@
   "rubocop-performance": {
     "language": "Ruby",
     "package": "rubocop-performance",
-    "version": "1.26.1",
+    "version": "1.27.0",
     "license": "MIT",
     "description": "A collection of RuboCop cops to check for performance optimizations",
     "website": "https://docs.rubocop.org/rubocop-performance/",
@@ -662,7 +662,7 @@
   "simplecov": {
     "language": "Ruby",
     "package": "simplecov",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "license": "MIT",
     "description": "Code coverage for Ruby with a powerful configuration library and automatic merging of coverage across test suites",
     "website": "https://github.com/simplecov-ruby/simplecov",
