@@ -74,7 +74,7 @@
   "aws-sdk-cloudfront": {
     "language": "Ruby",
     "package": "aws-sdk-cloudfront",
-    "version": "1.151.0",
+    "version": "1.152.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -110,7 +110,7 @@
   "aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.636.0",
+    "version": "1.638.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -158,7 +158,7 @@
   "aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.192.0",
+    "version": "1.193.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
@@ -590,7 +590,7 @@
   "rubocop-graphql": {
     "language": "Ruby",
     "package": "rubocop-graphql",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "license": "MIT",
     "description": "A collection of RuboCop cops to improve GraphQL-related code",
     "website": "https://github.com/DmitryTsepelev/rubocop-graphql",
@@ -698,7 +698,7 @@
   "webmock": {
     "language": "Ruby",
     "package": "webmock",
-    "version": "3.26.2",
+    "version": "3.26.3",
     "license": "MIT",
     "description": "WebMock allows stubbing HTTP requests and setting expectations on HTTP requests.",
     "website": "https://github.com/bblimke/webmock",
