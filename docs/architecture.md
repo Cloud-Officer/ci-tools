@@ -49,6 +49,21 @@
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                     Windows Installer                               │   │
+│  │  ┌──────────────────────┐                                           │   │
+│  │  │ ssm-jump.install.bat │  winget: AWS CLI, SSM plugin, Git bash    │   │
+│  │  └──────────────────────┘  desktop shortcut that runs ssm-jump      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                     Quality Gates                                   │   │
+│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────┐    │   │
+│  │  │ spec/ (RSpec) │  │ tests/ (Bats) │  │  .github/workflows/   │    │   │
+│  │  │ Ruby unit spec│  │ shell + Docker│  │ build, docker, deps   │    │   │
+│  │  └───────────────┘  └───────────────┘  └───────────────────────┘    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                     Distribution Methods                            │   │
 │  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────┐    │   │
 │  │  │    Docker     │  │   Homebrew    │  │   Direct Execution    │    │   │
@@ -80,6 +95,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - **Ruby scripts** share `lib/cli_main.rb` (the `CliMain` module) for top-level error handling and command-line option parsing
 - **Bash scripts** utilize external CLI tools (AWS CLI, GitHub CLI, Jira CLI) for service integration
 - **Linters script** orchestrates multiple language-specific linting tools
+- **Windows installer** (`ssm-jump.install.bat`) provisions the `ssm-jump` prerequisites with `winget` and writes a desktop launcher
 - **GitHub Actions workflows** lint, scan, and test every pull request, and publish the Docker image on tag pushes
 - **Distribution** is supported via Docker containers, Homebrew formulas, or direct Ruby bundler installation
 
@@ -179,7 +195,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - File type detection based on configuration files
 - Linter installation for missing tools (`is_darwin` selects Homebrew vs. apt/go/npm/gem, `pipx_install` isolates Python tools such as cfn-lint and semgrep because Debian 12+/Ubuntu 23.04+ mark the system Python externally managed under PEP 668)
 - Checksum-verified binary install for hadolint on Linux: the release binary is downloaded to a temporary file, compared against the published `.sha256`, and only then moved into `/usr/local/bin` with `sudo install -m 0755` (the container runs as the unprivileged `citools` user, so a direct write would fail)
-- Multi-linter execution with failure tracking
+- `find_lintable`: Shared `find` filter that excludes `vendor/`, `node_modules/`, and `Libraries/` from file discovery
+- `sudo_for_user_command`: Emits `sudo` or an empty string depending on whether the target tool's install prefix is user-writable
+- Multi-linter execution with failure tracking: every linter runs even after an earlier one fails, and `FAILED` is checked once at the end
 - Built-in custom shell-script rules (`shell_lint_custom`) that run after shellcheck
 
 **Supported Linters:**
@@ -295,6 +313,13 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **Location:** `generate-codeowners`
 
+**Key Components:**
+
+- Positional arguments: build/deploy file owners (`$1`) and default owners (`$2`), both rejected when empty
+- `IGNORED_EXCLUDES`: `find` exclusion array built from `github-build --get_ignored_folders`, overridable in tests via `GHB_IGNORED_EXCLUDES`
+- `check_file`: Adds a per-pattern entry (`*.sh`, `Dockerfile`) only when at least one matching file exists
+- Custom section preservation: `awk` extracts the lines between `# custom start` and `# custom end` before the file is rewritten
+
 **Functionality:**
 
 - Creates CODEOWNERS file with default owner assignments
@@ -310,6 +335,12 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 **Purpose:** Generates Homebrew formula resource blocks from Gemfile.lock.
 
 **Location:** `brew-resources.rb`
+
+**Key Components:**
+
+- `fetch_gem_sha256`: Downloads the `.gem` from RubyGems over HTTParty and hashes it with `Digest::SHA256`
+- `format_resource`: Emits the Homebrew `resource` block, branching on `spec.platform` to produce `on_macos`/`on_linux` and `on_arm`/`on_intel` variants
+- `run_brew_resources`: Parses `Gemfile.lock` through `Bundler::LockfileParser` and emits one resource per spec
 
 **Functionality:**
 
