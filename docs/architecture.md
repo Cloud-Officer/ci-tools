@@ -195,7 +195,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - File type detection based on configuration files
 - Linter installation for missing tools (`is_darwin` selects Homebrew vs. apt/go/npm/gem, `pipx_install` isolates Python tools such as cfn-lint and semgrep because Debian 12+/Ubuntu 23.04+ mark the system Python externally managed under PEP 668)
 - Checksum-verified binary install for hadolint on Linux: the release binary is downloaded to a temporary file, compared against the published `.sha256`, and only then moved into `/usr/local/bin` with `sudo install -m 0755` (the container runs as the unprivileged `citools` user, so a direct write would fail)
-- `find_lintable`: Shared `find` filter that excludes `vendor/`, `node_modules/`, and `Libraries/` from file discovery
+- `find_lintable`: Shared `find` filter that excludes the dependency and build output directories (`vendor/`, `node_modules/`, `Libraries/`, `Pods/`, `.build/`, `Carthage/`, `DerivedData/`, `venv/`, `.venv/`, `dist/`, `build/`, `target/`) from file discovery
 - `sudo_for_user_command`: Emits `sudo` or an empty string depending on whether the target tool's install prefix is user-writable
 - Multi-linter execution with failure tracking: every linter runs even after an earlier one fails, and `FAILED` is checked once at the end
 - Built-in custom shell-script rules (`shell_lint_custom`) that run after shellcheck
@@ -424,7 +424,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 **Functionality:**
 
 - Gates pull requests on the same linters the `linters` script runs locally, so local and CI results agree
-- Runs both test suites on pull requests and pushes to `master`, release branches, and tags
+- Runs both test suites on pull requests and pushes to `master`, release branches (`[0-9]*`), `dependabot/**`, and tags
 - Keeps `Gemfile.lock` and `.soup.json` current through the scheduled dependency job
 
 **Internal Dependencies:** `linters`, `spec/`, `tests/`, `Dockerfile`
