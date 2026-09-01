@@ -175,8 +175,15 @@ stub_hadolint_download() {
   ln -s "$(command -v bash)" "${HOME}/bin/bash"
   export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
 
-  # Force the non-Darwin (Linux) install branch.
-  function uname() { echo "Linux"; }
+  # Force the non-Darwin (Linux) install branch. `uname -m` has to answer too:
+  # the asset name is now arch-suffixed. STUB_ARCH lets a test pick the machine.
+  function uname() {
+    if [ "${1}" == "-m" ]; then
+      echo "${STUB_ARCH:-x86_64}"
+    else
+      echo "Linux"
+    fi
+  }
 
   # The bytes the fake release download hands back: a runnable hadolint stub.
   function write_hadolint_payload() {
@@ -207,7 +214,11 @@ EOF
     echo "wget invoked: $*" >&2
 
     if [ "${2}" == "-" ]; then
-      echo "${PUBLISHED_CHECKSUM:-$(hadolint_payload_sha)}  hadolint-Linux-x86_64"
+      local sha="${PUBLISHED_CHECKSUM:-$(hadolint_payload_sha)}"
+      # Mirrors the real checksums.sha256: every asset, one per line, "<hash> *<name>".
+      echo "${sha} *hadolint-linux-${STUB_ARCH:-x86_64}"
+      echo "0000000000000000000000000000000000000000000000000000000000000000 *hadolint-macos-x86_64"
+
       return 0
     fi
 
@@ -265,6 +276,109 @@ EOF
   # Nothing is elevated or executed once verification fails.
   [[ "$output" != *"sudo invoked: install"* ]]
   [[ "$output" != *"hadolint invoked"* ]]
+}
+
+@test "picks the arm64 hadolint asset on an arm64 machine" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  stub_hadolint_download
+  export STUB_ARCH="arm64"
+
+  run linters
+  [ "$status" -eq 0 ]
+  # The asset name follows the machine, and is never the hardcoded x86_64 one.
+  [[ "$output" == *"hadolint-linux-arm64"* ]]
+  [[ "$output" != *"hadolint-linux-x86_64"* ]]
+  [[ "$output" == *"hadolint invoked: ./Dockerfile"* ]]
+}
+
+@test "aborts the hadolint install when the asset has no published checksum" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  stub_hadolint_download
+  # A machine whose asset is absent from checksums.sha256 must stop the install
+  # rather than comparing against an empty expected hash.
+  export STUB_ARCH="riscv64"
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unsupported architecture: riscv64"* ]]
+  [[ "$output" != *"sudo invoked: install"* ]]
+}
+
+@test "skips shellcheck instead of failing when no shell scripts exist" {
+  skip_unless_bash4
+  touch .shellcheckrc
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No shell scripts found, skipping"* ]]
+}
+
+@test "skips hadolint instead of failing when no Dockerfiles exist" {
+  skip_unless_bash4
+  touch .hadolint.yaml
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No Dockerfiles found, skipping"* ]]
+}
+
+@test "lints Dockerfile variants, not just the exact name" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile.ci
+  stub_hadolint_download
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hadolint invoked: ./Dockerfile.ci"* ]]
+}
+
+@test "installs trivy from the signed apt repo, never piping a script to a root shell" {
+  skip_unless_bash4
+  touch .trivyignore
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  # These stubs sit inside a `wget | gpg | sudo tee` pipeline, so every trace goes
+  # to stderr (which bats folds into $output); anything echoed to stdout would be
+  # eaten by the next stage instead of being asserted on.
+  function uname() { echo "Linux"; }
+  function curl() { echo "curl invoked: $*" >&2; }
+  function wget() { echo "wget invoked: $*" >&2; }
+  function gpg() { echo "gpg invoked: $*" >&2; cat > /dev/null; }
+  function tee() { echo "tee invoked: $*" >&2; cat > /dev/null; }
+
+  function sudo() {
+    echo "sudo invoked: $*" >&2
+
+    # Land a runnable trivy on PATH the way the real apt install would.
+    # Matched on the whole argv: this stub is called with 2 args (apt-get update)
+    # and with 5, so indexing a fixed position trips `set -u`.
+    if [[ "$*" == *"install"*"trivy"* ]]; then
+      cat > "${HOME}/bin/trivy" <<'TRIVY'
+#!/usr/bin/env bash
+echo "trivy invoked: $*"
+TRIVY
+      chmod 0755 "${HOME}/bin/trivy"
+    fi
+  }
+
+  export -f uname curl wget gpg tee sudo
+
+  run linters
+  [ "$status" -eq 0 ]
+  # The old install path piped a remote script from a mutable branch into root.
+  [[ "$output" != *"raw.githubusercontent.com"* ]]
+  [[ "$output" != *"sudo sh"* ]]
+  # The signed apt repository is configured and used instead.
+  [[ "$output" == *"get.trivy.dev/deb/public.key"* ]]
+  [[ "$output" == *"gpg invoked: --dearmor"* ]]
+  [[ "$output" == *"install --no-install-recommends trivy"* ]]
+  [[ "$output" == *"trivy invoked:"* ]]
 }
 
 @test "installs semgrep via pipx (not bare pip3) on Linux" {

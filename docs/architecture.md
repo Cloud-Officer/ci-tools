@@ -196,7 +196,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Bash 4+ bootstrap: the script uses `mapfile`, so it checks `BASH_VERSINFO` and re-execs under `/opt/homebrew/bin/bash`, `/usr/local/bin/bash`, or `/usr/bin/bash` when started by macOS's system Bash 3.2; it exits with an install hint if no Bash 4+ is found
 - File type detection based on configuration files
 - Linter installation for missing tools (`is_darwin` selects Homebrew vs. apt/go/npm/gem, `pipx_install` isolates Python tools such as cfn-lint and semgrep because Debian 12+/Ubuntu 23.04+ mark the system Python externally managed under PEP 668)
-- Checksum-verified binary install for hadolint on Linux: the release binary is downloaded to a temporary file, compared against the published `.sha256`, and only then moved into `/usr/local/bin` with `sudo install -m 0755` (the container runs as the unprivileged `citools` user, so a direct write would fail)
+- Checksum-verified binary install for hadolint on Linux: the arch-appropriate release asset (`hadolint-linux-x86_64` / `hadolint-linux-arm64`, selected by `release_arch`) is downloaded to a temporary file, compared against its entry in the published `checksums.sha256`, and only then moved into `/usr/local/bin` with `sudo install -m 0755` (the container runs as the unprivileged `citools` user, so a direct write would fail)
+- `release_arch`: Maps `uname -m` onto the architecture suffix used by release assets (`arm64` / `x86_64`), failing on anything else, so binary downloads never assume x86_64
+- Zero-match guards: `find_lintable` results are collected into an array and the linter is skipped when it is empty — invoking `shellcheck` or `hadolint` with no file operands exits non-zero on a usage dump and would otherwise fail the build for a tree that simply has nothing to lint
 - `find_lintable`: Shared `find` filter that excludes the dependency and build output directories (`vendor/`, `node_modules/`, `Libraries/`, `Pods/`, `.build/`, `Carthage/`, `DerivedData/`, `venv/`, `.venv/`, `dist/`, `build/`, `target/`) from file discovery
 - `sudo_for_user_command`: Emits `sudo` or an empty string depending on whether the target tool's install prefix is user-writable
 - Multi-linter execution with failure tracking: every linter runs even after an earlier one fails, and `FAILED` is checked once at the end
@@ -211,7 +213,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - hadolint: Dockerfiles
 - cfn-lint: CloudFormation templates
 - golangci-lint: Go code
-- pmd: Java/JS/SQL
+- pmd: Java/JS/SQL (Homebrew on macOS; signature-verified distribution zip into `/opt` on Linux)
 - eslint: JavaScript
 - ktlint: Kotlin
 - bandit: Python security
@@ -551,15 +553,17 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 ### Supply Chain Integrity
 
-| Control                | Implementation                                                                | Location                                   |
-|------------------------|-------------------------------------------------------------------------------|--------------------------------------------|
-| hadolint Checksum      | Compares the download against the published `.sha256`, aborts on mismatch     | `linters` in the hadolint install branch   |
-| Jira CLI Checksum      | Verifies the release archive SHA256 against `checksums.txt`                   | `sync-jira-release` in the install section |
-| Session Manager Plugin | Repackages the upstream `.deb` to fix shebangs, permissions, and `seelog.xml` | `Dockerfile` in the AWS dependencies stage |
-| Least-privilege Image  | Container runs as the pinned numeric uid `1001`, not root                     | `Dockerfile` in the final `USER` directive |
-| CI Security Scanning   | `semgrep` and `trivy` jobs gate every pull request                            | `.github/workflows/build.yml`              |
-| SOUP / License Check   | `cloud-officer/ci-actions/soup` regenerates and checks `.soup.json`           | `.github/workflows/build.yml`              |
-| Dependency Refresh     | Weekly cron refreshes `Gemfile.lock` and `.soup.json` through a pull request  | `.github/workflows/dependencies.yml`       |
+| Control                | Implementation                                                                                       | Location                                   |
+|------------------------|------------------------------------------------------------------------------------------------------|--------------------------------------------|
+| hadolint Checksum      | Compares the download against its entry in the published `checksums.sha256`, aborts on mismatch      | `linters` in the hadolint install branch   |
+| Trivy Signed Packages  | Installed from Aqua's GPG-signed apt repository rather than piping a remote script into a root shell | `linters` in the trivy install branch      |
+| pmd Signature          | Distribution zip verified against PMD's published GPG release key before install                     | `linters` in the pmd install branch        |
+| Jira CLI Checksum      | Verifies the release archive SHA256 against `checksums.txt`                                          | `sync-jira-release` in the install section |
+| Session Manager Plugin | Repackages the upstream `.deb` to fix shebangs, permissions, and `seelog.xml`                        | `Dockerfile` in the AWS dependencies stage |
+| Least-privilege Image  | Container runs as the pinned numeric uid `1001`, not root                                            | `Dockerfile` in the final `USER` directive |
+| CI Security Scanning   | `semgrep` and `trivy` jobs gate every pull request                                                   | `.github/workflows/build.yml`              |
+| SOUP / License Check   | `cloud-officer/ci-actions/soup` regenerates and checks `.soup.json`                                  | `.github/workflows/build.yml`              |
+| Dependency Refresh     | Weekly cron refreshes `Gemfile.lock` and `.soup.json` through a pull request                         | `.github/workflows/dependencies.yml`       |
 
 ### Accepted Scanner Findings
 
@@ -622,5 +626,5 @@ The accepted Trivy findings fall into three groups: conditions Trivy cannot eval
 - **Audit trail**: CloudFormation and SSM operations are logged by AWS
 - **Key lifecycle**: Automatic key rotation prevents credential staleness
 - **Encryption at rest**: KMS encryption for CloudWatch logs
-- **Verified downloads**: Third-party binaries fetched at install time (hadolint, Jira CLI) are SHA256-verified against publisher-provided checksums before being placed on `PATH`
+- **Verified downloads**: Third-party binaries fetched at install time (hadolint, Jira CLI) are SHA256-verified against publisher-provided checksums before being placed on `PATH`; pmd is GPG-signature-verified against PMD's published release key, and trivy is installed from Aqua's signed apt repository so every package is verified by apt. Versions stay floating-latest throughout — the checksum, signature, and repository key are the trust anchors, not a pinned version
 - **No production identifiers in published docs**: `tests/readme.bats` fails the build if the README contains real emails, instance ids, or hostnames

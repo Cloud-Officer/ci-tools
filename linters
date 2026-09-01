@@ -37,6 +37,21 @@ sudo_for_user_command() {
   fi
 }
 
+# Emits the release-asset architecture for the current machine, using the same
+# uname mapping and unsupported-arch failure as sync-jira-release. Downloads of
+# release binaries must not assume x86_64 -- the project image and CI both run
+# on arm64 as well.
+release_arch() {
+  case "$(uname -m)" in
+    arm64 | aarch64) echo "arm64" ;;
+    x86_64 | amd64) echo "x86_64" ;;
+    *)
+      echo "Error: Unsupported architecture: $(uname -m)" >&2
+      return 1
+      ;;
+  esac
+}
+
 # Installs a Python CLI tool in its own isolated environment via pipx, on Linux.
 # pipx is used instead of a bare `pip3 install` because Debian 12+/Ubuntu 23.04+
 # mark the system Python externally managed (PEP 668), so pip3 refuses to install
@@ -195,8 +210,16 @@ if [ -f .shellcheckrc ]; then
     fi
   fi
 
-  # shellcheck disable=SC2046
-  shellcheck --external-sources $(find_lintable "*.sh") || FAILED=1
+  # Feed the file list through an array: unquoted $(find_lintable ...) word-splits,
+  # and when nothing matches it expands to no operands at all, which exits
+  # non-zero on a usage dump and fails the build for a tree with no shell files.
+  mapfile -t SHELL_FILES < <(find_lintable "*.sh")
+
+  if [ ${#SHELL_FILES[@]} -gt 0 ]; then
+    shellcheck --external-sources "${SHELL_FILES[@]}" || FAILED=1
+  else
+    echo "No shell scripts found, skipping"
+  fi
 
   echo "Checking shell scripts (custom rules)..."
   shell_lint_custom || FAILED=1
@@ -213,9 +236,19 @@ if [ -f .hadolint.yaml ]; then
       # elevate only for the move into /usr/local/bin -- writing there directly
       # fails for every non-root user (the project image runs as `citools`), and
       # the other Linux branches elevate the same way (sudo apt-get, sudo sh -s).
+      # Asset names are lowercase and arch-suffixed (hadolint-linux-x86_64 /
+      # hadolint-linux-arm64), and the per-asset .sha256 files no longer exist --
+      # every hash now lives in one checksums.sha256, keyed by asset name.
+      HADOLINT_ASSET="hadolint-linux-$(release_arch)"
       HADOLINT_TMP=$(mktemp)
-      wget -qO "${HADOLINT_TMP}" https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64
-      EXPECTED_CHECKSUM=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64.sha256 | awk '{print $1}')
+      wget -qO "${HADOLINT_TMP}" "https://github.com/hadolint/hadolint/releases/latest/download/${HADOLINT_ASSET}"
+      EXPECTED_CHECKSUM=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/checksums.sha256 | awk -v asset="*${HADOLINT_ASSET}" '$2 == asset {print $1}')
+
+      if [ -z "${EXPECTED_CHECKSUM}" ]; then
+        echo "Error: no published checksum for ${HADOLINT_ASSET}"
+        rm -f "${HADOLINT_TMP}"
+        exit 1
+      fi
 
       if command -v sha256sum &> /dev/null; then
         ACTUAL_CHECKSUM=$(sha256sum "${HADOLINT_TMP}" | awk '{print $1}')
@@ -236,8 +269,16 @@ if [ -f .hadolint.yaml ]; then
     fi
   fi
 
-  # shellcheck disable=SC2046
-  hadolint $(find_lintable "Dockerfile") || FAILED=1
+  # Same zero-match guard as shellcheck above. The pattern is Dockerfile* -- not
+  # the exact name -- to match the scanner-selection test further down, so a repo
+  # holding only Dockerfile.ci is linted rather than failing on no operands.
+  mapfile -t DOCKERFILES < <(find_lintable "Dockerfile*")
+
+  if [ ${#DOCKERFILES[@]} -gt 0 ]; then
+    hadolint "${DOCKERFILES[@]}" || FAILED=1
+  else
+    echo "No Dockerfiles found, skipping"
+  fi
 fi
 
 if [ -f .cfnlintrc ]; then
@@ -273,7 +314,40 @@ if [ -f .pmd.xml ]; then
   echo "Checking Java/JS/SQL with pmd..."
 
   if ! command -v pmd &>/dev/null; then
-    brew install pmd
+    if is_darwin; then
+      brew install pmd
+    else
+      # pmd is not packaged for apt, so install the official distribution zip and
+      # verify its detached GPG signature against PMD's published release key.
+      # The version stays floating-latest (discovered at run time, like the jira
+      # CLI); the key fingerprint is the trust anchor, not a version pin.
+      PMD_SIGNING_KEY="2EFA55D0785C31F956F2F87EA0B5CA1A4E086838"
+      sudo apt-get --yes install --no-install-recommends gnupg unzip
+      PMD_VERSION=$(curl -s https://api.github.com/repos/pmd/pmd/releases/latest | grep '"tag_name"' | sed -E 's|.*"pmd_releases/([^"]+)".*|\1|')
+
+      if [ -z "${PMD_VERSION}" ]; then
+        echo "Error: Could not determine latest pmd version"
+        exit 1
+      fi
+
+      PMD_TMP=$(mktemp -d)
+      PMD_URL="https://github.com/pmd/pmd/releases/download/pmd_releases/${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
+      wget -qO "${PMD_TMP}/pmd.zip" "${PMD_URL}"
+      wget -qO "${PMD_TMP}/pmd.zip.asc" "${PMD_URL}.asc"
+      gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "${PMD_SIGNING_KEY}"
+
+      if ! gpg --batch --verify "${PMD_TMP}/pmd.zip.asc" "${PMD_TMP}/pmd.zip"; then
+        echo "Error: Signature verification failed for pmd ${PMD_VERSION}!"
+        rm -rf "${PMD_TMP}"
+        exit 1
+      fi
+
+      unzip -qd "${PMD_TMP}" "${PMD_TMP}/pmd.zip"
+      sudo rm -rf "/opt/pmd-bin-${PMD_VERSION}"
+      sudo mv "${PMD_TMP}/pmd-bin-${PMD_VERSION}" /opt/
+      sudo ln -sf "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd
+      rm -rf "${PMD_TMP}"
+    fi
   fi
 
   pmd check --dir . --format textcolor --rulesets ".pmd.xml" || FAILED=1
@@ -407,7 +481,15 @@ if [ -f .trivyignore ]; then
     if is_darwin; then
       brew install trivy
     else
-      curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+      # Install from Aqua's own signed apt repository rather than piping
+      # contrib/install.sh from the mutable main branch into a root shell: apt
+      # verifies the GPG signature on every package, and the version stays
+      # floating-latest exactly as it was before.
+      sudo apt-get --yes install --no-install-recommends wget apt-transport-https gnupg
+      wget -qO - https://get.trivy.dev/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+      echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
+      sudo apt-get update
+      sudo apt-get --yes install --no-install-recommends trivy
     fi
   fi
 
