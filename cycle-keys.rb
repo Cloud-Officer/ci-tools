@@ -7,6 +7,13 @@ require 'date'
 require 'iniparse'
 require_relative 'lib/cli_main'
 
+DEFAULT_REGION = 'us-east-1'
+# A freshly created access key is not usable for signing immediately - IAM is
+# eventually consistent. Poll with the new key until it authenticates rather
+# than assuming it is live.
+NEW_KEY_ACTIVATION_ATTEMPTS = 10
+NEW_KEY_ACTIVATION_DELAY_SECONDS = 2
+
 def cleanup_secondary_keys(iam, primary_key_id, metadata_list)
   metadata_list.each do |key_metadata|
     next if key_metadata.access_key_id == primary_key_id
@@ -61,24 +68,18 @@ def create_and_save_new_key(iam, credentials, profile, user_name, credentials_fi
     raise(e)
   end
 
-  new_access_key_id
+  response.access_key
 end
 
 def rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, original_access_key, original_secret_key, error_context)
   puts("\tRolling back due to: #{error_context}")
-  begin
-    puts("\tDeleting newly created key #{new_access_key_id}...")
-    iam.delete_access_key(
-      {
-        access_key_id: new_access_key_id,
-        user_name: user_name
-      }
-    )
-    puts("\tRollback: deleted new key")
+  region = credentials[profile]['region'] || DEFAULT_REGION
 
-    # The disable step may already have flipped the original key to Inactive.
-    # Re-Activate it before restoring credentials on disk so the user is not
-    # left holding a credentials file that points at a disabled key.
+  begin
+    # Re-activate the original key first. The client we were handed may be
+    # signing with the new key, and the delete below removes that key - so the
+    # call that restores our fallback credentials has to happen while the
+    # client making it is still valid.
     begin
       iam.update_access_key(
         {
@@ -93,6 +94,17 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
       pp(e)
     end
 
+    # Delete the new key with the restored original credentials so the request
+    # does not depend on the very key it is deleting.
+    puts("\tDeleting newly created key #{new_access_key_id}...")
+    build_iam_client(region, original_access_key, original_secret_key).delete_access_key(
+      {
+        access_key_id: new_access_key_id,
+        user_name: user_name
+      }
+    )
+    puts("\tRollback: deleted new key")
+
     credentials[profile]['aws_access_key_id'] = original_access_key
     credentials[profile]['aws_secret_access_key'] = original_secret_key
     File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
@@ -105,6 +117,25 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
     puts("\tNew key #{new_access_key_id} may still be active")
     pp(e)
   end
+end
+
+def new_key_usable?(iam, new_access_key_id, attempts: NEW_KEY_ACTIVATION_ATTEMPTS, delay: NEW_KEY_ACTIVATION_DELAY_SECONDS)
+  puts("\tWaiting for #{new_access_key_id} to become usable")
+
+  attempts.times do |attempt|
+    iam.list_access_keys
+    return true
+  rescue Aws::Errors::ServiceError => e
+    if attempt == attempts - 1
+      puts("\tNew key #{new_access_key_id} did not become usable after #{attempts} attempt(s)")
+      pp(e)
+      return false
+    end
+
+    sleep(delay)
+  end
+
+  false
 end
 
 KEY_AGE_DAYS_THRESHOLD = 80 # Compliance policy requires rotation every 90 days (CIS / access-keys-rotated rule); rotate at 80 to leave a 10-day buffer for cron schedules.
@@ -125,7 +156,7 @@ def find_primary_key_user(metadata_list, primary_key_id)
 end
 
 def process_credential_profile(credentials, profile, options)
-  region = credentials[profile]['region'] || 'us-east-1'
+  region = credentials[profile]['region'] || DEFAULT_REGION
   access_key = credentials[profile]['aws_access_key_id']
   secret_key = credentials[profile]['aws_secret_access_key']
   credentials_file_name = "#{Dir.home}/.aws/credentials"
@@ -158,14 +189,29 @@ def process_credential_profile(credentials, profile, options)
   # Cleanup runs only after the guards above - it is destructive (deletes
   # any non-primary keys) and must not fire on no-op paths.
   cleanup_secondary_keys(iam, access_key, response.access_key_metadata)
-  new_access_key_id = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
+  new_key = create_and_save_new_key(iam, credentials, profile, user_name, credentials_file_name)
+  new_access_key_id = new_key.access_key_id
 
-  rollback =
-    lambda do |error_context|
-      rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, access_key, secret_key, error_context)
+  rollback_using =
+    lambda do |client|
+      lambda do |error_context|
+        rollback_key_change(client, credentials, profile, user_name, credentials_file_name, new_access_key_id, access_key, secret_key, error_context)
+      end
     end
 
-  disable_and_delete_old_key(iam, access_key, user_name, rollback)
+  # Retire the old key using the NEW key's own credentials. Signing the disable
+  # and the delete with the key being retired means the delete - and the
+  # rollback that would clean up after it - ride on credentials AWS has just
+  # invalidated.
+  rotated_iam = build_iam_client(region, new_access_key_id, new_key.secret_access_key)
+
+  unless new_key_usable?(rotated_iam, new_access_key_id)
+    # The old key is still Active here, so roll back through it.
+    rollback_using.call(iam).call('new key never became usable')
+    return :error
+  end
+
+  disable_and_delete_old_key(rotated_iam, access_key, user_name, rollback_using.call(rotated_iam))
   :rotated
 end
 
