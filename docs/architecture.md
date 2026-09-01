@@ -146,6 +146,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Key rotation logic with age-based thresholds
 - `cleanup_secondary_keys`: Disables and deletes any non-primary keys before rotation
 - `create_and_save_new_key`: Creates a new access key and persists it under an exclusive file lock
+- `new_key_usable?`: Polls IAM with the new key until it authenticates, absorbing IAM's eventual consistency before the old key is retired
 - `disable_and_delete_old_key`: Disables and deletes the previous key with rollback on failure
 
 **Functionality:**
@@ -153,7 +154,8 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Reads AWS credentials from `~/.aws/credentials`
 - Creates new access keys when current keys exceed 80 days (override with `--force`)
 - Persists new credentials using an exclusive file lock (`flock`) to prevent concurrent writers
-- Rolls back (deletes the new key and restores the original credentials) if disabling or deleting the old key fails
+- Retires the old key through a client built from the **new** key, so neither the delete nor the rollback is signed with the credentials being invalidated
+- Rolls back (re-activates the original key, then deletes the new key and restores the original credentials) if disabling or deleting the old key fails
 - Disables and deletes old keys after successful rotation
 - Updates credentials file with new key material
 
@@ -574,14 +576,14 @@ The accepted Trivy findings fall into three groups: conditions Trivy cannot eval
 
 ### Error Handling
 
-| Control                | Implementation                                    | Location                                     |
-|------------------------|---------------------------------------------------|----------------------------------------------|
-| Exception Wrapping     | Top-level rescue blocks with stack traces         | `CliMain.run!` in `lib/cli_main.rb`          |
-| Validation Errors      | CloudFormation validation error handling          | `deploy.rb` in CloudFormation update section |
-| Stack State Monitoring | Checks for failed stack states                    | `deploy.rb` in stack status check            |
-| SSM Parameter Rollback | Restores SSM snapshot when CFN update fails       | `deploy.rb` in `restore_ssm_parameters`      |
-| Key Rotation Rollback  | Deletes new key and restores original credentials | `cycle-keys.rb` in `rollback` lambda         |
-| Exit Codes             | Non-zero exit codes on failures                   | All scripts                                  |
+| Control                | Implementation                                                   | Location                                     |
+|------------------------|------------------------------------------------------------------|----------------------------------------------|
+| Exception Wrapping     | Top-level rescue blocks with stack traces                        | `CliMain.run!` in `lib/cli_main.rb`          |
+| Validation Errors      | CloudFormation validation error handling                         | `deploy.rb` in CloudFormation update section |
+| Stack State Monitoring | Checks for failed stack states                                   | `deploy.rb` in stack status check            |
+| SSM Parameter Rollback | Restores SSM snapshot when CFN update fails                      | `deploy.rb` in `restore_ssm_parameters`      |
+| Key Rotation Rollback  | Re-activates original key, deletes new key, restores credentials | `cycle-keys.rb` in `rollback_key_change`     |
+| Exit Codes             | Non-zero exit codes on failures                                  | All scripts                                  |
 
 ### Operational Safety
 

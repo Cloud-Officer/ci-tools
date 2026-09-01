@@ -86,8 +86,10 @@ RSpec.describe(CycleKeys) do
       allow(lock_file).to(receive(:flock))
     end
 
-    it 'creates a new access key and returns the key id' do
-      expect(create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')).to(eq('AKIANEWKEY123'))
+    it 'creates a new access key and returns the key with its secret', :aggregate_failures do
+      new_key = create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')
+      expect(new_key.access_key_id).to(eq('AKIANEWKEY123'))
+      expect(new_key.secret_access_key).to(eq('secret123'))
     end
 
     it 'writes credentials with file lock', :aggregate_failures do
@@ -149,6 +151,9 @@ RSpec.describe(CycleKeys) do
     end
 
     before do
+      # rollback_key_change builds a cleanup client from the ORIGINAL credentials
+      # so the delete does not ride on the key it is deleting.
+      allow(Aws::IAM::Client).to(receive(:new).and_return(iam))
       allow(iam).to(receive(:delete_access_key).and_call_original)
       allow(credentials).to(receive(:[]).with('test-profile').and_return(cred_hash))
       allow(credentials).to(receive(:save))
@@ -182,6 +187,21 @@ RSpec.describe(CycleKeys) do
       expect(credentials).to(have_received(:save))
     end
 
+    it 're-activates the original key before deleting the new one' do
+      calls = []
+      allow(iam).to(receive(:update_access_key) { calls << :reactivate })
+      allow(iam).to(receive(:delete_access_key) { calls << :delete_new })
+      call_rollback
+      expect(calls).to(eq(%i[reactivate delete_new]))
+    end
+
+    it 'builds the cleanup client from the original credentials, not the new key' do
+      call_rollback
+      expect(Aws::IAM::Client).to(
+        have_received(:new).with(hash_including(credentials: an_object_having_attributes(access_key_id: 'AKIAOLDKEY123')))
+      )
+    end
+
     it 'swallows errors from delete_access_key without raising' do
       allow(iam).to(receive(:delete_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'API error')))
       expect { call_rollback }
@@ -195,8 +215,37 @@ RSpec.describe(CycleKeys) do
     end
   end
 
+  describe '#new_key_usable?' do
+    let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
+
+    def not_propagated_yet
+      Aws::IAM::Errors::InvalidClientTokenId.new(nil, 'not yet valid')
+    end
+
+    it 'returns true as soon as the new key authenticates' do
+      expect(new_key_usable?(iam, 'AKIANEWKEY123', attempts: 3, delay: 0)).to(be(true))
+    end
+
+    it 'retries while the key is not yet propagated, then succeeds' do
+      allow(iam).to(receive(:list_access_keys).and_raise(not_propagated_yet).and_return(true))
+      expect(new_key_usable?(iam, 'AKIANEWKEY123', attempts: 5, delay: 0)).to(be(true))
+    end
+
+    it 'returns false once the attempts are exhausted' do
+      allow(iam).to(receive(:list_access_keys).and_raise(not_propagated_yet))
+      expect(new_key_usable?(iam, 'AKIANEWKEY123', attempts: 2, delay: 0)).to(be(false))
+    end
+
+    it 'sleeps between attempts' do
+      allow(iam).to(receive(:list_access_keys).and_raise(not_propagated_yet))
+      allow(self).to(receive(:sleep))
+      new_key_usable?(iam, 'AKIANEWKEY123', attempts: 3, delay: 7)
+      expect(self).to(have_received(:sleep).with(7).twice)
+    end
+  end
+
   describe '#find_primary_key_user' do
-    let(:now)      { Time.now }
+    let(:now)      { Time.now                                                                                                                    }
     let(:created)  { now - (45 * 24 * 60 * 60)                                                                                                   }
     let(:other)    { instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: 'AKIAOTHER', user_name: 'other', create_date: created)   }
     let(:matching) { instance_double(Aws::IAM::Types::AccessKeyMetadata, access_key_id: 'AKIAMATCH', user_name: 'matched', create_date: created) }
@@ -388,6 +437,38 @@ RSpec.describe(CycleKeys) do
         expect(iam).to(have_received(:update_access_key).with(hash_including(access_key_id: 'AKIACURRENT', status: 'Inactive')))
         expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIACURRENT')))
       end
+
+      it 'retires the old key with a client built from the NEW key, not the key being retired' do
+        process_credential_profile(credentials, 'dev', options)
+        expect(Aws::IAM::Client).to(
+          have_received(:new).with(hash_including(credentials: an_object_having_attributes(access_key_id: 'AKIANEWKEY123')))
+        )
+      end
+    end
+
+    context 'when the new key never becomes usable' do
+      let(:lock_file) { instance_double(File) }
+
+      before do
+        iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'alice', create_date: Time.now - (100 * 24 * 60 * 60), status: 'Active' }] })
+        iam.stub_responses(:create_access_key, { access_key: { access_key_id: 'AKIANEWKEY123', secret_access_key: 'newsecret', user_name: 'alice', status: 'Active' } })
+        allow(credentials).to(receive(:save))
+        allow(File).to(receive(:open).with("#{Dir.home}/.aws/credentials.lock", anything, anything).and_yield(lock_file))
+        allow(lock_file).to(receive(:flock))
+        allow(iam).to(receive(:update_access_key))
+        allow(iam).to(receive(:delete_access_key))
+        allow(self).to(receive(:new_key_usable?).and_return(false))
+      end
+
+      it 'returns :error without ever disabling the old key', :aggregate_failures do
+        expect(process_credential_profile(credentials, 'dev', options)).to(eq(:error))
+        expect(iam).not_to(have_received(:update_access_key).with(hash_including(status: 'Inactive')))
+      end
+
+      it 'rolls back by deleting the unusable new key' do
+        process_credential_profile(credentials, 'dev', options)
+        expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIANEWKEY123')))
+      end
     end
 
     context 'when disabling the old key fails after a new key was created' do
@@ -436,10 +517,10 @@ RSpec.describe(CycleKeys) do
   end
 
   describe '#disable_and_delete_old_key' do
-    let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
-    let(:access_key) { 'AKIAOLDKEY123'       }
-    let(:user_name)  { 'testuser'            }
-    let(:rollback)   { instance_double(Proc) }
+    let(:iam)        { Aws::IAM::Client.new(stub_responses: true) }
+    let(:access_key) { 'AKIAOLDKEY123'                            }
+    let(:user_name)  { 'testuser'                                 }
+    let(:rollback)   { instance_double(Proc)                      }
 
     before do
       allow(rollback).to(receive(:call))
