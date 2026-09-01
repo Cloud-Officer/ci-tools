@@ -67,21 +67,85 @@ pipx_install() {
   export PATH="${PATH}:${HOME}/.local/bin"
 }
 
+# Installs a tool that ships in both Homebrew and apt. The apt package name
+# defaults to the command name and is overridden with $2 where they differ
+# (bandit ships as python3-bandit).
+# Usage: brew_or_apt_install yamllint  /  brew_or_apt_install bandit python3-bandit
+brew_or_apt_install() {
+  if is_darwin; then
+    brew install "${1}"
+  else
+    sudo apt-get --yes install --no-install-recommends "${2:-${1}}"
+  fi
+}
+
+# Installs a Go-based tool: Homebrew on macOS, `go install` on Linux, where the
+# module bin dir also has to join PATH for the very next command to find it.
+# $3 is an optional Homebrew tap for formulae outside homebrew-core (protolint).
+# Usage: brew_or_go_install actionlint github.com/rhysd/actionlint/cmd/actionlint@latest
+brew_or_go_install() {
+  if is_darwin; then
+    if [ -n "${3:-}" ]; then
+      brew tap "${3}"
+    fi
+
+    brew install "${1}"
+  else
+    go install "${2}"
+    export PATH="${PATH}:${HOME}/go/bin"
+  fi
+}
+
+# Installs an npm-distributed tool globally, bootstrapping npm itself when it is
+# missing (apt on Linux, Homebrew on macOS) rather than silently skipping the
+# install. sudo_for_user_command decides whether the global prefix needs root.
+# Usage: npm_install markdownlint-cli2
+npm_install() {
+  if ! command -v npm &>/dev/null; then
+    if is_darwin; then
+      brew install node
+    else
+      sudo apt-get --yes install --no-install-recommends npm
+    fi
+  fi
+
+  # shellcheck disable=SC2046
+  $(sudo_for_user_command npm) npm install -g "${1}"
+}
+
 # Common find filter used for files-to-lint discovery. Pass the -name pattern as $1.
+# The exclusion set is the same one github-build generates into the
+# `ghb:excluded-dirs` blocks of trivy.yaml and .semgrepignore from
+# config/languages.yaml. Keep the three in step: a directory listed there but not
+# here means build output and vendored code get linted by the tools driven from
+# this script, which is how the two lists drifted apart in the first place.
 find_lintable() {
   find . -name "${1}" \
-    -not -path "*/vendor/*" \
-    -not -path "*/node_modules/*" \
-    -not -path "*/Libraries/*" \
-    -not -path "*/Pods/*" \
     -not -path "*/.build/*" \
-    -not -path "*/Carthage/*" \
-    -not -path "*/DerivedData/*" \
-    -not -path "*/venv/*" \
+    -not -path "*/.bundle/*" \
+    -not -path "*/.git/*" \
+    -not -path "*/.gradle/*" \
+    -not -path "*/.hg/*" \
+    -not -path "*/.m2/*" \
+    -not -path "*/.npm/*" \
+    -not -path "*/.pnpm/*" \
+    -not -path "*/.pytest_cache/*" \
+    -not -path "*/.svn/*" \
     -not -path "*/.venv/*" \
-    -not -path "*/dist/*" \
+    -not -path "*/.yarn/*" \
+    -not -path "*/__pycache__/*" \
     -not -path "*/build/*" \
-    -not -path "*/target/*"
+    -not -path "*/Carthage/*" \
+    -not -path "*/coverage/*" \
+    -not -path "*/DerivedData/*" \
+    -not -path "*/dist/*" \
+    -not -path "*/env/*" \
+    -not -path "*/Libraries/*" \
+    -not -path "*/node_modules/*" \
+    -not -path "*/Pods/*" \
+    -not -path "*/target/*" \
+    -not -path "*/vendor/*" \
+    -not -path "*/venv/*"
 }
 
 # Custom shell-script rules that shellcheck doesn't cover, ported from the
@@ -160,12 +224,7 @@ if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
   echo "Checking GitHub Actions workflow files..."
 
   if ! command -v actionlint &>/dev/null; then
-    if is_darwin; then
-      brew install actionlint
-    else
-      go install github.com/rhysd/actionlint/cmd/actionlint@latest
-      export PATH="${PATH}:${HOME}/go/bin"
-    fi
+    brew_or_go_install actionlint github.com/rhysd/actionlint/cmd/actionlint@latest
   fi
 
   actionlint || FAILED=1
@@ -177,8 +236,8 @@ if [ -f .markdownlint-cli2.yaml ]; then
   if ! command -v markdownlint-cli2 &>/dev/null; then
     if is_darwin; then
       brew install markdownlint-cli2
-    elif command -v npm &>/dev/null; then
-      $(sudo_for_user_command npm) npm install -g markdownlint-cli2
+    else
+      npm_install markdownlint-cli2
     fi
   fi
 
@@ -189,11 +248,7 @@ if [ -f .yamllint.yml ]; then
   echo "Checking YAML..."
 
   if ! command -v yamllint &>/dev/null; then
-    if is_darwin; then
-      brew install yamllint
-    else
-      sudo apt-get --yes install --no-install-recommends yamllint
-    fi
+    brew_or_apt_install yamllint
   fi
 
   yamllint --strict . || FAILED=1
@@ -203,11 +258,7 @@ if [ -f .shellcheckrc ]; then
   echo "Checking shell scripts..."
 
   if ! command -v shellcheck &>/dev/null; then
-    if is_darwin; then
-      brew install shellcheck
-    else
-      sudo apt-get --yes install --no-install-recommends shellcheck
-    fi
+    brew_or_apt_install shellcheck
   fi
 
   # Feed the file list through an array: unquoted $(find_lintable ...) word-splits,
@@ -299,12 +350,7 @@ if [ -f .golangci.yml ]; then
   echo "Checking Go..."
 
   if ! command -v golangci-lint &>/dev/null; then
-    if is_darwin; then
-      brew install golangci-lint
-    else
-      go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-      export PATH="${PATH}:${HOME}/go/bin"
-    fi
+    brew_or_go_install golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
   fi
 
   golangci-lint run || FAILED=1
@@ -372,15 +418,7 @@ if [ -f .eslintrc.json ]; then
   fi
 
   if [ ${INSTALL_ESLINT} -eq 1 ]; then
-    if is_darwin; then
-      npm install -g eslint@8
-    else
-      if ! command -v npm &>/dev/null; then
-        sudo apt-get --yes install --no-install-recommends npm
-      fi
-
-      $(sudo_for_user_command npm) npm install -g eslint@8
-    fi
+    npm_install eslint@8
   fi
 
   eslint . || FAILED=1
@@ -390,11 +428,7 @@ if [ -f .editorconfig ]; then
   echo "Checking Kotlin with ktlint..."
 
   if ! command -v ktlint &>/dev/null; then
-    if is_darwin; then
-      brew install ktlint
-    else
-      sudo apt-get --yes install --no-install-recommends ktlint
-    fi
+    brew_or_apt_install ktlint
   fi
 
   ktlint || FAILED=1
@@ -404,11 +438,7 @@ if [ -f .bandit ]; then
   echo "Checking Python with bandit..."
 
   if ! command -v bandit &>/dev/null; then
-    if is_darwin; then
-      brew install bandit
-    else
-      sudo apt-get --yes install --no-install-recommends python3-bandit
-    fi
+    brew_or_apt_install bandit python3-bandit
   fi
 
   bandit -ll --ini .bandit --silent . || FAILED=1
@@ -419,11 +449,7 @@ if [ -f .flake8 ]; then
   echo "Checking Python with flake8..."
 
   if ! command -v flake8 &>/dev/null; then
-    if is_darwin; then
-      brew install flake8
-    else
-      sudo apt-get --yes install --no-install-recommends flake8
-    fi
+    brew_or_apt_install flake8
   fi
 
   flake8 . || FAILED=1
@@ -433,13 +459,7 @@ if [ -f .protolint.yaml ]; then
   echo "Checking Protocol Buffer with protolint..."
 
   if ! command -v protolint &>/dev/null; then
-    if is_darwin; then
-      brew tap yoheimuta/protolint
-      brew install protolint
-    else
-      go install github.com/yoheimuta/protolint/cmd/protolint@latest
-      export PATH="${PATH}:${HOME}/go/bin"
-    fi
+    brew_or_go_install protolint github.com/yoheimuta/protolint/cmd/protolint@latest yoheimuta/protolint
   fi
 
   protolint . || FAILED=1
