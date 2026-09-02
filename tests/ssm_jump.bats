@@ -2,6 +2,7 @@
 
 setup() {
   export PATH="${BATS_TEST_DIRNAME}/../:${PATH}"
+  SSM_JUMP="${BATS_TEST_DIRNAME}/../ssm-jump"
 }
 
 # Stubs the AWS CLI so no test reaches the network: describe-instances yields the
@@ -164,6 +165,21 @@ AWS
   [[ "$output" == *"Usage: ssm-jump"* ]]
 }
 
-# The two formatting guards that used to live here (tabs, `[ ! -z ]`) are gone:
-# `linters` now discovers extensionless shell scripts by shebang, so shellcheck
-# and the custom SL rules cover this file directly (issue #524).
+# Stopgap guards (issue #524). `linters` can now discover this file by shebang,
+# but the block that runs shellcheck is gated on a `.shellcheckrc`, which
+# github-build only emits once Cloud-Officer/github-build#519 and
+# Cloud-Officer/ci-actions#293 have landed and it has been re-run here. Until
+# then these pin the two conventions the linter will take over, and they should
+# be deleted in the same change that adds `.shellcheckrc`.
+
+@test "is indented with spaces only (no literal tab characters)" {
+  run grep -n "$(printf '\t')" "${SSM_JUMP}"
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+}
+
+@test "uses [ -n ] rather than [ ! -z ] for non-empty string tests" {
+  run grep -nF '! -z' "${SSM_JUMP}"
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+}
