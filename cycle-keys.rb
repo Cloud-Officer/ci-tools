@@ -14,6 +14,21 @@ DEFAULT_REGION = 'us-east-1'
 NEW_KEY_ACTIVATION_ATTEMPTS = 10
 NEW_KEY_ACTIVATION_DELAY_SECONDS = 2
 
+# Holds an exclusive lock on the credentials file for the whole read-modify-write
+# cycle. Locking only the save let two concurrent runs both parse the same
+# pre-rotation snapshot and the second one write back a file whose other profiles
+# had already been rotated by the first, silently reverting them.
+#
+# flock is tied to the open file description, so a nested open of the same path
+# from this process would deadlock against the lock we already hold: the callers
+# below save directly and rely on this being held for them.
+def with_credentials_lock(credentials_file_name)
+  File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
+    lock_file.flock(File::LOCK_EX)
+    yield
+  end
+end
+
 def cleanup_secondary_keys(iam, primary_key_id, metadata_list)
   metadata_list.each do |key_metadata|
     next if key_metadata.access_key_id == primary_key_id
@@ -50,20 +65,17 @@ def create_and_save_new_key(iam, credentials, profile, user_name, credentials_fi
   credentials[profile]['aws_secret_access_key'] = response.access_key.secret_access_key
 
   begin
-    # Use file locking to prevent race conditions when multiple instances run simultaneously
-    File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
-      lock_file.flock(File::LOCK_EX)
-      credentials.save
-      puts("\tNew key saved into: #{credentials_file_name}")
-    end
+    # The exclusive lock is already held by run_cycle_keys for the whole cycle.
+    credentials.save
+    puts("\tNew key saved into: #{credentials_file_name}")
   rescue StandardError => e
-    puts("\tFailed to persist new key to #{credentials_file_name}, deleting #{new_access_key_id} from AWS...")
+    warn("\tFailed to persist new key to #{credentials_file_name}, deleting #{new_access_key_id} from AWS...")
     begin
       iam.delete_access_key({ access_key_id: new_access_key_id, user_name: user_name })
       puts("\tCleanup succeeded: #{new_access_key_id} was deleted")
     rescue StandardError => cleanup_error
-      puts("\tWARNING: manual cleanup required — orphaned key #{new_access_key_id} for #{user_name}")
-      pp(cleanup_error)
+      warn("\tWARNING: manual cleanup required — orphaned key #{new_access_key_id} for #{user_name}")
+      warn(cleanup_error.full_message)
     end
     raise(e)
   end
@@ -71,7 +83,7 @@ def create_and_save_new_key(iam, credentials, profile, user_name, credentials_fi
   response.access_key
 end
 
-def rollback_key_change(iam, credentials, profile, user_name, credentials_file_name, new_access_key_id, original_access_key, original_secret_key, error_context)
+def rollback_key_change(iam, credentials, profile, user_name, new_access_key_id, original_access_key, original_secret_key, error_context)
   puts("\tRolling back due to: #{error_context}")
   region = credentials[profile]['region'] || DEFAULT_REGION
 
@@ -90,8 +102,8 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
       )
       puts("\tRollback: re-activated original key #{original_access_key}")
     rescue StandardError => e
-      puts("\tWARNING: failed to re-activate original key #{original_access_key} - manual intervention required")
-      pp(e)
+      warn("\tWARNING: failed to re-activate original key #{original_access_key} - manual intervention required")
+      warn(e.full_message)
     end
 
     # Delete the new key with the restored original credentials so the request
@@ -107,15 +119,12 @@ def rollback_key_change(iam, credentials, profile, user_name, credentials_file_n
 
     credentials[profile]['aws_access_key_id'] = original_access_key
     credentials[profile]['aws_secret_access_key'] = original_secret_key
-    File.open("#{credentials_file_name}.lock", File::RDWR | File::CREAT, 0o600) do |lock_file|
-      lock_file.flock(File::LOCK_EX)
-      credentials.save
-      puts("\tRollback: restored original credentials")
-    end
+    credentials.save
+    puts("\tRollback: restored original credentials")
   rescue StandardError => e
-    puts("\tWARNING: Rollback failed - manual cleanup required!")
-    puts("\tNew key #{new_access_key_id} may still be active")
-    pp(e)
+    warn("\tWARNING: Rollback failed - manual cleanup required!")
+    warn("\tNew key #{new_access_key_id} may still be active")
+    warn(e.full_message)
   end
 end
 
@@ -127,8 +136,8 @@ def new_key_usable?(iam, new_access_key_id, attempts: NEW_KEY_ACTIVATION_ATTEMPT
     return true
   rescue Aws::Errors::ServiceError => e
     if attempt == attempts - 1
-      puts("\tNew key #{new_access_key_id} did not become usable after #{attempts} attempt(s)")
-      pp(e)
+      warn("\tNew key #{new_access_key_id} did not become usable after #{attempts} attempt(s)")
+      warn(e.full_message)
       return false
     end
 
@@ -167,8 +176,8 @@ def process_credential_profile(credentials, profile, options)
   begin
     response = iam.list_access_keys
   rescue StandardError => e
-    puts("\tError listing access keys")
-    pp(e)
+    warn("\tError listing access keys")
+    warn(e.full_message)
     return :error
   end
 
@@ -195,7 +204,7 @@ def process_credential_profile(credentials, profile, options)
   rollback_using =
     lambda do |client|
       lambda do |error_context|
-        rollback_key_change(client, credentials, profile, user_name, credentials_file_name, new_access_key_id, access_key, secret_key, error_context)
+        rollback_key_change(client, credentials, profile, user_name, new_access_key_id, access_key, secret_key, error_context)
       end
     end
 
@@ -226,8 +235,8 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback)
       }
     )
   rescue StandardError => e
-    puts("\tError disabling old access key")
-    pp(e)
+    warn("\tError disabling old access key")
+    warn(e.full_message)
     rollback.call('failed to disable old key')
     raise
   end
@@ -241,8 +250,8 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback)
       }
     )
   rescue StandardError => e
-    puts("\tError deleting access key")
-    pp(e)
+    warn("\tError deleting access key")
+    warn(e.full_message)
     rollback.call('failed to delete old key')
     raise
   end
@@ -260,9 +269,24 @@ def run_cycle_keys(options)
   credentials_file_name = "#{Dir.home}/.aws/credentials"
   raise("AWS credentials file not found: #{credentials_file_name}") unless File.exist?(credentials_file_name)
 
-  puts("Reading #{credentials_file_name}")
-  credentials = IniParse.open(credentials_file_name)
+  result, profile_found =
+    with_credentials_lock(credentials_file_name) do
+      puts("Reading #{credentials_file_name}")
+      rotate_profile(IniParse.open(credentials_file_name), options)
+    end
 
+  raise("Profile '#{options[:profile]}' not found in #{credentials_file_name}") unless profile_found
+
+  # Exiting inside the lock block would skip File#close and leave the decision
+  # tangled up with the locking, so the outcome is carried out and acted on here.
+  case result
+  when :error, :username_mismatch then exit(1)
+  when :too_young then exit(0)
+  end
+end
+
+def rotate_profile(credentials, options)
+  result = nil
   profile_found = false
 
   credentials.each do |section|
@@ -270,13 +294,9 @@ def run_cycle_keys(options)
 
     profile_found = true
     result = process_credential_profile(credentials, section.key, options)
-    case result
-    when :error, :username_mismatch then exit(1)
-    when :too_young then exit(0)
-    end
   end
 
-  raise("Profile '#{options[:profile]}' not found in #{credentials_file_name}") unless profile_found
+  [result, profile_found]
 end
 
 # :nocov:
