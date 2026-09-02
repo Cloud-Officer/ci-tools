@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'tmpdir'
 require 'webmock/rspec'
 
 module BrewResources
@@ -41,10 +42,17 @@ RSpec.describe(BrewResources) do
   end
 
   describe '#run_brew_resources' do
-    let(:lockfile_path) { 'spec/fixtures/Gemfile.lock' }
+    # Both paths were relative to the process working directory: the fixture was
+    # written into the repository itself and the teardown then `rm -rf`'d
+    # 'spec/fixtures' from wherever rspec happened to be running. Dir.mktmpdir
+    # keeps the fixture out of the working tree and removes it for us, so nothing
+    # deletes a relative path it does not own.
+    let(:fixture_dir)   { Dir.mktmpdir                              }
+    let(:lockfile_path) { File.join(fixture_dir, 'Gemfile.lock')    }
+
+    after { FileUtils.remove_entry(fixture_dir) }
 
     before do
-      FileUtils.mkdir_p('spec/fixtures')
       File.write(lockfile_path, <<~LOCK)
         GEM
           remote: https://rubygems.org/
@@ -63,11 +71,14 @@ RSpec.describe(BrewResources) do
       allow(self).to(receive(:fetch_gem_sha256).and_return('deadbeef' * 8))
     end
 
-    after { FileUtils.rm_rf('spec/fixtures') }
-
     it 'parses the lockfile and prints a Homebrew resource block for each spec' do
       expect { run_brew_resources(lockfile_path) }
         .to(output(/resource 'example' do/).to_stdout)
+    end
+
+    it 'writes no fixture into the repository working tree' do
+      run_brew_resources(lockfile_path)
+      expect(Dir.exist?(File.join(__dir__, 'fixtures'))).to(be(false))
     end
   end
 

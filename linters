@@ -521,7 +521,10 @@ if [ -f .trivyignore ]; then
     SCANNERS="${SCANNERS},misconfig"
   fi
 
-  # Build submodule exclusion paths for find
+  # Build submodule exclusion paths for find. Expanded as ${arr[@]+"${arr[@]}"}
+  # because this script re-execs under "bash 4 or newer", which admits 4.0-4.3,
+  # where expanding an empty array under `set -u` aborts as an unbound variable --
+  # and a repository with no .gitmodules leaves it empty.
   SUBMODULE_PRUNE=()
   if [ -f .gitmodules ]; then
     while IFS= read -r sm_path; do
@@ -534,7 +537,7 @@ if [ -f .trivyignore ]; then
                    Gemfile.lock composer.lock \
                    pom.xml build.gradle build.gradle.kts \
                    Cargo.lock Package.resolved; do
-    if find . "${SUBMODULE_PRUNE[@]}" -name "${lock_file}" -print -quit 2>/dev/null | grep -q .; then
+    if find . ${SUBMODULE_PRUNE[@]+"${SUBMODULE_PRUNE[@]}"} -name "${lock_file}" -print -quit 2>/dev/null | grep -q .; then
       SCANNERS="${SCANNERS},vuln"
       break
     fi
