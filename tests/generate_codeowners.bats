@@ -80,3 +80,24 @@ EOF
   grep -q "# custom start" .github/CODEOWNERS
   grep -q "# custom end" .github/CODEOWNERS
 }
+
+@test "works when the ignored-folders list is empty" {
+  # An empty IGNORED_EXCLUDES is the common case (no ignored folders reported).
+  # Expanding it as "${arr[@]}" aborts under `set -u` on bash 4.0-4.3, which the
+  # re-exec guard admits, so the expansion has to tolerate an empty array.
+  export GHB_IGNORED_EXCLUDES=" "
+
+  touch Gemfile
+  run generate-codeowners "@build-owner" "@default-owner"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  [ -f .github/CODEOWNERS ]
+}
+
+@test "writes validation errors to stderr, not stdout" {
+  run --separate-stderr generate-codeowners "" ""
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"ERROR: build files owners cannot be empty!"* ]]
+  # stdout is where a caller redirects real output; the diagnostics must not land there.
+  [[ "$output" != *"ERROR:"* ]]
+}
