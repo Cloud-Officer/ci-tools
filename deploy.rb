@@ -195,7 +195,12 @@ def resolve_parameter_value(key, prefix, ami_id, asg, options)
   end
 end
 
-CFN_SECRET_PARAMETERS = %w[DbPassword MqPassword SendGridApiKey].freeze
+# Backstop only. The authoritative set of secret parameters is read from the
+# template's NoEcho flags by fetch_no_echo_parameter_keys; these three are kept so
+# a get_template_summary failure cannot silently expose the secrets we already
+# know about. Adding a name here is not how a new secret gets protected -- marking
+# it NoEcho in the template is.
+CFN_KNOWN_SECRET_PARAMETERS = %w[DbPassword MqPassword SendGridApiKey].freeze
 
 def update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
   ssm = Aws::SSM::Client.new
@@ -208,9 +213,23 @@ def update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
   end
 end
 
-def mark_cfn_secrets_for_previous_value!(parameters)
+# describe_stacks reports every NoEcho parameter's value as "****". Sending that
+# masked string back in update_stack overwrites the real secret with literal
+# asterisks, so each one has to be resent with use_previous_value instead.
+def fetch_no_echo_parameter_keys(cfn, stack_name)
+  cfn.get_template_summary({ stack_name: stack_name }).parameters.filter_map do |parameter|
+    parameter.parameter_key if parameter.no_echo
+  end
+rescue StandardError => e
+  warn("Unable to read NoEcho parameters for #{stack_name}, falling back to the known list: #{e.message}")
+  []
+end
+
+def mark_cfn_secrets_for_previous_value!(parameters, secret_keys)
+  protected_keys = CFN_KNOWN_SECRET_PARAMETERS | secret_keys
+
   parameters.each do |parameter|
-    next unless CFN_SECRET_PARAMETERS.include?(parameter.parameter_key)
+    next unless protected_keys.include?(parameter.parameter_key)
 
     parameter.parameter_value = nil
     parameter.use_previous_value = true
@@ -364,7 +383,10 @@ def discover_cfn_stack_context(cfn, options)
   subnet = extract_subnet_number(stack_name)
   {
     stack_name: stack_name,
-    parameters: stacks_response.first.parameters,
+    # Parameters is an optional member: the SDK returns nil for a stack that
+    # declares none, and every consumer below iterates it.
+    parameters: stacks_response.first.parameters || [],
+    secret_parameter_keys: fetch_no_echo_parameter_keys(cfn, stack_name),
     environment: environment,
     subnet: subnet,
     prefix: parameter_prefix_for(options[:instance]),
@@ -414,6 +436,24 @@ ensure
   update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above])
 end
 
+# The scale-up above doubles desired_capacity (and raises max_size when the plan
+# needs it). run_rolling_deploy's own ensure restores the mixed-instances policy,
+# but nothing restored the capacity: a failure between the scale-up and the
+# scale-down left the group running at the inflated size indefinitely.
+def run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
+  run_rolling_deploy(asg_resources, asg, mixed_params, plan[:new_capacity], elb, target_group_arn, options)
+rescue StandardError
+  puts("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
+  begin
+    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])
+  rescue StandardError => e
+    puts("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
+    pp(e)
+  end
+
+  raise
+end
+
 def discover_load_balancer(options)
   return [nil, nil] unless load_balanced_instance?(options[:instance])
 
@@ -448,7 +488,7 @@ def run_deployment(options)
 
   ssm_snapshot = capture_ssm_snapshot(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix])
   update_ssm_parameters_with_rollback(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix], ssm_snapshot)
-  mark_cfn_secrets_for_previous_value!(ctx[:parameters])
+  mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
 
   update_stack_with_ssm_rollback(cfn, ctx[:stack_name], ctx[:parameters], ctx[:prefix], ami_id, ssm_snapshot)
 
@@ -458,7 +498,7 @@ def run_deployment(options)
   puts("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
   update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: plan[:new_capacity], max_size: plan[:new_max])
 
-  run_rolling_deploy(asg_resources, asg, mixed_params, plan[:new_capacity], elb, target_group_arn, options)
+  run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
 
   puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
   puts('Deployment completed successfully.')

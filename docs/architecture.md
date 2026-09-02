@@ -114,7 +114,8 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count
 - `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
 - `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
-- `mark_cfn_secrets_for_previous_value!`: Flags the parameters listed in `CFN_SECRET_PARAMETERS` as `use_previous_value` so secrets are never re-sent to CloudFormation
+- `fetch_no_echo_parameter_keys`: Reads the stack's own template summary and returns every parameter declared `NoEcho`, so the secret set is discovered rather than hand-maintained
+- `mark_cfn_secrets_for_previous_value!`: Flags those parameters, unioned with the `CFN_KNOWN_SECRET_PARAMETERS` backstop, as `use_previous_value` so secrets are never re-sent to CloudFormation. `describe_stacks` reports a `NoEcho` value as `****`, and resending that string would overwrite the real secret with asterisks
 - `create_ami`: Creates an AMI from the standalone instance and waits on `Aws::EC2::Waiters::ImageAvailable`
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
@@ -125,6 +126,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Updates CloudFormation stack parameters via SSM
 - Captures SSM parameter snapshots and restores them if the CloudFormation update fails
 - Preserves existing values for secret CloudFormation parameters instead of transmitting them
+- Restores the auto scaling group's original desired capacity when a rolling deploy fails after the scale-up, so a failed run does not leave the group running at the inflated size
 - Manages ASG desired capacity with blue/green deployment pattern
 - Restores ASG mixed-instances policy via an `ensure` block even if scaling fails
 - Publishes Lambda versions and updates CloudFront distributions
@@ -581,24 +583,25 @@ The accepted Trivy findings fall into three groups: conditions Trivy cannot eval
 
 ### Error Handling
 
-| Control                | Implementation                                                   | Location                                     |
-|------------------------|------------------------------------------------------------------|----------------------------------------------|
-| Exception Wrapping     | Top-level rescue blocks with stack traces                        | `CliMain.run!` in `lib/cli_main.rb`          |
-| Validation Errors      | CloudFormation validation error handling                         | `deploy.rb` in CloudFormation update section |
-| Stack State Monitoring | Checks for failed stack states                                   | `deploy.rb` in stack status check            |
-| SSM Parameter Rollback | Restores SSM snapshot when CFN update fails                      | `deploy.rb` in `restore_ssm_parameters`      |
-| Key Rotation Rollback  | Re-activates original key, deletes new key, restores credentials | `cycle-keys.rb` in `rollback_key_change`     |
-| Exit Codes             | Non-zero exit codes on failures                                  | All scripts                                  |
+| Control                | Implementation                                                     | Location                                                   |
+|------------------------|--------------------------------------------------------------------|------------------------------------------------------------|
+| Exception Wrapping     | Top-level rescue blocks with stack traces                          | `CliMain.run!` in `lib/cli_main.rb`                        |
+| Validation Errors      | CloudFormation validation error handling                           | `deploy.rb` in CloudFormation update section               |
+| Stack State Monitoring | Checks for failed stack states                                     | `deploy.rb` in stack status check                          |
+| SSM Parameter Rollback | Restores SSM snapshot when CFN update fails                        | `deploy.rb` in `restore_ssm_parameters`                    |
+| ASG Capacity Rollback  | Restores the original desired capacity when a rolling deploy fails | `deploy.rb` in `run_rolling_deploy_with_capacity_rollback` |
+| Key Rotation Rollback  | Re-activates original key, deletes new key, restores credentials   | `cycle-keys.rb` in `rollback_key_change`                   |
+| Exit Codes             | Non-zero exit codes on failures                                    | All scripts                                                |
 
 ### Operational Safety
 
-| Control             | Implementation                                     | Location                                              |
-|---------------------|----------------------------------------------------|-------------------------------------------------------|
-| Capacity Limits     | Respects ASG max_size constraints                  | `deploy.rb` in ASG update section                     |
-| Health Checks       | Waits for ELB target health before proceeding      | `deploy.rb` in `wait_for_healthy_instances`           |
-| Warm-up Periods     | Configurable sleep times for cache warming         | `deploy.rb` in `WARMUP_SHORT` / `WARMUP_LONG`         |
-| Polling Timeouts    | Wait loops raise after a bounded attempt count     | `deploy.rb` in `poll_until`                           |
-| Secret Preservation | CFN secrets updated with `use_previous_value`      | `deploy.rb` in `mark_cfn_secrets_for_previous_value!` |
+| Control             | Implementation                                            | Location                                              |
+|---------------------|-----------------------------------------------------------|-------------------------------------------------------|
+| Capacity Limits     | Respects ASG max_size constraints                         | `deploy.rb` in ASG update section                     |
+| Health Checks       | Waits for ELB target health before proceeding             | `deploy.rb` in `wait_for_healthy_instances`           |
+| Warm-up Periods     | Configurable sleep times for cache warming                | `deploy.rb` in `WARMUP_SHORT` / `WARMUP_LONG`         |
+| Polling Timeouts    | Wait loops raise after a bounded attempt count            | `deploy.rb` in `poll_until`                           |
+| Secret Preservation | CFN `NoEcho` parameters updated with `use_previous_value` | `deploy.rb` in `mark_cfn_secrets_for_previous_value!` |
 
 ### Logging and Monitoring
 
