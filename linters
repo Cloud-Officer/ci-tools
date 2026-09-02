@@ -24,7 +24,7 @@ FAILED=0
 
 # Returns 0 (success) on macOS so callers can use `if is_darwin; then brew ... else <other> ; fi`.
 is_darwin() {
-  [ "$(uname -s)" = "Darwin" ]
+  [ "$(uname -s)" == "Darwin" ]
 }
 
 # Emits "sudo" or "" depending on whether the named command's path is user-writable.
@@ -119,8 +119,10 @@ npm_install() {
 # config/languages.yaml. Keep the three in step: a directory listed there but not
 # here means build output and vendored code get linted by the tools driven from
 # this script, which is how the two lists drifted apart in the first place.
+# Extra find predicates may follow the pattern ("${@:2}"), so callers needing a
+# narrower search reuse this exclusion set instead of copying it and drifting.
 find_lintable() {
-  find . -name "${1}" \
+  find . -name "${1}" ${2+"${@:2}"} \
     -not -path "*/.build/*" \
     -not -path "*/.bundle/*" \
     -not -path "*/.git/*" \
@@ -148,6 +150,26 @@ find_lintable() {
     -not -path "*/venv/*"
 }
 
+# Discovers the shell scripts to lint: *.sh by name, plus extensionless executables
+# whose shebang names a shell. The four tools this repo ships -- linters, ssm-jump,
+# sync-jira-release, generate-codeowners -- install onto PATH without a suffix, so a
+# name-only glob never saw them. shellcheck itself does not care about the
+# extension; it dispatches on the shebang.
+#
+# Detection is by shebang rather than by the executable bit alone: a non-shell
+# script fails with SC1071 rather than being skipped, and this repo's Ruby CLIs
+# are executable too. Bats suites are excluded the same way -- their shebang is
+# not a shell, and their @test syntax would not parse.
+find_shell_scripts() {
+  find_lintable "*.sh"
+
+  while IFS= read -r candidate; do
+    if head -n 1 "${candidate}" 2>/dev/null | grep -qE '^#!.*[/ ](ba|da|k)?sh([[:space:]]|$)'; then
+      echo "${candidate}"
+    fi
+  done < <(find_lintable "*" -type f -perm -u+x ! -name "*.*")
+}
+
 # Custom shell-script rules that shellcheck doesn't cover, ported from the
 # historical shell_linter.rb. Runs after shellcheck over the same *.sh files:
 #   SL0001 - prefer ${var} over $var
@@ -156,7 +178,7 @@ find_lintable() {
 # `# shellcheck disable=all` directive skips the rest of that file.
 shell_lint_custom() {
   local sh_files=()
-  mapfile -t sh_files < <(find_lintable "*.sh")
+  mapfile -t sh_files < <(find_shell_scripts)
 
   if [ ${#sh_files[@]} -eq 0 ]; then
     return 0
@@ -261,10 +283,10 @@ if [ -f .shellcheckrc ]; then
     brew_or_apt_install shellcheck
   fi
 
-  # Feed the file list through an array: unquoted $(find_lintable ...) word-splits,
+  # Feed the file list through an array: unquoted $(find_shell_scripts) word-splits,
   # and when nothing matches it expands to no operands at all, which exits
   # non-zero on a usage dump and fails the build for a tree with no shell files.
-  mapfile -t SHELL_FILES < <(find_lintable "*.sh")
+  mapfile -t SHELL_FILES < <(find_shell_scripts)
 
   if [ ${#SHELL_FILES[@]} -gt 0 ]; then
     shellcheck --external-sources "${SHELL_FILES[@]}" || FAILED=1
@@ -417,7 +439,7 @@ if [ -f .eslintrc.json ]; then
     INSTALL_ESLINT=1
   fi
 
-  if [ ${INSTALL_ESLINT} -eq 1 ]; then
+  if [ "${INSTALL_ESLINT}" -eq 1 ]; then
     npm_install eslint@8
   fi
 
@@ -562,7 +584,7 @@ if [ -f .swiftlint.yml ]; then
   swiftlint lint --strict || FAILED=1
 fi
 
-if [ ${FAILED} -eq 1 ]; then
+if [ "${FAILED}" -eq 1 ]; then
   echo "Some checks failed."
   exit 1
 fi

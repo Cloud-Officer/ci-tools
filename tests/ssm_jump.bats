@@ -165,9 +165,12 @@ AWS
   [[ "$output" == *"Usage: ssm-jump"* ]]
 }
 
-# ssm-jump is extensionless, so the house shell lint (which only scans *.sh)
-# never sees it. These guards pin the file's formatting conventions instead
-# (see issue #524).
+# Stopgap guards (issue #524). `linters` can now discover this file by shebang,
+# but the block that runs shellcheck is gated on a `.shellcheckrc`, which
+# github-build only emits once Cloud-Officer/github-build#519 and
+# Cloud-Officer/ci-actions#293 have landed and it has been re-run here. Until
+# then these pin the two conventions the linter will take over, and they should
+# be deleted in the same change that adds `.shellcheckrc`.
 
 @test "is indented with spaces only (no literal tab characters)" {
   run grep -n "$(printf '\t')" "${SSM_JUMP}"
