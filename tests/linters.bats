@@ -80,6 +80,135 @@ stub_all_linters() {
   [[ "$output" == *"Checking Markdown"* ]]
 }
 
+@test "bootstraps npm before installing markdownlint-cli2 on Linux" {
+  skip_unless_bash4
+  touch .markdownlint-cli2.yaml
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  function uname() { echo "Linux"; }
+
+  # npm deliberately absent. The old `elif command -v npm` shape silently skipped
+  # the install here and then failed on the missing binary; npm_install must
+  # bootstrap npm through apt instead.
+  # markdownlint-cli2 is deliberately NOT stubbed up front: the install branch only
+  # runs when the binary is absent. apt drops in npm, npm drops in the linter.
+  function sudo() {
+    echo "sudo invoked: $*"
+
+    if [[ "$*" == *"install"*"npm"* ]]; then
+      cat > "${HOME}/bin/npm" <<'NPM'
+#!/usr/bin/env bash
+echo "npm invoked: $*"
+
+if [[ "$*" == *"markdownlint-cli2"* ]]; then
+  cat > "${HOME}/bin/markdownlint-cli2" <<'MDL'
+#!/usr/bin/env bash
+echo "markdownlint invoked: $*"
+MDL
+  chmod 0755 "${HOME}/bin/markdownlint-cli2"
+fi
+NPM
+      chmod 0755 "${HOME}/bin/npm"
+    fi
+  }
+
+  export -f uname sudo
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"install --no-install-recommends npm"* ]]
+  [[ "$output" == *"npm invoked: install -g markdownlint-cli2"* ]]
+  [[ "$output" == *"markdownlint invoked"* ]]
+}
+
+@test "installs bandit under its apt package name on Linux" {
+  skip_unless_bash4
+  touch .bandit
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  function uname() { echo "Linux"; }
+
+  function sudo() {
+    echo "sudo invoked: $*"
+    cat > "${HOME}/bin/bandit" <<'BANDIT'
+#!/usr/bin/env bash
+echo "bandit invoked: $*"
+BANDIT
+    chmod 0755 "${HOME}/bin/bandit"
+  }
+
+  export -f uname sudo
+
+  run linters
+  [ "$status" -eq 0 ]
+  # brew name is bandit, apt name is python3-bandit -- the override must be used.
+  [[ "$output" == *"install --no-install-recommends python3-bandit"* ]]
+  [[ "$output" == *"bandit invoked"* ]]
+}
+
+@test "taps the protolint formula on macOS before installing" {
+  skip_unless_bash4
+
+  if [ "$(uname -s)" != "Darwin" ]; then
+    skip "protolint tap only applies on macOS"
+  fi
+
+  touch .protolint.yaml
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  function brew() {
+    echo "brew invoked: $*"
+    cat > "${HOME}/bin/protolint" <<'PROTO'
+#!/usr/bin/env bash
+echo "protolint invoked: $*"
+PROTO
+    chmod 0755 "${HOME}/bin/protolint"
+  }
+
+  export -f brew
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"brew invoked: tap yoheimuta/protolint"* ]]
+  [[ "$output" == *"brew invoked: install protolint"* ]]
+}
+
+@test "find_lintable excludes generated and vendored directories" {
+  skip_unless_bash4
+  touch .hadolint.yaml
+  # One Dockerfile in each directory the canonical ghb:excluded-dirs list covers
+  # but the old 12-entry filter missed, plus a real one that must still be found.
+  mkdir -p coverage .bundle __pycache__ .gradle .yarn env node_modules
+  touch coverage/Dockerfile .bundle/Dockerfile __pycache__/Dockerfile \
+    .gradle/Dockerfile .yarn/Dockerfile env/Dockerfile node_modules/Dockerfile Dockerfile
+
+  function hadolint() { echo "hadolint invoked: $*"; }
+  export -f hadolint
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hadolint invoked: ./Dockerfile"* ]]
+  [[ "$output" != *"coverage/Dockerfile"* ]]
+  [[ "$output" != *".bundle/Dockerfile"* ]]
+  [[ "$output" != *"__pycache__/Dockerfile"* ]]
+  [[ "$output" != *".gradle/Dockerfile"* ]]
+  [[ "$output" != *".yarn/Dockerfile"* ]]
+  [[ "$output" != *"env/Dockerfile"* ]]
+  [[ "$output" != *"node_modules/Dockerfile"* ]]
+}
+
 @test "runs yamllint when its config is present" {
   skip_unless_bash4
   touch .yamllint.yml
