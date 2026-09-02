@@ -9,6 +9,18 @@ CLOUDFRONT_DISTRIBUTION_DEFAULTS = {
   staging: false
 }.freeze
 
+# The CloudFront default_cache_behavior shape, written once. All three call sites
+# need the same five required members; only lambda_function_associations varies.
+def default_cache_behavior(overrides = {})
+  {
+    target_origin_id: 'origin1',
+    viewer_protocol_policy: 'redirect-to-https',
+    allowed_methods: { quantity: 2, items: %w[GET HEAD] },
+    forwarded_values: { query_string: false, cookies: { forward: 'none' } },
+    min_ttl: 0
+  }.merge(overrides)
+end
+
 def build_distribution_item(overrides = {})
   {
     id: 'DIST123',
@@ -19,13 +31,7 @@ def build_distribution_item(overrides = {})
     comment: '',
     aliases: { quantity: 1, items: ['beta.example.com'] },
     origins: { quantity: 1, items: [{ id: 'origin1', domain_name: 'origin.example.com' }] },
-    default_cache_behavior: {
-      target_origin_id: 'origin1',
-      viewer_protocol_policy: 'redirect-to-https',
-      allowed_methods: { quantity: 2, items: %w[GET HEAD] },
-      forwarded_values: { query_string: false, cookies: { forward: 'none' } },
-      min_ttl: 0
-    },
+    default_cache_behavior: default_cache_behavior,
     cache_behaviors: { quantity: 0 },
     restrictions: { geo_restriction: { restriction_type: 'none', quantity: 0 } },
     viewer_certificate: {},
@@ -60,14 +66,7 @@ RSpec.describe(Deploy) do
       distribution_config: {
         caller_reference: 'ref',
         origins: { quantity: 1, items: [{ id: 'origin1', domain_name: 'origin.example.com' }] },
-        default_cache_behavior: {
-          target_origin_id: 'origin1',
-          viewer_protocol_policy: 'redirect-to-https',
-          allowed_methods: { quantity: 2, items: %w[GET HEAD] },
-          forwarded_values: { query_string: false, cookies: { forward: 'none' } },
-          min_ttl: 0,
-          lambda_function_associations: lambda_assoc
-        },
+        default_cache_behavior: default_cache_behavior(lambda_function_associations: lambda_assoc),
         comment: '',
         enabled: true
       }
@@ -484,18 +483,49 @@ RSpec.describe(Deploy) do
   end
 
   describe '#mark_cfn_secrets_for_previous_value!' do
-    let(:secret)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword') }
-    let(:non_secret) { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId') }
+    let(:secret)      { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword') }
+    let(:no_echo)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'StripeSecret') }
+    let(:non_secret)  { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId')   }
 
     before do
-      allow(secret).to(receive(:parameter_value=))
-      allow(secret).to(receive(:use_previous_value=))
-      mark_cfn_secrets_for_previous_value!([secret, non_secret])
+      [secret, no_echo, non_secret].each do |parameter|
+        allow(parameter).to(receive(:parameter_value=))
+        allow(parameter).to(receive(:use_previous_value=))
+      end
     end
 
     it 'marks each known secret for previous-value reuse', :aggregate_failures do
+      mark_cfn_secrets_for_previous_value!([secret, non_secret], [])
       expect(secret).to(have_received(:parameter_value=).with(nil))
       expect(secret).to(have_received(:use_previous_value=).with(true))
+    end
+
+    it 'marks a NoEcho parameter absent from the known list', :aggregate_failures do
+      mark_cfn_secrets_for_previous_value!([no_echo, non_secret], %w[StripeSecret])
+      expect(no_echo).to(have_received(:use_previous_value=).with(true))
+      expect(non_secret).not_to(have_received(:use_previous_value=))
+    end
+
+    it 'leaves ordinary parameters alone' do
+      mark_cfn_secrets_for_previous_value!([secret, no_echo, non_secret], %w[StripeSecret])
+      expect(non_secret).not_to(have_received(:parameter_value=))
+    end
+  end
+
+  describe '#fetch_no_echo_parameter_keys' do
+    let(:cfn) { Aws::CloudFormation::Client.new(stub_responses: true) }
+
+    it 'returns only the parameters the template marks NoEcho' do
+      cfn.stub_responses(
+        :get_template_summary,
+        { parameters: [{ parameter_key: 'StripeSecret', no_echo: true }, { parameter_key: 'APIImageId', no_echo: false }] }
+      )
+      expect(fetch_no_echo_parameter_keys(cfn, 'api-stack')).to(eq(%w[StripeSecret]))
+    end
+
+    it 'falls back to an empty list when the summary cannot be read' do
+      cfn.stub_responses(:get_template_summary, 'ServiceError')
+      expect(fetch_no_echo_parameter_keys(cfn, 'api-stack')).to(eq([]))
     end
   end
 
@@ -833,9 +863,9 @@ RSpec.describe(Deploy) do
 
   describe '#scale_down_after_deploy' do
     let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
-    let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
-    let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
-    let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
+    let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)              }
+    let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 }     }
+    let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                     }
 
     before do
       allow(self).to(receive(:sleep))
@@ -901,7 +931,7 @@ RSpec.describe(Deploy) do
         allow(Aws::CloudFront::Client).to(receive(:new).and_return(cloudfront))
         allow(lambda_client).to(receive(:publish_version).and_call_original)
         lambda_client.stub_responses(:publish_version, { function_arn: 'arn:aws:lambda:us-east-1:123:function:my-function:1' })
-        dist_item = build_distribution_item(default_cache_behavior: { target_origin_id: 'origin1', viewer_protocol_policy: 'redirect-to-https', allowed_methods: { quantity: 2, items: %w[GET HEAD] }, forwarded_values: { query_string: false, cookies: { forward: 'none' } }, min_ttl: 0, lambda_function_associations: { quantity: 0, items: [] } })
+        dist_item = build_distribution_item(default_cache_behavior: default_cache_behavior(lambda_function_associations: { quantity: 0, items: [] }))
         cloudfront.stub_responses(:list_distributions, build_distribution_list([dist_item]))
         cloudfront.stub_responses(:get_distribution_config, build_cf_config)
       end
@@ -920,7 +950,7 @@ RSpec.describe(Deploy) do
 
     context 'with the standard ASG/CFN deploy path' do
       let(:ctx) do
-        { stack_name: 'beta1-StackInstances-x', parameters: [], environment: 'beta', subnet: 1, prefix: 'API', ssm_prefix: '/beta/1' }
+        { stack_name: 'beta1-StackInstances-x', parameters: [], secret_parameter_keys: %w[DbPassword], environment: 'beta', subnet: 1, prefix: 'API', ssm_prefix: '/beta/1' }
       end
       let(:snapshot) { { snapshot_name => 'ami-old' } }
       let(:snapshot_name) { '/beta/1/APIImageId' }
@@ -950,6 +980,70 @@ RSpec.describe(Deploy) do
       it 'routes the SSM parameter update through the rollback-protected path with the snapshot' do
         run_deployment({ environment: 'beta', instance: 'api', profile: nil })
         expect(self).to(have_received(:update_ssm_parameters_with_rollback).with([], 'API', 'ami-new', anything, anything, '/beta/1', snapshot))
+      end
+
+      it 'passes the template-discovered NoEcho keys to the secret marker' do
+        run_deployment({ environment: 'beta', instance: 'api', profile: nil })
+        expect(self).to(have_received(:mark_cfn_secrets_for_previous_value!).with([], %w[DbPassword]))
+      end
+
+      # A rolling deploy that blows up after the scale-up used to leave the group
+      # running at the inflated capacity with nothing to put it back.
+      def run_failed_rolling_deploy
+        allow(self).to(receive(:run_rolling_deploy).and_raise(StandardError, 'deploy blew up'))
+        run_deployment({ environment: 'beta', instance: 'api', profile: nil })
+      rescue StandardError
+        nil
+      end
+
+      it 're-raises a rolling-deploy failure rather than swallowing it' do
+        allow(self).to(receive(:run_rolling_deploy).and_raise(StandardError, 'deploy blew up'))
+        expect { run_deployment({ environment: 'beta', instance: 'api', profile: nil }) }
+          .to(raise_error(StandardError, 'deploy blew up'))
+      end
+
+      it 'restores the original desired capacity instead of leaving the group scaled up' do
+        run_failed_rolling_deploy
+        # Scale-up went to 4; the group must be put back to the 2 it started at.
+        expect(self).to(have_received(:update_asg_capacity).with(anything, 'asg', hash_including(desired_capacity: 2, max_size: 4)))
+      end
+
+      def stub_failing_capacity_restore
+        allow(self).to(receive(:run_rolling_deploy).and_raise(StandardError, 'deploy blew up'))
+        allow(self).to(receive(:update_asg_capacity)) do |_client, _name, **kwargs|
+          raise(StandardError, 'restore failed') if kwargs[:desired_capacity] == 2
+        end
+      end
+
+      # A failed cleanup must not become the error the operator sees.
+      it 'reports the deploy failure, not the restore failure, when the restore also fails' do
+        stub_failing_capacity_restore
+        expect { run_deployment({ environment: 'beta', instance: 'api', profile: nil }) }
+          .to(raise_error(StandardError, 'deploy blew up'))
+      end
+    end
+
+    context 'with --create_ami_only' do
+      before do
+        # resolve_capacity_factors is the first call past the early return, so it
+        # is the marker for "the deployment actually started". Nothing beyond it
+        # is stubbed here, and nothing beyond it should run.
+        allow(self).to(receive_messages(resolve_ami_id: 'ami-new', resolve_capacity_factors: { asg_increase: 1, asg_multiplier: 2 }))
+        allow(Aws::AutoScaling::Resource).to(receive(:new).and_return(instance_double(Aws::AutoScaling::Resource, client: nil)))
+        allow(self).to(receive(:find_auto_scaling_group).and_raise(StandardError.new('reached the ASG path')))
+      end
+
+      it 'returns after creating the AMI without starting a deployment', :aggregate_failures do
+        expect { run_deployment({ environment: 'beta', instance: 'api', profile: nil, create_ami_only: true }) }
+          .to(output(/--create_ami_only was supplied/).to_stdout)
+        expect(self).not_to(have_received(:resolve_capacity_factors))
+      end
+
+      it 'continues the deployment when --ami was supplied alongside it' do
+        # --create_ami_only only short-circuits when it did the creating; with an
+        # AMI handed in there is nothing to create and the deploy proceeds.
+        expect { run_deployment({ environment: 'beta', instance: 'api', profile: nil, create_ami_only: true, ami: 'ami-supplied' }) }
+          .to(raise_error(StandardError, 'reached the ASG path'))
       end
     end
   end
@@ -1204,14 +1298,7 @@ RSpec.describe(Deploy) do
     context 'when distribution matches' do
       before do
         dist_item = build_distribution_item(
-          default_cache_behavior: {
-            target_origin_id: 'origin1',
-            viewer_protocol_policy: 'redirect-to-https',
-            allowed_methods: { quantity: 2, items: %w[GET HEAD] },
-            forwarded_values: { query_string: false, cookies: { forward: 'none' } },
-            min_ttl: 0,
-            lambda_function_associations: { quantity: 0, items: [] }
-          }
+          default_cache_behavior: default_cache_behavior(lambda_function_associations: { quantity: 0, items: [] })
         )
         cloudfront.stub_responses(:list_distributions, build_distribution_list([dist_item]))
         cloudfront.stub_responses(:get_distribution_config, build_cf_config)
