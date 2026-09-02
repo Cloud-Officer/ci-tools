@@ -303,15 +303,18 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 - Git tag comparison for PR discovery
 - Jira issue key extraction from PR descriptions
 - Jira release version updates
+- `install_jira_cli` / `ensure_gh_cli`: Tool bootstraps, invoked only after the arguments and environment have been validated
+- `open_release_report`: Opens the report where a browser opener exists, and reports its absence without failing the run
 
 **Functionality:**
 
+- Validates its three arguments (`<tag1> <tag2> <jira_release>`, bound to named variables) and the four required environment variables **before** installing anything
 - Installs the Jira CLI when missing, resolving the latest release, downloading the platform archive, and verifying its SHA256 against the published `checksums.txt` before extraction
 - Extracts Jira project key from PR template
 - Finds all PRs between two git tags
 - Extracts Jira issue keys from PR descriptions
 - Updates issues with fix version in Jira
-- Opens Jira release report in browser
+- Opens the Jira release report in a browser, tolerating a host with no `open`/`xdg-open` — every issue has already been updated by that point, so a missing opener must not report the run as failed
 
 **Internal Dependencies:** None
 

@@ -161,3 +161,77 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"Checksum verification failed"* ]]
 }
+
+@test "validates arguments before running the jira CLI install" {
+  # jira absent, so the bootstrap would run -- but bad arguments must stop the
+  # script first. Previously the 88-line download ran before any validation.
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "jira" ]; then return 1; fi
+    builtin command "$@"
+  }
+
+  function curl() { echo "curl invoked: $*"; }
+  export -f command curl
+
+  run sync-jira-release tag1 tag2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage:"* ]]
+  [[ "$output" != *"jira CLI not found"* ]]
+  [[ "$output" != *"curl invoked"* ]]
+}
+
+@test "validates the environment before running the jira CLI install" {
+  export JIRA_BASE_URL=""
+
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "jira" ]; then return 1; fi
+    builtin command "$@"
+  }
+
+  function curl() { echo "curl invoked: $*"; }
+  export -f command curl
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Required environment variables"* ]]
+  [[ "$output" != *"curl invoked"* ]]
+}
+
+@test "succeeds on a host with no xdg-open once every issue is updated" {
+  # A headless Linux box has no xdg-open. Every Jira issue has already been
+  # updated by the time the report is opened, so this must not fail the run.
+  function uname() { echo "Linux"; }
+
+  function jira() {
+    case "${1}" in
+      release) printf 'header\n10001\trelease1\n' ;;
+      *) : ;;
+    esac
+  }
+
+  function gh() { echo "octocat/hello"; }
+  function git() {
+    case "${1}" in
+      rev-parse) return 0 ;;
+      log) echo "abc1234 Some change (#42)" ;;
+      *) builtin command git "$@" ;;
+    esac
+  }
+
+  function xdg-open() { return 127; }
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "xdg-open" ]; then return 1; fi
+    builtin command "$@"
+  }
+
+  export -f uname jira gh git xdg-open command
+
+  cd "${BATS_TEST_TMPDIR}"
+  mkdir -p .github
+  printf '[DEV-XXXX](https://x.atlassian.net/browse/DEV-XXXX)\n' > .github/pull_request_template.md
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No xdg-open on this host"* ]]
+  [[ "$output" == *"release-report-all-issues"* ]]
+}
