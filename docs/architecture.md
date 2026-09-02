@@ -149,13 +149,15 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `cleanup_secondary_keys`: Disables and deletes any non-primary keys before rotation
 - `create_and_save_new_key`: Creates a new access key and persists it under an exclusive file lock
 - `new_key_usable?`: Polls IAM with the new key until it authenticates, absorbing IAM's eventual consistency before the old key is retired
+- `with_credentials_lock`: Wraps the read, rotation, and save in a single exclusive lock. `flock` is tied to the open file description, so the save paths must not re-open the lock file or they would deadlock against the lock already held
+- Error context follows the `CliMain` convention throughout: failures are reported with `warn(e.full_message)` on STDERR, which renders one frame per line and walks `e.cause`, rather than `pp(e)`, which printed a single line to STDOUT and dropped both
 - `disable_and_delete_old_key`: Disables and deletes the previous key with rollback on failure
 
 **Functionality:**
 
 - Reads AWS credentials from `~/.aws/credentials`
 - Creates new access keys when current keys exceed 80 days (override with `--force`)
-- Persists new credentials using an exclusive file lock (`flock`) to prevent concurrent writers
+- Holds one exclusive `flock` on the credentials file across the whole read-modify-write cycle (`with_credentials_lock`), not just the save: locking only the write let two concurrent runs parse the same pre-rotation snapshot and the second write back a file whose other profiles the first had already rotated
 - Retires the old key through a client built from the **new** key, so neither the delete nor the rollback is signed with the credentials being invalidated
 - Rolls back (re-activates the original key, then deletes the new key and restores the original credentials) if disabling or deleting the old key fails
 - Disables and deletes old keys after successful rotation

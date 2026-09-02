@@ -92,10 +92,14 @@ RSpec.describe(CycleKeys) do
       expect(new_key.secret_access_key).to(eq('secret123'))
     end
 
-    it 'writes credentials with file lock', :aggregate_failures do
+    it 'saves without taking its own lock, which the caller already holds' do
       create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')
-      expect(lock_file).to(have_received(:flock).with(File::LOCK_EX))
       expect(credentials).to(have_received(:save))
+    end
+
+    it 'does not re-open the lock file, which would deadlock against the held lock' do
+      create_and_save_new_key(iam, credentials, 'test-profile', user_name, '/tmp/test-credentials')
+      expect(File).not_to(have_received(:open).with('/tmp/test-credentials.lock', anything, anything))
     end
 
     it 'updates credentials hash with new key', :aggregate_failures do
@@ -147,7 +151,7 @@ RSpec.describe(CycleKeys) do
     let(:lock_file)   { instance_double(File)                      }
 
     def call_rollback
-      rollback_key_change(iam, credentials, 'test-profile', 'testuser', '/tmp/test-credentials', 'AKIANEWKEY123', 'AKIAOLDKEY123', 'oldsecret123', 'failed to disable old key')
+      rollback_key_change(iam, credentials, 'test-profile', 'testuser', 'AKIANEWKEY123', 'AKIAOLDKEY123', 'oldsecret123', 'failed to disable old key')
     end
 
     before do
@@ -161,11 +165,12 @@ RSpec.describe(CycleKeys) do
       allow(lock_file).to(receive(:flock))
     end
 
-    it 'deletes the new key and saves restored credentials under lock', :aggregate_failures do
+    it 'deletes the new key and saves restored credentials', :aggregate_failures do
       call_rollback
       expect(iam).to(have_received(:delete_access_key).with(hash_including(access_key_id: 'AKIANEWKEY123', user_name: 'testuser')))
-      expect(lock_file).to(have_received(:flock).with(File::LOCK_EX))
       expect(credentials).to(have_received(:save))
+      # The lock is the caller's; re-opening it here would deadlock.
+      expect(File).not_to(have_received(:open).with('/tmp/test-credentials.lock', anything, anything))
     end
 
     it 'restores the original access-key fields in the credentials hash', :aggregate_failures do
@@ -289,15 +294,114 @@ RSpec.describe(CycleKeys) do
     end
   end
 
+  describe 'error reporting' do
+    let(:iam)         { Aws::IAM::Client.new(stub_responses: true)                                                     }
+    let(:credentials) { instance_double(IniParse::Document)                                                            }
+    let(:cred_hash)   { %w[region aws_access_key_id aws_secret_access_key].zip(%w[us-east-1 AKIACURRENT secret]).to_h  }
+
+    before do
+      allow(Aws::IAM::Client).to(receive(:new).and_return(iam))
+      allow(credentials).to(receive(:[]).with('dev').and_return(cred_hash))
+      iam.stub_responses(:list_access_keys, 'ServiceError')
+    end
+
+    it 'writes the failure to stderr, not stdout' do
+      expect { process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice' }) }
+        .to(output(/Error listing access keys/).to_stderr)
+    end
+
+    it 'keeps stdout free of the error so a redirected log does not lose it' do
+      expect { process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice' }) }
+        .not_to(output(/Error listing access keys/).to_stdout)
+    end
+
+    it 'includes a backtrace rather than the single-line pp form' do
+      # full_message renders one frame per line and walks e.cause; pp(e) dropped both.
+      expect { process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice' }) }
+        .to(output(/cycle-keys\.rb:\d+/).to_stderr)
+    end
+  end
+
+  describe '#process_credential_profile age guard' do
+    let(:iam)         { Aws::IAM::Client.new(stub_responses: true)                                                     }
+    let(:credentials) { instance_double(IniParse::Document)                                                            }
+    let(:cred_hash)   { %w[region aws_access_key_id aws_secret_access_key].zip(%w[us-east-1 AKIACURRENT secret]).to_h  }
+    let(:lock_file)   { instance_double(File)                                                                          }
+
+    def stub_key_aged(days)
+      iam.stub_responses(:list_access_keys, { access_key_metadata: [{ access_key_id: 'AKIACURRENT', user_name: 'alice', create_date: Time.now - (days * 24 * 60 * 60), status: 'Active' }] })
+    end
+
+    before do
+      allow(Aws::IAM::Client).to(receive(:new).and_return(iam))
+      allow(credentials).to(receive(:[]).with('dev').and_return(cred_hash))
+      allow(credentials).to(receive(:save))
+      allow(File).to(receive(:open).with("#{Dir.home}/.aws/credentials.lock", anything, anything).and_yield(lock_file))
+      allow(lock_file).to(receive(:flock))
+      iam.stub_responses(:create_access_key, { access_key: { access_key_id: 'AKIANEWKEY123', secret_access_key: 'newsecret', user_name: 'alice', status: 'Active' } })
+      allow(iam).to(receive(:update_access_key))
+      allow(iam).to(receive(:delete_access_key))
+    end
+
+    it 'skips a key one day short of the threshold' do
+      stub_key_aged(KEY_AGE_DAYS_THRESHOLD - 1)
+      expect(process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice' })).to(eq(:too_young))
+    end
+
+    it 'rotates a key exactly at the threshold' do
+      stub_key_aged(KEY_AGE_DAYS_THRESHOLD)
+      expect(process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice' })).to(eq(:rotated))
+    end
+
+    it 'rotates a too-young key when --force is given' do
+      stub_key_aged(1)
+      expect(process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice', force: true })).to(eq(:rotated))
+    end
+
+    it 'still honours the threshold when --force is absent from the options hash' do
+      stub_key_aged(1)
+      expect(process_credential_profile(credentials, 'dev', { profile: 'dev', username: 'alice' })).to(eq(:too_young))
+    end
+  end
+
   describe '#run_cycle_keys' do
     let(:credentials_path) { "#{Dir.home}/.aws/credentials" }
     let(:credentials)      { instance_double(IniParse::Document)                   }
     let(:section)          { instance_double(IniParse::Lines::Section, key: 'dev') }
 
+    let(:lock_file) { instance_double(File) }
+
     before do
       allow(File).to(receive(:exist?).with(credentials_path).and_return(true))
+      allow(File).to(receive(:open).with("#{credentials_path}.lock", anything, anything).and_yield(lock_file))
+      allow(lock_file).to(receive(:flock))
       allow(IniParse).to(receive(:open).with(credentials_path).and_return(credentials))
       allow(credentials).to(receive(:each).and_yield(section))
+    end
+
+    it 'takes the exclusive lock before reading the credentials file', :aggregate_failures do
+      allow(self).to(receive(:process_credential_profile).and_return(:rotated))
+      run_cycle_keys({ profile: 'dev', username: 'alice' })
+      expect(lock_file).to(have_received(:flock).with(File::LOCK_EX))
+      expect(IniParse).to(have_received(:open).with(credentials_path))
+    end
+
+    # IniParse.open must not be reached until flock has returned.
+    def stub_read_ordering_guard
+      locked = false
+      allow(lock_file).to(receive(:flock)) { locked = true }
+      allow(IniParse).to(receive(:open).with(credentials_path)) do
+        raise('read happened outside the lock') unless locked
+
+        credentials
+      end
+      allow(self).to(receive(:process_credential_profile).and_return(:rotated))
+    end
+
+    it 'reads inside the lock, so a concurrent run cannot parse a stale snapshot' do
+      stub_read_ordering_guard
+      expect { run_cycle_keys({ profile: 'dev', username: 'alice' }) }
+        .not_to(raise_error)
     end
 
     context 'when no profile in credentials matches the --profile arg' do
