@@ -1,8 +1,7 @@
 globs:
   - "**/*.md"
   - "!.*"
-  # Same exclusion set github-build generates into the ghb:excluded-dirs blocks of
-  # trivy.yaml and .semgrepignore, and that find_lintable applies in `linters`.
+  # ghb:excluded-dirs:start - managed by github-build from config/languages.yaml; do not edit by hand
   - "!**/.build/**"
   - "!**/.bundle/**"
   - "!**/.git/**"
@@ -28,6 +27,7 @@ globs:
   - "!**/target/**"
   - "!**/vendor/**"
   - "!**/venv/**"
+  # ghb:excluded-dirs:end
   # Claude Code skill review artifacts: rewritten wholesale on every run and gitignored,
   # so a lint failure there can only be "fixed" by regenerating the file. Living docs the
   # same skills maintain (README.md, docs/architecture.md, docs/user-guide.md, docs/db.md,
