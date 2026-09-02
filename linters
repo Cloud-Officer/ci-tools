@@ -225,6 +225,7 @@ shell_lint_custom() {
           break
         }
 
+
         if (c == quote) {
           inside_quotes = !inside_quotes
         } else if (c == "$" && !inside_quotes && prev != "\\") {
@@ -237,8 +238,10 @@ shell_lint_custom() {
         prev = c
       }
 
-      if (index(line, "[") && index(line, "]") && line ~ /\[.* = .*\]/ && line !~ /\[.*==.*\]/) {
-        pos = index(line, " = ")
+      code = substr(line, 1, i - 1)
+
+      if (index(code, "[") && index(code, "]") && code ~ /\[.* = .*\]/ && code !~ /\[.*==.*\]/) {
+        pos = index(code, " = ")
         report(FILENAME, FNR, pos ? pos : 0, "SL0002", line)
         rc = 1
       }
@@ -248,8 +251,8 @@ shell_lint_custom() {
         rc = 1
       }
 
-      if (line ~ /\[[ ]+!([ ]+)-z[ ]/) {
-        report(FILENAME, FNR, index(line, "! -z") - 1, "SL0004", line)
+      if (code ~ /\[[ ]+!([ ]+)-z[ ]/) {
+        report(FILENAME, FNR, index(code, "! -z") - 1, "SL0004", line)
         rc = 1
       }
     }

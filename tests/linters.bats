@@ -730,6 +730,18 @@ SH
   [[ "$output" == *"./notz line 3"* ]]
 }
 
+@test "built-in rules ignore the patterns when they appear only in a comment" {
+  skip_unless_bash4
+  touch .shellcheckrc
+  printf '#!/usr/bin/env bash\n# prefer [ -n "${x}" ] over [ ! -z "${x}" ]\n# and [ "${a}" = "${b}" ] should use ==\nx="a"\necho "${x}"\n' > commented
+  chmod +x commented
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"SL0002"* ]]
+  [[ "$output" != *"SL0004"* ]]
+}
+
 @test "the shipped shell tools satisfy the built-in rules" {
   skip_unless_bash4
   touch .shellcheckrc
