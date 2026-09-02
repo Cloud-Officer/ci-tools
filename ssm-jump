@@ -121,7 +121,7 @@ if "${autoselect_first}"; then
   instances=$(echo "${instances}" | head -n1)
 fi
 
-if [ "$(echo "${instances}" | wc -l | tr -d ' ')" = "1" ]; then
+if [ "$(echo "${instances}" | wc -l | tr -d ' ')" == "1" ]; then
   instance_id=$(echo "${instances}" | awk '{ print $1 }')
 else
   max_lines=0

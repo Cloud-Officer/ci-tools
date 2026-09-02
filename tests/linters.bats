@@ -435,6 +435,37 @@ EOF
   [[ "$output" != *"sudo invoked: install"* ]]
 }
 
+@test "lints extensionless shell scripts, not just *.sh" {
+  skip_unless_bash4
+  touch .shellcheckrc
+  printf '#!/usr/bin/env bash\ncd /tmp\n' > tool-without-extension
+  chmod +x tool-without-extension
+
+  function shellcheck() { echo "shellcheck invoked: $*"; }
+  export -f shellcheck
+
+  run linters
+  # Discovery is by shebang: a file with no suffix is what this repo actually ships.
+  [[ "$output" == *"./tool-without-extension"* ]]
+}
+
+@test "does not feed non-shell executables to shellcheck" {
+  skip_unless_bash4
+  touch .shellcheckrc
+  printf '#!/usr/bin/env ruby\nputs 1\n' > ruby-tool
+  printf '#!/usr/bin/env bats\n@test "x" { true; }\n' > bats-tool
+  chmod +x ruby-tool bats-tool
+
+  function shellcheck() { echo "shellcheck invoked: $*"; }
+  export -f shellcheck
+
+  run linters
+  # shellcheck errors with SC1071 on a non-shell shebang rather than skipping it,
+  # so these must never reach it.
+  [[ "$output" != *"ruby-tool"* ]]
+  [[ "$output" != *"bats-tool"* ]]
+}
+
 @test "skips shellcheck instead of failing when no shell scripts exist" {
   skip_unless_bash4
   touch .shellcheckrc

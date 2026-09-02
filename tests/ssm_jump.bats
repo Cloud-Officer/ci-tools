@@ -2,7 +2,6 @@
 
 setup() {
   export PATH="${BATS_TEST_DIRNAME}/../:${PATH}"
-  SSM_JUMP="${BATS_TEST_DIRNAME}/../ssm-jump"
 }
 
 # Stubs the AWS CLI so no test reaches the network: describe-instances yields the
@@ -165,18 +164,6 @@ AWS
   [[ "$output" == *"Usage: ssm-jump"* ]]
 }
 
-# ssm-jump is extensionless, so the house shell lint (which only scans *.sh)
-# never sees it. These guards pin the file's formatting conventions instead
-# (see issue #524).
-
-@test "is indented with spaces only (no literal tab characters)" {
-  run grep -n "$(printf '\t')" "${SSM_JUMP}"
-  [ "$status" -ne 0 ]
-  [ -z "$output" ]
-}
-
-@test "uses [ -n ] rather than [ ! -z ] for non-empty string tests" {
-  run grep -nF '! -z' "${SSM_JUMP}"
-  [ "$status" -ne 0 ]
-  [ -z "$output" ]
-}
+# The two formatting guards that used to live here (tabs, `[ ! -z ]`) are gone:
+# `linters` now discovers extensionless shell scripts by shebang, so shellcheck
+# and the custom SL rules cover this file directly (issue #524).

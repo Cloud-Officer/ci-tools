@@ -19,9 +19,9 @@ install_jira_cli() {
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
     ARCH=$(uname -m)
 
-    if [ "${ARCH}" = "arm64" ] || [ "${ARCH}" = "aarch64" ]; then
+    if [ "${ARCH}" == "arm64" ] || [ "${ARCH}" == "aarch64" ]; then
       ARCH="arm64"
-    elif [ "${ARCH}" = "x86_64" ] || [ "${ARCH}" = "amd64" ]; then
+    elif [ "${ARCH}" == "x86_64" ] || [ "${ARCH}" == "amd64" ]; then
       ARCH="x86_64"
     else
       echo "Error: Unsupported architecture: ${ARCH}"
@@ -44,7 +44,7 @@ install_jira_cli() {
     echo "Installing jira CLI version ${LATEST_VERSION} for ${OS}/${ARCH}..."
 
     # Map OS name for download URL
-    if [ "${OS}" = "darwin" ]; then
+    if [ "${OS}" == "darwin" ]; then
       DOWNLOAD_OS="macOS"
     else
       DOWNLOAD_OS="${OS}"
@@ -123,7 +123,7 @@ ensure_gh_cli() {
 open_release_report() {
   local opener="xdg-open"
 
-  if [ "$(uname -s)" = "Darwin" ]; then
+  if [ "$(uname -s)" == "Darwin" ]; then
     opener="open"
   fi
 
