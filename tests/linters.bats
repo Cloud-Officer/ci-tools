@@ -706,6 +706,41 @@ SH
   [[ "$output" == *"All checks passed"* ]]
 }
 
+@test "SL0003 flags a literal tab indent" {
+  skip_unless_bash4
+  touch .shellcheckrc
+  printf '#!/usr/bin/env bash\nif [ -n "${x:-}" ]; then\n\techo "${x}"\nfi\n' > tabbed
+  chmod +x tabbed
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SL0003"* ]]
+  [[ "$output" == *"./tabbed line 3"* ]]
+}
+
+@test "SL0004 flags [ ! -z ] in place of [ -n ]" {
+  skip_unless_bash4
+  touch .shellcheckrc
+  printf '#!/usr/bin/env bash\nx="a"\nif [ ! -z "${x}" ]; then\n  echo "${x}"\nfi\n' > notz
+  chmod +x notz
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SL0004"* ]]
+  [[ "$output" == *"./notz line 3"* ]]
+}
+
+@test "the shipped shell tools satisfy the built-in rules" {
+  skip_unless_bash4
+  touch .shellcheckrc
+  cp "${BATS_TEST_DIRNAME}/../linters" "${BATS_TEST_DIRNAME}/../ssm-jump" \
+    "${BATS_TEST_DIRNAME}/../sync-jira-release" "${BATS_TEST_DIRNAME}/../generate-codeowners" .
+
+  run linters
+  [[ "$output" != *"SL0003"* ]]
+  [[ "$output" != *"SL0004"* ]]
+}
+
 @test "built-in shell rules honor # shellcheck disable=all" {
   skip_unless_bash4
   touch .shellcheckrc
