@@ -80,6 +80,38 @@ stub_all_linters() {
   [[ "$output" == *"Checking Markdown"* ]]
 }
 
+@test "sudo_for_user_command omits sudo for a command in a writable dir" {
+  skip_unless_bash4
+  local bin="${BATS_TEST_TMPDIR}/writable"
+  mkdir -p "${bin}"
+  printf '#!/usr/bin/env bash\n' > "${bin}/mytool"
+  chmod +x "${bin}/mytool"
+
+  run bash -c "PATH='${bin}:${PATH}'; source <(sed -n '/^sudo_for_user_command()/,/^}/p' '${BATS_TEST_DIRNAME}/../linters'); sudo_for_user_command mytool"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sudo_for_user_command asks for sudo when the dir is not writable" {
+  skip_unless_bash4
+  local bin="${BATS_TEST_TMPDIR}/readonly"
+  mkdir -p "${bin}"
+  printf '#!/usr/bin/env bash\n' > "${bin}/rotool"
+  chmod +x "${bin}/rotool"
+  chmod 0555 "${bin}"
+
+  run bash -c "PATH='${bin}:${PATH}'; source <(sed -n '/^sudo_for_user_command()/,/^}/p' '${BATS_TEST_DIRNAME}/../linters'); sudo_for_user_command rotool"
+  chmod 0755 "${bin}"
+  [ "$output" == "sudo" ]
+}
+
+@test "sudo_for_user_command asks for sudo when the command is absent" {
+  skip_unless_bash4
+
+  run bash -c "source <(sed -n '/^sudo_for_user_command()/,/^}/p' '${BATS_TEST_DIRNAME}/../linters'); sudo_for_user_command definitely-not-a-real-tool"
+  [ "$output" == "sudo" ]
+}
+
 @test "bootstraps npm before installing markdownlint-cli2 on Linux" {
   skip_unless_bash4
   touch .markdownlint-cli2.yaml

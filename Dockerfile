@@ -24,6 +24,7 @@ RUN \
 		gcc \
 		git \
 		git-lfs \
+		gnupg \
 		golang \
 		intltool \
 		jq \
@@ -47,10 +48,14 @@ RUN \
 
 # Install AWS dependencies
 WORKDIR /tmp
+COPY aws-cli-pgp-key.asc /tmp/aws-cli-pgp-key.asc
 RUN \
 	ssm_arch="$(test "$(uname -m)" = "x86_64" && echo "64bit" || echo "arm64")" && \
-# install AWS CLI \
+# install AWS CLI, verifying the signature against the AWS CLI Team key \
 	curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o "awscliv2.zip" && \
+	curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip.sig" -o "awscliv2.sig" && \
+	gpg --batch --import /tmp/aws-cli-pgp-key.asc && \
+	gpg --batch --verify awscliv2.sig awscliv2.zip && \
 	unzip awscliv2.zip && \
 	./aws/install && \
 # download AWS CLI SSM plugin \
@@ -66,7 +71,7 @@ RUN \
 # install patched package \
 	dpkg-deb --build tmp-deb session-manager-plugin.patched.deb && \
 	dpkg -i session-manager-plugin.patched.deb && \
-	rm -rf ./aws/ awscliv2.zip session-manager-plugin*deb
+	rm -rf ./aws/ awscliv2.zip awscliv2.sig /tmp/aws-cli-pgp-key.asc session-manager-plugin*deb
 
 # Add user/group citools and add ubuntu user to that group. The uid/gid are
 # pinned so the numeric USER below cannot drift: ubuntu:26.04 already ships an
