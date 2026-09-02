@@ -236,6 +236,8 @@ Beyond shellcheck, the script applies custom shell-script rules (`shell_lint_cus
 
 - SL0001: prefer `${var}` over `$var` for variable references
 - SL0002: prefer `==` over a single `=` for string comparison inside `[ ... ]`
+- SL0003: indent with spaces, not literal tabs
+- SL0004: prefer `[ -n "${var}" ]` over `[ ! -z "${var}" ]`
 
 Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck disable=all` directive skips the rest of that file.
 

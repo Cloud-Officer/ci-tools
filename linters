@@ -174,6 +174,8 @@ find_shell_scripts() {
 # historical shell_linter.rb. Runs after shellcheck over the same *.sh files:
 #   SL0001 - prefer ${var} over $var
 #   SL0002 - prefer == over a single = inside [ ... ]
+#   SL0003 - indent with spaces, not literal tabs
+#   SL0004 - prefer [ -n "${var}" ] over [ ! -z "${var}" ]
 # Single-quoted spans, escaped \$ and comments are ignored; a
 # `# shellcheck disable=all` directive skips the rest of that file.
 shell_lint_custom() {
@@ -202,6 +204,12 @@ shell_lint_custom() {
       sev["SL0002"]  = "warning"
       msg["SL0002"]  = "Inside [ ... ], use '\''=='\'' for string equality; a single '\''='\'' looks like assignment."
       hint["SL0002"] = "Replace '\''='\'' with '\''=='\''."
+      sev["SL0003"]  = "warning"
+      msg["SL0003"]  = "Indent with spaces; a literal tab renders inconsistently across editors and diffs."
+      hint["SL0003"] = "Replace the leading tab with spaces."
+      sev["SL0004"]  = "warning"
+      msg["SL0004"]  = "Use [ -n \"${var}\" ] rather than [ ! -z \"${var}\" ] to test for a non-empty string."
+      hint["SL0004"] = "Replace '\''! -z'\'' with '\''-n'\''."
     }
     FNR == 1 { inside_quotes = 0 }
     skip[FILENAME] { next }
@@ -217,6 +225,7 @@ shell_lint_custom() {
           break
         }
 
+
         if (c == quote) {
           inside_quotes = !inside_quotes
         } else if (c == "$" && !inside_quotes && prev != "\\") {
@@ -229,9 +238,21 @@ shell_lint_custom() {
         prev = c
       }
 
-      if (index(line, "[") && index(line, "]") && line ~ /\[.* = .*\]/ && line !~ /\[.*==.*\]/) {
-        pos = index(line, " = ")
+      code = substr(line, 1, i - 1)
+
+      if (index(code, "[") && index(code, "]") && code ~ /\[.* = .*\]/ && code !~ /\[.*==.*\]/) {
+        pos = index(code, " = ")
         report(FILENAME, FNR, pos ? pos : 0, "SL0002", line)
+        rc = 1
+      }
+
+      if (line ~ /^[ ]*\t/) {
+        report(FILENAME, FNR, index(line, "\t") - 1, "SL0003", line)
+        rc = 1
+      }
+
+      if (code ~ /\[[ ]+!([ ]+)-z[ ]/) {
+        report(FILENAME, FNR, index(code, "! -z") - 1, "SL0004", line)
         rc = 1
       }
     }
