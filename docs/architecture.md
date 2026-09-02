@@ -259,7 +259,8 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 - Supports TCP tunneling via port forwarding (`--forward host:remote_port:local_port`)
 - Can be used as SSH ProxyCommand for seamless SSH integration (switches to `AWS-StartSSHSession`)
 - Builds the SSM `--parameters` payload with `jq` to prevent JSON injection
-- Interactive instance selection when multiple matches found
+- Interactive instance selection when multiple matches found; a closed stdin at that prompt is reported as an error naming `--autoselect-first` rather than terminating the script silently
+- Every value-taking option is guarded by `require_value`, so a flag given without its value is reported through the script's own `fatal` instead of aborting on bash's `unbound variable` under `set -u`
 
 **Internal Dependencies:** None
 

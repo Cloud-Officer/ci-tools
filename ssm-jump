@@ -16,6 +16,13 @@ fatal() {
   exit 1
 }
 
+# Guards a value-taking option. Reading "${2}" when the flag is the last argument
+# aborts under `set -u` with bash's own "$2: unbound variable" rather than the
+# script's own error reporting, which every other input error here goes through.
+require_value() {
+  [ "${1}" -ge 2 ] || fatal "Option ${2} requires a value !"
+}
+
 while [[ $# -gt 0 ]]; do
   key="${1}"
 
@@ -36,21 +43,25 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       ;;
     -f | --forward)
+      require_value $# "${key}"
       forward="${2}"
       shift # past argument
       shift # past value
       ;;
     -c | --proxy-command)
+      require_value $# "${key}"
       proxycommand_port="${2}"
       shift # past argument
       shift # past value
       ;;
     -p | --profile)
+      require_value $# "${key}"
       profile="${2}"
       shift # past argument
       shift # past value
       ;;
     -d | --document)
+      require_value $# "${key}"
       document="${2}"
       shift # past argument
       shift # past value
@@ -80,7 +91,7 @@ if ! echo "${document}" | grep -qE '^[A-Za-z0-9_-]+$'; then
 fi
 
 if [ -n "${forward}" ]; then
-  IFS=":" read -a forward_array <<< "${forward}"
+  IFS=":" read -ra forward_array <<< "${forward}"
   if [ ${#forward_array[@]} -ne 3 ]; then
     fatal "The forward string needs exactly 3 parts, ${#forward_array[@]} given."
   fi
@@ -122,9 +133,15 @@ else
 
   input=0
 
-  while ! [[ ${input} =~ ^[0-9]+$ ]] || [ ${input} -lt 1 ] || [ ${input} -gt "${max_lines}" ]; do
+  while ! [[ ${input} =~ ^[0-9]+$ ]] || [ "${input}" -lt 1 ] || [ "${input}" -gt "${max_lines}" ]; do
     echo -n "Connect to what line ? "
-    read -r input
+
+    # `read` returns non-zero at EOF, and as the last command in the loop body
+    # that let `set -e` kill the script with no message whenever stdin was not a
+    # terminal -- piped input, CI, or the generated Windows .bat shortcut.
+    if ! read -r input; then
+      fatal "No selection made: stdin closed before a line was chosen. Re-run with --autoselect-first to take the first match."
+    fi
   done
 
   max_lines=0
