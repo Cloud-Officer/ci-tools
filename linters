@@ -30,7 +30,10 @@ is_darwin() {
 # Emits "sudo" or "" depending on whether the named command's path is user-writable.
 # Usage: $(sudo_for_user_command npm) npm install -g foo
 sudo_for_user_command() {
-  if command -v "${1}" | grep "${HOME}" &>/dev/null; then
+  local resolved
+  resolved="$(command -v "${1}" 2>/dev/null)"
+
+  if [ -n "${resolved}" ] && [ -w "$(dirname "${resolved}")" ]; then
     echo ""
   else
     echo "sudo"
