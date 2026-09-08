@@ -179,6 +179,8 @@ When a `.shellcheckrc` is present, shell scripts are checked with `shellcheck` a
 
 * **SL0001** - prefer `${var}` over `$var`.
 * **SL0002** - prefer `==` over a single `=` inside `[ ... ]`.
+* **SL0003** - indent with spaces, not literal tabs.
+* **SL0004** - prefer `[ -n "${var}" ]` over `[ ! -z "${var}" ]`.
 
 These rules ignore single-quoted spans, escaped `\$` and comments, and a `# shellcheck disable=all` directive skips the rest of the file.
 

@@ -202,7 +202,7 @@ jobs:
     strategy:
       matrix:
         os:
-        - macos-26
+        - macos-latest
         - ubuntu-latest
     steps:
     - name: Setup
@@ -234,7 +234,7 @@ jobs:
     strategy:
       matrix:
         os:
-        - macos-26
+        - macos-latest
         - ubuntu-latest
     steps:
     - name: Setup
