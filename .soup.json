@@ -302,7 +302,7 @@
   "json": {
     "language": "Ruby",
     "package": "json",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "license": "Ruby",
     "description": "A JSON implementation as a JRuby extension.",
     "website": "https://github.com/ruby/json",
@@ -692,7 +692,7 @@
     "website": "https://github.com/bblimke/webmock",
     "last_verified_at": "2026-05-22",
     "risk_level": "Low",
-    "requirements": "Dependency",
-    "verification_reasoning": "Dependency"
+    "requirements": "Stub HTTP requests in the RSpec suite",
+    "verification_reasoning": "Standard Ruby HTTP stubbing library, integrates directly with RSpec and is actively maintained"
   }
 }
