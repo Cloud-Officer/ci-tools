@@ -927,9 +927,11 @@ RSpec.describe(Deploy) do
       expect(options[:ami]).to(eq('ami-abc'))
     end
 
-    it 'raises when a mandatory argument is missing' do
-      expect { parse_deploy_options(%w[--environment beta1 --instance api]) }
-        .to(raise_error(OptionParser::MissingArgument, /profile/))
+    it 'prints usage to stderr and exits 1 when a mandatory argument is missing', :aggregate_failures do
+      expect do
+        expect { parse_deploy_options(%w[--environment beta1 --instance api]) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/profile.*Usage:/m).to_stderr)
     end
 
     %w[-h --help].each do |flag|

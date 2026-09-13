@@ -43,12 +43,36 @@ RSpec.describe(CliMain) do
       expect(result).to(eq(name: 'foo'))
     end
 
-    it 'raises MissingArgument when a mandatory key is absent' do
+    def expect_usage_error(argv, message)
       expect do
-        described_class.parse_options!(banner: 'Usage: x', mandatory: %i[name], argv: []) do |opts|
-          opts.on('--name name', String)
-        end
-      end.to(raise_error(OptionParser::MissingArgument, /name/))
+        expect { parse_with_help_banner(argv) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/#{message}.*Usage: x.*--name/m).to_stderr)
+    end
+
+    def parse_with_help_banner(argv)
+      described_class.parse_options!(banner: 'Usage: x', mandatory: %i[name], argv: argv) do |opts|
+        opts.on('--name name', String)
+      end
+    end
+
+    it 'prints the error and usage to stderr and exits 1 when a mandatory key is absent' do
+      expect_usage_error([], 'missing argument: name')
+    end
+
+    it 'prints the error and usage to stderr and exits 1 for an unknown option' do
+      expect_usage_error(%w[--bogus], 'invalid option: --bogus')
+    end
+
+    it 'prints the error and usage to stderr and exits 1 when an option value is missing' do
+      expect_usage_error(%w[--name], 'missing argument: --name')
+    end
+
+    it 'does not print a backtrace for a usage error', :aggregate_failures do
+      expect do
+        expect { parse_with_help_banner([]) }
+          .to(raise_error(SystemExit))
+      end.not_to(output(/cli_main\.rb:\d+/).to_stderr)
     end
 
     it 'mutates the supplied argv (parse! contract)' do
