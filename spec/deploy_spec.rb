@@ -694,6 +694,11 @@ RSpec.describe(Deploy) do
         expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
       end
+
+      it 'reports the stop reason on stderr' do
+        expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
+          .to(raise_error(SystemExit).and(output(/Stopping here: Template validation failed/).to_stderr))
+      end
     end
   end
 
@@ -930,6 +935,39 @@ RSpec.describe(Deploy) do
     end
   end
 
+  describe '#run_rolling_deploy_with_capacity_rollback' do
+    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
+    let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
+    let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
+    let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
+    let(:plan)          { { new_capacity: 4, new_max: nil }                           }
+
+    before { allow(self).to(receive(:run_rolling_deploy).and_raise(RuntimeError, 'deploy boom')) }
+
+    context 'when the capacity restore succeeds' do
+      before { allow(self).to(receive(:update_asg_capacity)) }
+
+      it 'reports the capacity restore on stderr and re-raises' do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(RuntimeError, 'deploy boom').and(output(/Rolling deploy failed, restoring desired capacity to 2/).to_stderr))
+      end
+    end
+
+    context 'when the capacity restore fails' do
+      before { allow(self).to(receive(:update_asg_capacity).and_raise(RuntimeError, 'restore boom')) }
+
+      it 'warns on stderr with the full restore error message and re-raises the deploy error' do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(RuntimeError, 'deploy boom').and(output(/WARNING: failed to restore auto scaling group capacity - beta1-api-asg.*restore boom \(RuntimeError\)/m).to_stderr))
+      end
+
+      it 'writes nothing about the failed restore to stdout' do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(RuntimeError, 'deploy boom').and(output('').to_stdout))
+      end
+    end
+  end
+
   describe '#run_deployment' do
     let(:lambda_client) { Aws::Lambda::Client.new(stub_responses: true)     }
     let(:cloudfront)    { Aws::CloudFront::Client.new(stub_responses: true) }
@@ -1089,6 +1127,11 @@ RSpec.describe(Deploy) do
           .to(raise_error(StandardError, 'boom'))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
+
+      it 'reports the rollback on stderr' do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(StandardError, 'boom').and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
+      end
     end
 
     context 'when CloudFormation returns "No updates are to be performed" (SystemExit 0)' do
@@ -1108,6 +1151,11 @@ RSpec.describe(Deploy) do
         expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+
+      it 'reports the rollback on stderr' do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(SystemExit).and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
       end
     end
 
@@ -1155,6 +1203,11 @@ RSpec.describe(Deploy) do
         expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
           .to(raise_error(Aws::SSM::Errors::ThrottlingException))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+
+      it 'reports the rollback on stderr' do
+        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+          .to(raise_error(Aws::SSM::Errors::ThrottlingException).and(output(/SSM parameter update failed, rolling back SSM parameters/).to_stderr))
       end
     end
 
