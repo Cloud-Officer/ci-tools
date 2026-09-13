@@ -235,3 +235,66 @@ setup() {
   [[ "$output" == *"No xdg-open on this host"* ]]
   [[ "$output" == *"release-report-all-issues"* ]]
 }
+
+@test "reports when the latest jira CLI version cannot be determined" {
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "jira" ]; then return 1; fi
+    builtin command "$@"
+  }
+
+  function curl() {
+    echo '{"message": "API rate limit exceeded"}'
+    return 22
+  }
+
+  function uname() {
+    if [ "${1}" = "-s" ]; then echo "Linux"
+    elif [ "${1}" = "-m" ]; then echo "x86_64"
+    else builtin uname "$@"
+    fi
+  }
+  export -f command curl uname
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Could not determine latest jira CLI version"* ]]
+}
+
+@test "reports when the checksum file has no entry for the archive" {
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "jira" ]; then return 1; fi
+    builtin command "$@"
+  }
+
+  function curl() {
+    local out_file=""
+    while [ "$#" -gt 0 ]; do
+      if [ "${1}" = "-o" ]; then
+        out_file="${2}"
+        shift 2
+        continue
+      fi
+      shift
+    done
+
+    if [ -z "${out_file}" ]; then
+      echo '"tag_name": "v1.5.0"'
+    elif [[ "${out_file}" == *checksums.txt ]]; then
+      printf 'deadbeef  jira_1.5.0_renamed_asset.tar.gz\n' > "${out_file}"
+    else
+      printf 'archive bytes' > "${out_file}"
+    fi
+  }
+
+  function uname() {
+    if [ "${1}" = "-s" ]; then echo "Linux"
+    elif [ "${1}" = "-m" ]; then echo "x86_64"
+    else builtin uname "$@"
+    fi
+  }
+  export -f command curl uname
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Could not find checksum for jira_1.5.0_linux_x86_64.tar.gz"* ]]
+}
