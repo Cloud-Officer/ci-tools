@@ -633,12 +633,26 @@ RSpec.describe(Deploy) do
       end
     end
 
-    context 'when update fails' do
+    context 'when update fails with a reason' do
+      before do
+        cfn.stub_responses(
+          :describe_stacks,
+          { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_ROLLBACK_COMPLETE', stack_status_reason: 'Resource creation cancelled', creation_time: Time.now }] }
+        )
+      end
+
+      it 'raises an error with the stack name, status and reason' do
+        expect { wait_for_stack_update(cfn, 'test') }
+          .to(raise_error(RuntimeError, 'Stack test update failed with status UPDATE_ROLLBACK_COMPLETE: Resource creation cancelled'))
+      end
+    end
+
+    context 'when update fails without a reason' do
       before { cfn.stub_responses(:describe_stacks, { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_FAILED', creation_time: Time.now }] }) }
 
-      it 'raises an error' do
+      it 'raises an error with the stack name and status' do
         expect { wait_for_stack_update(cfn, 'test') }
-          .to(raise_error(RuntimeError, 'Stack update failed'))
+          .to(raise_error(RuntimeError, 'Stack test update failed with status UPDATE_FAILED'))
       end
     end
 

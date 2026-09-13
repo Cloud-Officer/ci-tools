@@ -270,9 +270,15 @@ def wait_for_stack_update(cfn, stack_name)
     response = cfn.describe_stacks({ stack_name: stack_name }).stacks
     raise("Unable to describe stack #{stack_name}") if response.empty?
 
-    raise('Stack update failed') if failure_states.include?(response.first.stack_status)
+    stack = response.first
 
-    response.first.stack_status == 'UPDATE_COMPLETE'
+    if failure_states.include?(stack.stack_status)
+      message = "Stack #{stack_name} update failed with status #{stack.stack_status}"
+      message += ": #{stack.stack_status_reason}" unless stack.stack_status_reason.to_s.empty?
+      raise(message)
+    end
+
+    stack.stack_status == 'UPDATE_COMPLETE'
   end
 end
 
