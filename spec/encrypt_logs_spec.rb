@@ -12,9 +12,11 @@ RSpec.describe(EncryptLogs) do
       expect(options[:retention_in_days]).to(eq(30))
     end
 
-    it 'raises when a mandatory arg is missing' do
-      expect { parse_encrypt_logs_options(%w[--profile dev]) }
-        .to(raise_error(OptionParser::MissingArgument, /retention_in_days/))
+    it 'prints usage to stderr and exits 1 when a mandatory arg is missing', :aggregate_failures do
+      expect do
+        expect { parse_encrypt_logs_options(%w[--profile dev]) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/retention_in_days.*Usage:/m).to_stderr)
     end
 
     %w[-h --help].each do |flag|
