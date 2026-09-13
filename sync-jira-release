@@ -34,7 +34,7 @@ install_jira_cli() {
     fi
 
     # Get latest version
-    LATEST_VERSION=$(curl -s https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    LATEST_VERSION=$(curl -fsS https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
 
     if [ -z "${LATEST_VERSION}" ]; then
       echo "Error: Could not determine latest jira CLI version"
@@ -61,7 +61,7 @@ install_jira_cli() {
     curl -sL "${CHECKSUMS_URL}" -o "${TEMP_DIR}/checksums.txt"
 
     # Verify checksum
-    EXPECTED_CHECKSUM=$(grep "${ARCHIVE_NAME}" "${TEMP_DIR}/checksums.txt" | awk '{print $1}')
+    EXPECTED_CHECKSUM=$(grep "${ARCHIVE_NAME}" "${TEMP_DIR}/checksums.txt" | awk '{print $1}' || true)
     if [ -z "${EXPECTED_CHECKSUM}" ]; then
       echo "Error: Could not find checksum for ${ARCHIVE_NAME}"
       exit 1
