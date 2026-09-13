@@ -375,6 +375,10 @@ EOF
     echo "wget invoked: $*" >&2
 
     if [ "${2}" == "-" ]; then
+      if [ -n "${CHECKSUM_FETCH_FAILS:-}" ]; then
+        return 8
+      fi
+
       local sha="${PUBLISHED_CHECKSUM:-$(hadolint_payload_sha)}"
       # Mirrors the real checksums.sha256: every asset, one per line, "<hash> *<name>".
       echo "${sha} *hadolint-linux-${STUB_ARCH:-x86_64}"
@@ -465,6 +469,42 @@ EOF
   [ "$status" -eq 1 ]
   [[ "$output" == *"Unsupported architecture: riscv64"* ]]
   [[ "$output" != *"sudo invoked: install"* ]]
+}
+
+@test "reports a missing checksum when the checksum download itself fails" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  stub_hadolint_download
+  export CHECKSUM_FETCH_FAILS=1
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Error: no published checksum for hadolint-linux-x86_64"* ]]
+  [[ "$output" != *"sudo invoked: install"* ]]
+  [[ "$output" != *"hadolint invoked"* ]]
+}
+
+@test "reports the pmd version error when the GitHub release lookup fails" {
+  skip_unless_bash4
+  touch .pmd.xml
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  function uname() { echo "Linux"; }
+  function sudo() { echo "sudo invoked: $*" >&2; }
+  function curl() { echo "curl invoked: $*" >&2; return 22; }
+  function wget() { echo "wget invoked: $*" >&2; }
+  function gpg() { echo "gpg invoked: $*" >&2; }
+  export -f uname sudo curl wget gpg
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"curl invoked: -fsS https://api.github.com/repos/pmd/pmd/releases/latest"* ]]
+  [[ "$output" == *"Error: Could not determine latest pmd version"* ]]
+  [[ "$output" != *"wget invoked"* ]]
 }
 
 @test "lints extensionless shell scripts, not just *.sh" {

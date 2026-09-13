@@ -320,7 +320,7 @@ if [ -f .hadolint.yaml ]; then
       HADOLINT_ASSET="hadolint-linux-$(release_arch)"
       HADOLINT_TMP=$(mktemp)
       wget -qO "${HADOLINT_TMP}" "https://github.com/hadolint/hadolint/releases/latest/download/${HADOLINT_ASSET}"
-      EXPECTED_CHECKSUM=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/checksums.sha256 | awk -v asset="*${HADOLINT_ASSET}" '$2 == asset {print $1}')
+      EXPECTED_CHECKSUM=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/checksums.sha256 | awk -v asset="*${HADOLINT_ASSET}" '$2 == asset {print $1}' || true)
 
       if [ -z "${EXPECTED_CHECKSUM}" ]; then
         echo "Error: no published checksum for ${HADOLINT_ASSET}"
@@ -396,7 +396,7 @@ if [ -f .pmd.xml ]; then
       # CLI); the key fingerprint is the trust anchor, not a version pin.
       PMD_SIGNING_KEY="2EFA55D0785C31F956F2F87EA0B5CA1A4E086838"
       sudo apt-get --yes install --no-install-recommends gnupg unzip
-      PMD_VERSION=$(curl -s https://api.github.com/repos/pmd/pmd/releases/latest | grep '"tag_name"' | sed -E 's|.*"pmd_releases/([^"]+)".*|\1|')
+      PMD_VERSION=$(curl -fsS https://api.github.com/repos/pmd/pmd/releases/latest | grep '"tag_name"' | sed -E 's|.*"pmd_releases/([^"]+)".*|\1|' || true)
 
       if [ -z "${PMD_VERSION}" ]; then
         echo "Error: Could not determine latest pmd version"
