@@ -209,30 +209,49 @@ fi
 
 echo "Using Jira project prefix: ${JIRA_PREFIX}"
 
+pr_numbers=()
+
+while IFS= read -r pr_number; do
+  pr_numbers+=("${pr_number}")
+done < <(git log "${from_tag}..${to_tag}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g' || true)
+
+if [ ${#pr_numbers[@]} -eq 0 ]; then
+  echo "Error: no pull requests found between \`${from_tag}\` and \`${to_tag}\`." >&2
+  exit 1
+fi
+
 repo=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 temp_file=$(mktemp)
-trap 'rm -f "${temp_file}" "${temp_file}_unique"' exit
+trap 'rm -f "${temp_file}"' exit
 
-for pr_number in $(git log "${from_tag}..${to_tag}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g'); do
+for pr_number in "${pr_numbers[@]}"; do
   pr_description=$(gh pr view "${pr_number}" --repo "${repo}" --json body -q '.body')
   echo "Checking PR ${pr_number}..."
   echo "${pr_description}" | grep -o "\b${JIRA_PREFIX}-[0-9]\+\b" >> "${temp_file}" || true
 done
 
-sort "${temp_file}" | uniq > "${temp_file}_unique"
+issue_keys=()
+
+while IFS= read -r issue_key; do
+  issue_keys+=("${issue_key}")
+done < <(sort -u "${temp_file}")
+
+rm -f "${temp_file}"
+
+if [ ${#issue_keys[@]} -eq 0 ]; then
+  echo "Error: no ${JIRA_PREFIX} issue keys found in the pull requests between \`${from_tag}\` and \`${to_tag}\`." >&2
+  exit 1
+fi
 
 FAILED_ISSUES=()
 
-# shellcheck disable=SC2013
-for issue_key in $(cat "${temp_file}_unique"); do
+for issue_key in "${issue_keys[@]}"; do
   echo "Updating issue ${issue_key}..."
   if ! jira issue edit "${issue_key}" --no-input --fix-version "${jira_release}"; then
     echo "Warning: failed to update ${issue_key}" >&2
     FAILED_ISSUES+=("${issue_key}")
   fi
 done
-
-rm -f "${temp_file}" "${temp_file}_unique"
 
 if [ ${#FAILED_ISSUES[@]} -gt 0 ]; then
   echo "" >&2
