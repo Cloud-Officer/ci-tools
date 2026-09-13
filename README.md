@@ -264,6 +264,39 @@ Host myclient-api-* myclient-i-*
 
 That way, using `ssh myclient-api-rc5-standalone` will strip the `myclient-` prefix before trying to match an EC2 instance with that name.
 
+##### Copy files to an instance (scp / rsync)
+
+Once the `ProxyCommand` entry is in place, `scp` and `rsync` work through the same tunnel, so no VPN or public IP is needed:
+
+```bash
+scp ./build.zip worker-prod3-standalone:~/
+rsync -avz --progress ./dist/ worker-prod3-standalone:~/dist/
+```
+
+Without an `~/.ssh/config` entry, pass the proxy inline:
+
+```bash
+scp -i ~/.ssh/mykey.pem \
+    -o 'ProxyCommand=ssm-jump --profile myprofile --autoselect-first --proxy-command 22 worker-prod3-standalone' \
+    ./build.zip ubuntu@worker-prod3-standalone:~/
+```
+
+##### EC2 Mac instances
+
+EC2 Mac (`mac1.metal`, `mac2.metal`, `mac2-m2.metal`, ...) instances are reachable the same way, but the default user is `ec2-user` instead of `ubuntu`. Give them their own block so aliases like `ssh macos-beta2` or `scp file.zip macos-prod4:~/` map onto the `macos-<env>-standalone` instance name:
+
+```ssh-config
+Host macos-*
+    User                  ec2-user
+    IdentityFile          ~/.ssh/mykey.pem
+    IdentitiesOnly        yes
+    StrictHostKeyChecking no
+    UserKnownHostsFile    /dev/null
+    ProxyCommand          ssm-jump --profile myprofile --autoselect-first --proxy-command %p %h-standalone
+```
+
+Note: the SSM agent on macOS AMIs takes a few minutes to come up after boot, so a fresh Mac instance may reject the first connection attempts.
+
 #### Windows Installation
 
 To install `ssm-jump`, dependencies and associated helpers on a Windows machine:

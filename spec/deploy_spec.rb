@@ -79,8 +79,8 @@ RSpec.describe(Deploy) do
     instance_double(Aws::CloudFront::Types::DistributionSummary, id: dist_id, default_cache_behavior: cache_behavior)
   end
 
-  def build_lambda_item(arn)
-    instance_double(Aws::CloudFront::Types::LambdaFunctionAssociation, lambda_function_arn: arn)
+  def build_lambda_item(arn, event_type = 'viewer-request')
+    instance_double(Aws::CloudFront::Types::LambdaFunctionAssociation, lambda_function_arn: arn, event_type: event_type)
   end
 
   describe 'constants' do
@@ -484,11 +484,12 @@ RSpec.describe(Deploy) do
 
   describe '#mark_cfn_secrets_for_previous_value!' do
     let(:secret)      { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword') }
-    let(:no_echo)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'StripeSecret') }
-    let(:non_secret)  { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId')   }
+    let(:no_echo)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'StripeSecret', parameter_value: '****')  }
+    let(:non_secret)  { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId', parameter_value: 'ami-old') }
+    let(:masked)      { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'UnlistedToken', parameter_value: '****') }
 
     before do
-      [secret, no_echo, non_secret].each do |parameter|
+      [secret, no_echo, non_secret, masked].each do |parameter|
         allow(parameter).to(receive(:parameter_value=))
         allow(parameter).to(receive(:use_previous_value=))
       end
@@ -510,6 +511,13 @@ RSpec.describe(Deploy) do
       mark_cfn_secrets_for_previous_value!([secret, no_echo, non_secret], %w[StripeSecret])
       expect(non_secret).not_to(have_received(:parameter_value=))
     end
+
+    it 'marks a masked parameter even when its key was not discovered', :aggregate_failures do
+      mark_cfn_secrets_for_previous_value!([masked, non_secret], [])
+      expect(masked).to(have_received(:parameter_value=).with(nil))
+      expect(masked).to(have_received(:use_previous_value=).with(true))
+      expect(non_secret).not_to(have_received(:use_previous_value=))
+    end
   end
 
   describe '#fetch_no_echo_parameter_keys' do
@@ -523,9 +531,10 @@ RSpec.describe(Deploy) do
       expect(fetch_no_echo_parameter_keys(cfn, 'api-stack')).to(eq(%w[StripeSecret]))
     end
 
-    it 'falls back to an empty list when the summary cannot be read' do
-      cfn.stub_responses(:get_template_summary, 'ServiceError')
-      expect(fetch_no_echo_parameter_keys(cfn, 'api-stack')).to(eq([]))
+    it 'raises when the summary cannot be read' do
+      cfn.stub_responses(:get_template_summary, 'Throttling')
+      expect { fetch_no_echo_parameter_keys(cfn, 'api-stack') }
+        .to(raise_error(Aws::CloudFormation::Errors::Throttling))
     end
   end
 
@@ -1358,6 +1367,73 @@ RSpec.describe(Deploy) do
         distribution = build_distribution_double('DIST123', nil, 0, [])
         update_distribution_lambda(cloudfront, distribution, function_arn)
         expect(cloudfront).to(have_received(:update_distribution))
+      end
+    end
+
+    context 'when viewer-request ARN matches but is not the first association' do
+      it 'skips update' do
+        items = [build_lambda_item('arn:aws:lambda:origin:1', 'origin-request'), build_lambda_item(function_arn)]
+        distribution = build_distribution_double('DIST123', nil, 2, items)
+        update_distribution_lambda(cloudfront, distribution, function_arn)
+        expect(cloudfront).not_to(have_received(:get_distribution_config))
+      end
+    end
+
+    context 'when a non viewer-request association already has the ARN' do
+      before do
+        origin = { event_type: 'origin-request', include_body: false, lambda_function_arn: function_arn }
+        viewer = { event_type: 'viewer-request', include_body: false, lambda_function_arn: 'arn:aws:lambda:old:1' }
+        cloudfront.stub_responses(:get_distribution_config, build_cf_config({ quantity: 2, items: [origin, viewer] }))
+      end
+
+      it 'still updates the viewer-request association' do
+        items = [build_lambda_item(function_arn, 'origin-request'), build_lambda_item('arn:aws:lambda:old:1')]
+        distribution = build_distribution_double('DIST123', nil, 2, items)
+        update_distribution_lambda(cloudfront, distribution, function_arn)
+        expect(cloudfront).to(have_received(:update_distribution))
+      end
+    end
+
+    context 'when multiple associations exist' do
+      let(:origin_arn) { 'arn:aws:lambda:us-east-1:123:function:origin:1' }
+      let(:sent_associations) do
+        associations = nil
+        allow(cloudfront).to(receive(:update_distribution)) { |params| associations = params[:distribution_config].default_cache_behavior.lambda_function_associations }
+        update_distribution_lambda(cloudfront, build_distribution_double('DIST123', nil, 2, []), function_arn)
+        associations
+      end
+
+      before do
+        origin = { event_type: 'origin-request', include_body: false, lambda_function_arn: origin_arn }
+        viewer = { event_type: 'viewer-request', include_body: false, lambda_function_arn: 'arn:aws:lambda:old:1' }
+        cloudfront.stub_responses(:get_distribution_config, build_cf_config({ quantity: 2, items: [origin, viewer] }))
+      end
+
+      it 'updates only the viewer-request association', :aggregate_failures do
+        pairs = sent_associations.items.map { |item| [item[:event_type], item[:lambda_function_arn]] }
+        expect(pairs).to(eq([['origin-request', origin_arn], ['viewer-request', function_arn]]))
+        expect(sent_associations.quantity).to(eq(2))
+      end
+    end
+
+    context 'when associations exist without a viewer-request entry' do
+      let(:origin_arn) { 'arn:aws:lambda:us-east-1:123:function:origin:1' }
+      let(:sent_associations) do
+        associations = nil
+        allow(cloudfront).to(receive(:update_distribution)) { |params| associations = params[:distribution_config].default_cache_behavior.lambda_function_associations }
+        update_distribution_lambda(cloudfront, build_distribution_double('DIST123', nil, 1, [build_lambda_item(origin_arn, 'origin-request')]), function_arn)
+        associations
+      end
+
+      before do
+        origin = { event_type: 'origin-request', include_body: false, lambda_function_arn: origin_arn }
+        cloudfront.stub_responses(:get_distribution_config, build_cf_config({ quantity: 1, items: [origin] }))
+      end
+
+      it 'adds a viewer-request association and keeps the existing one', :aggregate_failures do
+        pairs = sent_associations.items.map { |item| [item[:event_type], item[:lambda_function_arn]] }
+        expect(pairs).to(eq([['origin-request', origin_arn], ['viewer-request', function_arn]]))
+        expect(sent_associations.quantity).to(eq(2))
       end
     end
   end
