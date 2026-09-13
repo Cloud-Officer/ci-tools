@@ -12,9 +12,11 @@ RSpec.describe(EncryptLogs) do
       expect(options[:retention_in_days]).to(eq(30))
     end
 
-    it 'raises when a mandatory arg is missing' do
-      expect { parse_encrypt_logs_options(%w[--profile dev]) }
-        .to(raise_error(OptionParser::MissingArgument, /retention_in_days/))
+    it 'prints usage to stderr and exits 1 when a mandatory arg is missing', :aggregate_failures do
+      expect do
+        expect { parse_encrypt_logs_options(%w[--profile dev]) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/retention_in_days.*Usage:/m).to_stderr)
     end
 
     %w[-h --help].each do |flag|
@@ -44,9 +46,9 @@ RSpec.describe(EncryptLogs) do
       kms.stub_responses(
         :describe_key,
         [
-          { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:beta', description: 'beta encryption key' } },
-          { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:rc', description: 'rc encryption key' } },
-          { key_metadata: { key_id: 'key-3', arn: 'arn:aws:kms:prod', description: 'prod encryption key' } }
+          { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:beta', description: 'beta encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+          { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:rc', description: 'rc encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+          { key_metadata: { key_id: 'key-3', arn: 'arn:aws:kms:prod', description: 'prod encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } }
         ]
       )
       logs.stub_responses(:describe_log_groups, { log_groups: [{ log_group_name: '/aws/beta/api', retention_in_days: 7, kms_key_id: nil }] })
@@ -70,9 +72,9 @@ RSpec.describe(EncryptLogs) do
         kms.stub_responses(
           :describe_key,
           [
-            { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'beta encryption key' } },
-            { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:us-east-1:123:key/key-2', description: 'rc encryption key' } },
-            { key_metadata: { key_id: 'key-3', arn: 'arn:aws:kms:us-east-1:123:key/key-3', description: 'prod encryption key' } }
+            { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'beta encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:us-east-1:123:key/key-2', description: 'rc encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-3', arn: 'arn:aws:kms:us-east-1:123:key/key-3', description: 'prod encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } }
           ]
         )
       end
@@ -85,10 +87,85 @@ RSpec.describe(EncryptLogs) do
       end
     end
 
+    context 'with keys that are not usable' do
+      before do
+        kms.stub_responses(:list_keys, { keys: (1..6).map { |i| { key_id: "key-#{i}" } } })
+        kms.stub_responses(
+          :describe_key,
+          [
+            { key_metadata: { key_id: 'key-1', arn: 'arn:beta', description: 'beta encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-2', arn: 'arn:rc', description: 'rc encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-3', arn: 'arn:prod', description: 'prod encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-4', arn: 'arn:prod-disabled', description: 'prod (rotated, do not use)', key_state: 'Disabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-5', arn: 'arn:beta-pending', description: 'beta old key', key_state: 'PendingDeletion', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-6', arn: 'arn:rc-aws', description: 'rc managed key', key_state: 'Enabled', key_manager: 'AWS' } }
+          ]
+        )
+      end
+
+      it 'ignores disabled, pending-deletion and AWS-managed keys', :aggregate_failures do
+        result = build_kms_key_map(kms)
+        expect(result[:beta]).to(eq('arn:beta'))
+        expect(result[:rc]).to(eq('arn:rc'))
+        expect(result[:prod]).to(eq('arn:prod'))
+      end
+    end
+
+    context 'with a description that only prefix-matches an environment' do
+      before do
+        kms.stub_responses(:list_keys, { keys: (1..4).map { |i| { key_id: "key-#{i}" } } })
+        kms.stub_responses(
+          :describe_key,
+          [
+            { key_metadata: { key_id: 'key-1', arn: 'arn:beta', description: 'beta encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-2', arn: 'arn:rc', description: 'rc-encryption-key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-3', arn: 'arn:prod', description: 'prod encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-4', arn: 'arn:production-old', description: 'production-old', key_state: 'Enabled', key_manager: 'CUSTOMER' } }
+          ]
+        )
+      end
+
+      it 'matches the environment only as a whole token', :aggregate_failures do
+        result = build_kms_key_map(kms)
+        expect(result[:rc]).to(eq('arn:rc'))
+        expect(result[:prod]).to(eq('arn:prod'))
+      end
+    end
+
+    context 'with a description that is only a prefix-matching word' do
+      before do
+        kms.stub_responses(:list_keys, { keys: [{ key_id: 'key-1' }] })
+        kms.stub_responses(:describe_key, [{ key_metadata: { key_id: 'key-1', arn: 'arn:beta', description: 'betamax', key_state: 'Enabled', key_manager: 'CUSTOMER' } }])
+      end
+
+      it 'does not map the key' do
+        expect { build_kms_key_map(kms) }
+          .to(raise_error(RuntimeError, "KMS key not found for environment 'beta'"))
+      end
+    end
+
+    context 'with more than one usable key for an environment' do
+      before do
+        kms.stub_responses(:list_keys, { keys: [{ key_id: 'key-1' }, { key_id: 'key-2' }] })
+        kms.stub_responses(
+          :describe_key,
+          [
+            { key_metadata: { key_id: 'key-1', arn: 'arn:prod-1', description: 'prod encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-2', arn: 'arn:prod-2', description: 'prod replacement key', key_state: 'Enabled', key_manager: 'CUSTOMER' } }
+          ]
+        )
+      end
+
+      it 'raises instead of silently taking the last match' do
+        expect { build_kms_key_map(kms) }
+          .to(raise_error(RuntimeError, "Multiple enabled KMS keys found for environment 'prod': arn:prod-1, arn:prod-2"))
+      end
+    end
+
     context 'with non-matching key description' do
       before do
         kms.stub_responses(:list_keys, { keys: [{ key_id: 'key-1' }] })
-        kms.stub_responses(:describe_key, [{ key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'some other key' } }])
+        kms.stub_responses(:describe_key, [{ key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'some other key', key_state: 'Enabled', key_manager: 'CUSTOMER' } }])
       end
 
       it 'raises error for missing environment key' do
@@ -112,8 +189,8 @@ RSpec.describe(EncryptLogs) do
         kms.stub_responses(
           :describe_key,
           [
-            { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'beta encryption key' } },
-            { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:us-east-1:123:key/key-2', description: 'rc encryption key' } }
+            { key_metadata: { key_id: 'key-1', arn: 'arn:aws:kms:us-east-1:123:key/key-1', description: 'beta encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } },
+            { key_metadata: { key_id: 'key-2', arn: 'arn:aws:kms:us-east-1:123:key/key-2', description: 'rc encryption key', key_state: 'Enabled', key_manager: 'CUSTOMER' } }
           ]
         )
       end

@@ -34,22 +34,30 @@ module CliMain
   def self.parse_options!(mandatory:, argv: ARGV, banner: default_banner)
     options = {}
 
-    OptionParser.new do |opts|
-      opts.banner = banner
-      opts.separator('')
-      opts.separator('options')
-      yield(opts)
-      # Provide a uniform -h/--help handler for every CLI so they all print
-      # usage and exit 0 (an explicitly requested help is a success, not an
-      # error). Tools must not redefine -h/--help themselves.
-      opts.on('-h', '--help', 'Print this help message') do
-        puts(opts)
-        exit(0)
+    parser =
+      OptionParser.new do |opts|
+        opts.banner = banner
+        opts.separator('')
+        opts.separator('options')
+        yield(opts)
+        # Provide a uniform -h/--help handler for every CLI so they all print
+        # usage and exit 0 (an explicitly requested help is a success, not an
+        # error). Tools must not redefine -h/--help themselves.
+        opts.on('-h', '--help', 'Print this help message') do
+          puts(opts)
+          exit(0)
+        end
       end
-    end.parse!(argv, into: options)
 
-    missing = mandatory.select { |param| options[param].nil? }
-    raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
+    begin
+      parser.parse!(argv, into: options)
+      missing = mandatory.select { |param| options[param].nil? }
+      raise(OptionParser::MissingArgument, missing.join(', ')) unless missing.empty?
+    rescue OptionParser::ParseError => e
+      warn(e.message)
+      warn(parser.help)
+      exit(1)
+    end
 
     options
   end

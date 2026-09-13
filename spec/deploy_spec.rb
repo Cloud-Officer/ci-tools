@@ -50,8 +50,8 @@ RSpec.describe(Deploy) do
     { auto_scaling_groups: [{ auto_scaling_group_name: name, min_size: min, max_size: max, desired_capacity: desired, default_cooldown: 300, availability_zones: ['us-east-1a'], health_check_type: 'EC2', created_time: Time.now, instances: instances }] }
   end
 
-  def build_asg_instance(id)
-    { instance_id: id, lifecycle_state: 'InService', availability_zone: 'us-east-1a', health_status: 'Healthy', protected_from_scale_in: false }
+  def build_asg_instance(id, lifecycle_state: 'InService')
+    { instance_id: id, lifecycle_state: lifecycle_state, availability_zone: 'us-east-1a', health_status: 'Healthy', protected_from_scale_in: false }
   end
 
   def build_distribution_list(items, is_truncated: false, next_marker: nil)
@@ -568,6 +568,34 @@ RSpec.describe(Deploy) do
           .to(raise_error(RuntimeError, /Timed out waiting for healthy instances/))
       end
     end
+
+    context 'when no targets are registered' do
+      before { elb.stub_responses(:describe_target_health, { target_health_descriptions: [] }) }
+
+      it 'does not treat an empty target group as healthy' do
+        stub_const('MAX_POLL_ATTEMPTS', 2)
+        expect { wait_for_healthy_instances(elb, 'arn:aws:tg/test') }
+          .to(raise_error(RuntimeError, /Timed out waiting for healthy instances/))
+      end
+    end
+
+    context 'when targets register after the group was empty' do
+      before do
+        empty = { target_health_descriptions: [] }
+        healthy = { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'healthy' } }] }
+        elb.stub_responses(:describe_target_health, [empty, healthy])
+      end
+
+      it 'keeps polling until registered targets are healthy' do
+        wait_for_healthy_instances(elb, 'arn:aws:tg/test')
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+
+      it 'logs that no targets are registered' do
+        expect { wait_for_healthy_instances(elb, 'arn:aws:tg/test') }
+          .to(output(/No targets registered yet/).to_stdout)
+      end
+    end
   end
 
   describe '#wait_for_asg_instance_count' do
@@ -583,8 +611,62 @@ RSpec.describe(Deploy) do
       end
 
       it 'waits until count matches' do
-        wait_for_asg_instance_count(asg_client, 'test-asg', 2)
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :up)
         expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+    end
+
+    context 'when scaling up and the ASG overshoots the target' do
+      before do
+        overshoot = build_asg_data('test-asg', instances: %w[i-1 i-2 i-3].map { |id| build_asg_instance(id) })
+        asg_client.stub_responses(:describe_auto_scaling_groups, overshoot)
+      end
+
+      it 'returns on the first poll' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :up)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).once)
+      end
+    end
+
+    context 'when scaling up and an instance is still pending' do
+      before do
+        pending = build_asg_data('test-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2', lifecycle_state: 'Pending')])
+        ready = build_asg_data('test-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2')])
+        asg_client.stub_responses(:describe_auto_scaling_groups, [pending, ready])
+      end
+
+      it 'waits until the pending instance is in service' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :up)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+    end
+
+    context 'when scaling down and the ASG undershoots the target' do
+      before { asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('test-asg', instances: [build_asg_instance('i-1')])) }
+
+      it 'returns on the first poll' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :down)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).once)
+      end
+    end
+
+    context 'when scaling down and an instance is still terminating' do
+      before do
+        terminating = build_asg_data('test-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2', lifecycle_state: 'Terminating')])
+        gone = build_asg_data('test-asg', instances: [build_asg_instance('i-1')])
+        asg_client.stub_responses(:describe_auto_scaling_groups, [terminating, gone])
+      end
+
+      it 'waits until the terminating instance is detached' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 1, direction: :down)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+    end
+
+    context 'when direction is invalid' do
+      it 'raises an argument error' do
+        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :sideways) }
+          .to(raise_error(ArgumentError, /direction/))
       end
     end
 
@@ -592,7 +674,7 @@ RSpec.describe(Deploy) do
       before { asg_client.stub_responses(:describe_auto_scaling_groups, { auto_scaling_groups: [] }) }
 
       it 'raises an error' do
-        expect { wait_for_asg_instance_count(asg_client, 'missing-asg', 2) }
+        expect { wait_for_asg_instance_count(asg_client, 'missing-asg', 2, direction: :up) }
           .to(raise_error(RuntimeError, /Unable to describe ASG/))
       end
     end
@@ -605,7 +687,7 @@ RSpec.describe(Deploy) do
 
       it 'raises after max attempts' do
         stub_const('MAX_POLL_ATTEMPTS', 2)
-        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 3) }
+        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 3, direction: :up) }
           .to(raise_error(RuntimeError, /Timed out waiting for ASG/))
       end
     end
@@ -633,12 +715,26 @@ RSpec.describe(Deploy) do
       end
     end
 
-    context 'when update fails' do
+    context 'when update fails with a reason' do
+      before do
+        cfn.stub_responses(
+          :describe_stacks,
+          { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_ROLLBACK_COMPLETE', stack_status_reason: 'Resource creation cancelled', creation_time: Time.now }] }
+        )
+      end
+
+      it 'raises an error with the stack name, status and reason' do
+        expect { wait_for_stack_update(cfn, 'test') }
+          .to(raise_error(RuntimeError, 'Stack test update failed with status UPDATE_ROLLBACK_COMPLETE: Resource creation cancelled'))
+      end
+    end
+
+    context 'when update fails without a reason' do
       before { cfn.stub_responses(:describe_stacks, { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_FAILED', creation_time: Time.now }] }) }
 
-      it 'raises an error' do
+      it 'raises an error with the stack name and status' do
         expect { wait_for_stack_update(cfn, 'test') }
-          .to(raise_error(RuntimeError, 'Stack update failed'))
+          .to(raise_error(RuntimeError, 'Stack test update failed with status UPDATE_FAILED'))
       end
     end
 
@@ -693,6 +789,11 @@ RSpec.describe(Deploy) do
       it 'exits with code 1', :aggregate_failures do
         expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end
+
+      it 'reports the stop reason on stderr' do
+        expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
+          .to(raise_error(SystemExit).and(output(/Stopping here: Template validation failed/).to_stderr))
       end
     end
   end
@@ -826,9 +927,11 @@ RSpec.describe(Deploy) do
       expect(options[:ami]).to(eq('ami-abc'))
     end
 
-    it 'raises when a mandatory argument is missing' do
-      expect { parse_deploy_options(%w[--environment beta1 --instance api]) }
-        .to(raise_error(OptionParser::MissingArgument, /profile/))
+    it 'prints usage to stderr and exits 1 when a mandatory argument is missing', :aggregate_failures do
+      expect do
+        expect { parse_deploy_options(%w[--environment beta1 --instance api]) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/profile.*Usage:/m).to_stderr)
     end
 
     %w[-h --help].each do |flag|
@@ -927,6 +1030,39 @@ RSpec.describe(Deploy) do
       expect { run_rolling_deploy(asg_resources, asg, mixed_params, 6, nil, nil, { instance: 'worker' }) }
         .to(raise_error(RuntimeError, /Timed out/))
       expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(mixed_instances_policy: hash_including(instances_distribution: hash_including(on_demand_percentage_above_base_capacity: '50')))))
+    end
+  end
+
+  describe '#run_rolling_deploy_with_capacity_rollback' do
+    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
+    let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
+    let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
+    let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
+    let(:plan)          { { new_capacity: 4, new_max: nil }                           }
+
+    before { allow(self).to(receive(:run_rolling_deploy).and_raise(RuntimeError, 'deploy boom')) }
+
+    context 'when the capacity restore succeeds' do
+      before { allow(self).to(receive(:update_asg_capacity)) }
+
+      it 'reports the capacity restore on stderr and re-raises' do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(RuntimeError, 'deploy boom').and(output(/Rolling deploy failed, restoring desired capacity to 2/).to_stderr))
+      end
+    end
+
+    context 'when the capacity restore fails' do
+      before { allow(self).to(receive(:update_asg_capacity).and_raise(RuntimeError, 'restore boom')) }
+
+      it 'warns on stderr with the full restore error message and re-raises the deploy error' do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(RuntimeError, 'deploy boom').and(output(/WARNING: failed to restore auto scaling group capacity - beta1-api-asg.*restore boom \(RuntimeError\)/m).to_stderr))
+      end
+
+      it 'writes nothing about the failed restore to stdout' do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(RuntimeError, 'deploy boom').and(output('').to_stdout))
+      end
     end
   end
 
@@ -1089,6 +1225,11 @@ RSpec.describe(Deploy) do
           .to(raise_error(StandardError, 'boom'))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
+
+      it 'reports the rollback on stderr' do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(StandardError, 'boom').and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
+      end
     end
 
     context 'when CloudFormation returns "No updates are to be performed" (SystemExit 0)' do
@@ -1108,6 +1249,11 @@ RSpec.describe(Deploy) do
         expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+
+      it 'reports the rollback on stderr' do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(SystemExit).and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
       end
     end
 
@@ -1155,6 +1301,11 @@ RSpec.describe(Deploy) do
         expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
           .to(raise_error(Aws::SSM::Errors::ThrottlingException))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+
+      it 'reports the rollback on stderr' do
+        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+          .to(raise_error(Aws::SSM::Errors::ThrottlingException).and(output(/SSM parameter update failed, rolling back SSM parameters/).to_stderr))
       end
     end
 

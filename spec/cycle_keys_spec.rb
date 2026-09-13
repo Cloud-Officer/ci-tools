@@ -273,9 +273,11 @@ RSpec.describe(CycleKeys) do
       expect(options[:username]).to(eq('alice'))
     end
 
-    it 'raises when missing args' do
-      expect { parse_cycle_keys_options(%w[--profile dev]) }
-        .to(raise_error(OptionParser::MissingArgument, /username/))
+    it 'prints usage to stderr and exits 1 when missing args', :aggregate_failures do
+      expect do
+        expect { parse_cycle_keys_options(%w[--profile dev]) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/username.*Usage:/m).to_stderr)
     end
 
     %w[-h --help].each do |flag|

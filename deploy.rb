@@ -43,22 +43,30 @@ end
 def wait_for_healthy_instances(elb, target_group_arn)
   puts('Waiting for all instances to be healthy...')
   poll_until(description: 'waiting for healthy instances') do
-    unhealthy =
-      elb.describe_target_health({ target_group_arn: target_group_arn })
-         .target_health_descriptions.count { |h| h.target_health.state != 'healthy' }
+    descriptions = elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions
+
+    if descriptions.empty?
+      puts('No targets registered yet...')
+      next false
+    end
+
+    unhealthy = descriptions.count { |h| h.target_health.state != 'healthy' }
     puts("Waiting on #{unhealthy} unhealthy targets...")
     unhealthy.zero?
   end
 end
 
-def wait_for_asg_instance_count(asg_client, asg_name, target_count)
+def wait_for_asg_instance_count(asg_client, asg_name, target_count, direction:)
+  raise(ArgumentError, "Invalid direction #{direction.inspect}, expected :up or :down") unless %i[up down].include?(direction)
+
   poll_until(description: "waiting for ASG #{asg_name} to reach #{target_count} instances") do
     response = asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [asg_name] }).auto_scaling_groups
     raise("Unable to describe ASG #{asg_name}") if response.empty?
 
-    count = response.first.instances.count
+    instances = response.first.instances
+    count = direction == :up ? instances.count { |i| i.lifecycle_state == 'InService' } : instances.count
     puts("Waiting on instances #{count}/#{target_count}...")
-    count == target_count
+    direction == :up ? count >= target_count : count <= target_count
   end
 end
 
@@ -270,9 +278,15 @@ def wait_for_stack_update(cfn, stack_name)
     response = cfn.describe_stacks({ stack_name: stack_name }).stacks
     raise("Unable to describe stack #{stack_name}") if response.empty?
 
-    raise('Stack update failed') if failure_states.include?(response.first.stack_status)
+    stack = response.first
 
-    response.first.stack_status == 'UPDATE_COMPLETE'
+    if failure_states.include?(stack.stack_status)
+      message = "Stack #{stack_name} update failed with status #{stack.stack_status}"
+      message += ": #{stack.stack_status_reason}" unless stack.stack_status_reason.to_s.empty?
+      raise(message)
+    end
+
+    stack.stack_status == 'UPDATE_COMPLETE'
   end
 end
 
@@ -281,7 +295,7 @@ def update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
   begin
     cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
   rescue Aws::CloudFormation::Errors::ValidationError => e
-    puts("Stopping here: #{e.message}")
+    warn("Stopping here: #{e.message}")
     exit(e.message.include?('No updates are to be performed') ? 0 : 1)
   end
   wait_for_stack_update(cfn, stack_name)
@@ -291,7 +305,7 @@ end
 def update_ssm_parameters_with_rollback(parameters, prefix, ami_id, asg, options, ssm_prefix, ssm_snapshot)
   update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
 rescue StandardError
-  puts('SSM parameter update failed, rolling back SSM parameters...')
+  warn('SSM parameter update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
 end
@@ -300,13 +314,13 @@ def update_stack_with_ssm_rollback(cfn, stack_name, parameters, prefix, ami_id, 
   update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
 rescue SystemExit => e
   if e.status.nonzero?
-    puts('CloudFormation update failed, rolling back SSM parameters...')
+    warn('CloudFormation update failed, rolling back SSM parameters...')
     restore_ssm_parameters(ssm_snapshot)
   end
 
   raise
 rescue StandardError
-  puts('CloudFormation update failed, rolling back SSM parameters...')
+  warn('CloudFormation update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
 end
@@ -422,13 +436,13 @@ def scale_down_after_deploy(asg_resources, asg, mixed_params, new_capacity, elb,
   end
 
   puts('Waiting for auto scaling group to stop the instances...')
-  wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
+  wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity], direction: :down)
 end
 
 def run_rolling_deploy(asg_resources, asg, mixed_params, new_capacity, elb, target_group_arn, options)
   if new_capacity > asg[:desired_capacity]
     puts('Waiting for auto scaling group to start the instances...')
-    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
+    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity, direction: :up)
     warm_up_after_scale_up(elb, target_group_arn, options)
   end
 
@@ -445,12 +459,12 @@ end
 def run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
   run_rolling_deploy(asg_resources, asg, mixed_params, plan[:new_capacity], elb, target_group_arn, options)
 rescue StandardError
-  puts("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
+  warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
   begin
     update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])
   rescue StandardError => e
-    puts("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
-    pp(e)
+    warn("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
+    warn(e.full_message)
   end
 
   raise
