@@ -235,3 +235,20 @@ setup() {
   [[ "$output" == *"No xdg-open on this host"* ]]
   [[ "$output" == *"release-report-all-issues"* ]]
 }
+
+@test "surfaces the jira CLI output when listing releases fails" {
+  function jira() {
+    echo "401 Unauthorized: token expired"
+    echo "jira: could not reach https://test.atlassian.net" >&2
+    return 1
+  }
+
+  function gh() { :; }
+  export -f jira gh
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Failed to list Jira releases"* ]]
+  [[ "$output" == *"401 Unauthorized: token expired"* ]]
+  [[ "$output" == *"could not reach https://test.atlassian.net"* ]]
+}

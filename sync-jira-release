@@ -152,10 +152,13 @@ ensure_gh_cli
 
 # Verify the release exists in Jira and get its ID
 
-RELEASE_INFO=$(jira release list 2>&1 | tail -n +2 | awk -F'\t' -v name="${jira_release}" '$2 == name {print $1}') || {
-  echo "Error: Failed to list Jira releases. Check JIRA_API_TOKEN and JIRA_BASE_URL."
+RELEASE_LIST=$(jira release list) || {
+  echo "Error: Failed to list Jira releases:" >&2
+  echo "${RELEASE_LIST}" >&2
   exit 1
 }
+
+RELEASE_INFO=$(printf '%s\n' "${RELEASE_LIST}" | tail -n +2 | awk -F'\t' -v name="${jira_release}" '$2 == name {print $1}')
 
 if [ -z "${RELEASE_INFO}" ]; then
   echo "Error: Release '${jira_release}' does not exist in Jira."
