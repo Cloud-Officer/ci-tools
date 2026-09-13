@@ -101,3 +101,44 @@ EOF
   # stdout is where a caller redirects real output; the diagnostics must not land there.
   [[ "$output" != *"ERROR:"* ]]
 }
+
+stub_github_build() {
+  mkdir -p "${TEST_DIR}/stub-bin"
+  printf '#!/usr/bin/env bash\n%s\n' "${1}" > "${TEST_DIR}/stub-bin/github-build"
+  chmod +x "${TEST_DIR}/stub-bin/github-build"
+  export PATH="${TEST_DIR}/stub-bin:${PATH}"
+  unset GHB_IGNORED_EXCLUDES
+}
+
+@test "fails when github-build cannot list ignored folders" {
+  stub_github_build 'echo "boom" >&2; exit 1'
+  touch script.sh
+  run generate-codeowners "@build-team" "@default-team"
+  [ "$status" -ne 0 ]
+  [ ! -f .github/CODEOWNERS ]
+}
+
+@test "fails when github-build returns malformed JSON" {
+  stub_github_build 'echo "not json"'
+  touch script.sh
+  run generate-codeowners "@build-team" "@default-team"
+  [ "$status" -ne 0 ]
+  [ ! -f .github/CODEOWNERS ]
+}
+
+@test "excludes folders reported by github-build" {
+  stub_github_build "echo '{\"ignored_folders\":[\"node_modules\"]}'"
+  mkdir -p node_modules
+  touch node_modules/dep.sh
+  run generate-codeowners "@build-team" "@default-team"
+  [ "$status" -eq 0 ]
+  ! grep -qE '^\*\.sh' .github/CODEOWNERS
+}
+
+@test "succeeds when github-build reports no ignored folders" {
+  stub_github_build "echo '{\"ignored_folders\":[]}'"
+  touch script.sh
+  run generate-codeowners "@build-team" "@default-team"
+  [ "$status" -eq 0 ]
+  grep -qE '^\*\.sh' .github/CODEOWNERS
+}
