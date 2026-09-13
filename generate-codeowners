@@ -15,10 +15,12 @@ if [ -n "${GHB_IGNORED_EXCLUDES:-}" ]; then
   read -ra IGNORED_EXCLUDES <<< "${GHB_IGNORED_EXCLUDES}"
 else
   IGNORED_EXCLUDES=()
+  ignored_json=$(github-build --get_ignored_folders)
+  ignored_folders=$(jq -r '.ignored_folders[]' <<< "${ignored_json}")
 
   while IFS= read -r folder; do
     [ -n "${folder}" ] && IGNORED_EXCLUDES+=(-not -path "*/${folder}/*")
-  done < <(github-build --get_ignored_folders | jq -r '.ignored_folders[]')
+  done <<< "${ignored_folders}"
 fi
 
 function check_file()

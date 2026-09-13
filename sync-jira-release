@@ -34,7 +34,7 @@ install_jira_cli() {
     fi
 
     # Get latest version
-    LATEST_VERSION=$(curl -s https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    LATEST_VERSION=$(curl -fsS https://api.github.com/repos/ankitpokhrel/jira-cli/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
 
     if [ -z "${LATEST_VERSION}" ]; then
       echo "Error: Could not determine latest jira CLI version"
@@ -61,7 +61,7 @@ install_jira_cli() {
     curl -sL "${CHECKSUMS_URL}" -o "${TEMP_DIR}/checksums.txt"
 
     # Verify checksum
-    EXPECTED_CHECKSUM=$(grep "${ARCHIVE_NAME}" "${TEMP_DIR}/checksums.txt" | awk '{print $1}')
+    EXPECTED_CHECKSUM=$(grep "${ARCHIVE_NAME}" "${TEMP_DIR}/checksums.txt" | awk '{print $1}' || true)
     if [ -z "${EXPECTED_CHECKSUM}" ]; then
       echo "Error: Could not find checksum for ${ARCHIVE_NAME}"
       exit 1
@@ -152,10 +152,13 @@ ensure_gh_cli
 
 # Verify the release exists in Jira and get its ID
 
-RELEASE_INFO=$(jira release list 2>&1 | tail -n +2 | awk -F'\t' -v name="${jira_release}" '$2 == name {print $1}') || {
-  echo "Error: Failed to list Jira releases. Check JIRA_API_TOKEN and JIRA_BASE_URL."
+RELEASE_LIST=$(jira release list) || {
+  echo "Error: Failed to list Jira releases:" >&2
+  echo "${RELEASE_LIST}" >&2
   exit 1
 }
+
+RELEASE_INFO=$(printf '%s\n' "${RELEASE_LIST}" | tail -n +2 | awk -F'\t' -v name="${jira_release}" '$2 == name {print $1}')
 
 if [ -z "${RELEASE_INFO}" ]; then
   echo "Error: Release '${jira_release}' does not exist in Jira."
@@ -209,30 +212,49 @@ fi
 
 echo "Using Jira project prefix: ${JIRA_PREFIX}"
 
+pr_numbers=()
+
+while IFS= read -r pr_number; do
+  pr_numbers+=("${pr_number}")
+done < <(git log "${from_tag}..${to_tag}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g' || true)
+
+if [ ${#pr_numbers[@]} -eq 0 ]; then
+  echo "Error: no pull requests found between \`${from_tag}\` and \`${to_tag}\`." >&2
+  exit 1
+fi
+
 repo=$(gh repo view --json nameWithOwner -q '.nameWithOwner')
 temp_file=$(mktemp)
-trap 'rm -f "${temp_file}" "${temp_file}_unique"' exit
+trap 'rm -f "${temp_file}"' exit
 
-for pr_number in $(git log "${from_tag}..${to_tag}" --oneline | grep -E "(#[0-9]+)" | sed -E 's/.*#([0-9]+).*/\1/g'); do
+for pr_number in "${pr_numbers[@]}"; do
   pr_description=$(gh pr view "${pr_number}" --repo "${repo}" --json body -q '.body')
   echo "Checking PR ${pr_number}..."
   echo "${pr_description}" | grep -o "\b${JIRA_PREFIX}-[0-9]\+\b" >> "${temp_file}" || true
 done
 
-sort "${temp_file}" | uniq > "${temp_file}_unique"
+issue_keys=()
+
+while IFS= read -r issue_key; do
+  issue_keys+=("${issue_key}")
+done < <(sort -u "${temp_file}")
+
+rm -f "${temp_file}"
+
+if [ ${#issue_keys[@]} -eq 0 ]; then
+  echo "Error: no ${JIRA_PREFIX} issue keys found in the pull requests between \`${from_tag}\` and \`${to_tag}\`." >&2
+  exit 1
+fi
 
 FAILED_ISSUES=()
 
-# shellcheck disable=SC2013
-for issue_key in $(cat "${temp_file}_unique"); do
+for issue_key in "${issue_keys[@]}"; do
   echo "Updating issue ${issue_key}..."
   if ! jira issue edit "${issue_key}" --no-input --fix-version "${jira_release}"; then
     echo "Warning: failed to update ${issue_key}" >&2
     FAILED_ISSUES+=("${issue_key}")
   fi
 done
-
-rm -f "${temp_file}" "${temp_file}_unique"
 
 if [ ${#FAILED_ISSUES[@]} -gt 0 ]; then
   echo "" >&2
