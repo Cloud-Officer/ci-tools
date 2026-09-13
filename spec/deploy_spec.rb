@@ -568,6 +568,34 @@ RSpec.describe(Deploy) do
           .to(raise_error(RuntimeError, /Timed out waiting for healthy instances/))
       end
     end
+
+    context 'when no targets are registered' do
+      before { elb.stub_responses(:describe_target_health, { target_health_descriptions: [] }) }
+
+      it 'does not treat an empty target group as healthy' do
+        stub_const('MAX_POLL_ATTEMPTS', 2)
+        expect { wait_for_healthy_instances(elb, 'arn:aws:tg/test') }
+          .to(raise_error(RuntimeError, /Timed out waiting for healthy instances/))
+      end
+    end
+
+    context 'when targets register after the group was empty' do
+      before do
+        empty = { target_health_descriptions: [] }
+        healthy = { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'healthy' } }] }
+        elb.stub_responses(:describe_target_health, [empty, healthy])
+      end
+
+      it 'keeps polling until registered targets are healthy' do
+        wait_for_healthy_instances(elb, 'arn:aws:tg/test')
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+
+      it 'logs that no targets are registered' do
+        expect { wait_for_healthy_instances(elb, 'arn:aws:tg/test') }
+          .to(output(/No targets registered yet/).to_stdout)
+      end
+    end
   end
 
   describe '#wait_for_asg_instance_count' do

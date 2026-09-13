@@ -43,9 +43,14 @@ end
 def wait_for_healthy_instances(elb, target_group_arn)
   puts('Waiting for all instances to be healthy...')
   poll_until(description: 'waiting for healthy instances') do
-    unhealthy =
-      elb.describe_target_health({ target_group_arn: target_group_arn })
-         .target_health_descriptions.count { |h| h.target_health.state != 'healthy' }
+    descriptions = elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions
+
+    if descriptions.empty?
+      puts('No targets registered yet...')
+      next false
+    end
+
+    unhealthy = descriptions.count { |h| h.target_health.state != 'healthy' }
     puts("Waiting on #{unhealthy} unhealthy targets...")
     unhealthy.zero?
   end
