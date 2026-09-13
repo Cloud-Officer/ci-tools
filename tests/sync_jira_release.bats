@@ -209,7 +209,13 @@ setup() {
     esac
   }
 
-  function gh() { echo "octocat/hello"; }
+  function gh() {
+    case "${1}" in
+      pr) echo "Fixes DEV-123" ;;
+      *) echo "octocat/hello" ;;
+    esac
+  }
+
   function git() {
     case "${1}" in
       rev-parse) return 0 ;;
@@ -314,4 +320,116 @@ setup() {
   [[ "$output" == *"Failed to list Jira releases"* ]]
   [[ "$output" == *"401 Unauthorized: token expired"* ]]
   [[ "$output" == *"could not reach https://test.atlassian.net"* ]]
+}
+
+@test "fails loudly when no pull requests are found between the tags" {
+  function jira() {
+    case "${1}" in
+      release) printf 'header\n10001\trelease1\n' ;;
+      *) echo "jira invoked: $*" ;;
+    esac
+  }
+
+  function gh() { echo "octocat/hello"; }
+  function git() {
+    case "${1}" in
+      rev-parse) return 0 ;;
+      log) : ;;
+      *) builtin command git "$@" ;;
+    esac
+  }
+
+  export -f jira gh git
+
+  cd "${BATS_TEST_TMPDIR}"
+  mkdir -p .github
+  printf '[DEV-XXXX](https://x.atlassian.net/browse/DEV-XXXX)\n' > .github/pull_request_template.md
+
+  run sync-jira-release tag2 tag1 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'Error: no pull requests found between `tag2` and `tag1`'* ]]
+  [[ "$output" != *"Done!"* ]]
+  [[ "$output" != *"jira invoked"* ]]
+}
+
+@test "fails loudly when the pull requests reference no Jira issues" {
+  function jira() {
+    case "${1}" in
+      release) printf 'header\n10001\trelease1\n' ;;
+      *) echo "jira invoked: $*" ;;
+    esac
+  }
+
+  function gh() {
+    case "${1}" in
+      pr) echo "No ticket here" ;;
+      *) echo "octocat/hello" ;;
+    esac
+  }
+
+  function git() {
+    case "${1}" in
+      rev-parse) return 0 ;;
+      log) printf 'abc1234 First change (#42)\ndef5678 Second change (#43)\nfff0000 Direct commit\n' ;;
+      *) builtin command git "$@" ;;
+    esac
+  }
+
+  export -f jira gh git
+
+  cd "${BATS_TEST_TMPDIR}"
+  mkdir -p .github
+  printf '[DEV-XXXX](https://x.atlassian.net/browse/DEV-XXXX)\n' > .github/pull_request_template.md
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Checking PR 42..."* ]]
+  [[ "$output" == *"Checking PR 43..."* ]]
+  [[ "$output" == *'Error: no DEV issue keys found in the pull requests between `tag1` and `tag2`'* ]]
+  [[ "$output" != *"Done!"* ]]
+  [[ "$output" != *"jira invoked"* ]]
+}
+
+@test "updates each unique Jira issue referenced by the pull requests once" {
+  function uname() { echo "Linux"; }
+
+  function jira() {
+    case "${1}" in
+      release) printf 'header\n10001\trelease1\n' ;;
+      *) echo "jira invoked: $*" ;;
+    esac
+  }
+
+  function gh() {
+    case "${1}:${3}" in
+      pr:42) echo "Fixes DEV-1 and DEV-2" ;;
+      pr:43) echo "Follow-up for DEV-2" ;;
+      *) echo "octocat/hello" ;;
+    esac
+  }
+
+  function git() {
+    case "${1}" in
+      rev-parse) return 0 ;;
+      log) printf 'abc1234 First change (#42)\ndef5678 Second change (#43)\n' ;;
+      *) builtin command git "$@" ;;
+    esac
+  }
+
+  function command() {
+    if [ "${1}" = "-v" ] && [ "${2}" = "xdg-open" ]; then return 1; fi
+    builtin command "$@"
+  }
+
+  export -f uname jira gh git command
+
+  cd "${BATS_TEST_TMPDIR}"
+  mkdir -p .github
+  printf '[DEV-XXXX](https://x.atlassian.net/browse/DEV-XXXX)\n' > .github/pull_request_template.md
+
+  run sync-jira-release tag1 tag2 release1
+  [ "$status" -eq 0 ]
+  [ "$(grep -c 'jira invoked: issue edit DEV-1 ' <<< "$output")" -eq 1 ]
+  [ "$(grep -c 'jira invoked: issue edit DEV-2 ' <<< "$output")" -eq 1 ]
+  [[ "$output" == *"Done!"* ]]
 }
