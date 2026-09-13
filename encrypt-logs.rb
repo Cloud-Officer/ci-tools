@@ -15,6 +15,12 @@ def infer_environment(string)
   KMS_ENVIRONMENTS.find { |env| string.match?(%r{(?:^|[/_-])#{env}(?:[/_-]|$)}) }
 end
 
+def kms_key_environment(key_metadata)
+  return unless key_metadata[:key_state] == 'Enabled' && key_metadata[:key_manager] == 'CUSTOMER'
+
+  KMS_ENVIRONMENTS.find { |env| key_metadata[:description].to_s.match?(/\A#{env}(?![[:alnum:]])/) }
+end
+
 def build_kms_key_map(kms)
   keys = {}
 
@@ -24,9 +30,13 @@ def build_kms_key_map(kms)
         {
           key_id: key.key_id
         }
-      )
-      env = KMS_ENVIRONMENTS.find { |candidate| key_metadata[:key_metadata][:description].start_with?(candidate.to_s) }
-      keys[env] = key_metadata[:key_metadata][:arn] if env
+      )[:key_metadata]
+      env = kms_key_environment(key_metadata)
+      next unless env
+
+      raise("Multiple enabled KMS keys found for environment '#{env}': #{keys[env]}, #{key_metadata[:arn]}") if keys[env]
+
+      keys[env] = key_metadata[:arn]
     end
   end
 
