@@ -114,8 +114,8 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count
 - `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
 - `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
-- `fetch_no_echo_parameter_keys`: Reads the stack's own template summary and returns every parameter declared `NoEcho`, so the secret set is discovered rather than hand-maintained
-- `mark_cfn_secrets_for_previous_value!`: Flags those parameters, unioned with the `CFN_KNOWN_SECRET_PARAMETERS` backstop, as `use_previous_value` so secrets are never re-sent to CloudFormation. `describe_stacks` reports a `NoEcho` value as `****`, and resending that string would overwrite the real secret with asterisks
+- `fetch_no_echo_parameter_keys`: Reads the stack's own template summary and returns every parameter declared `NoEcho`, so the secret set is discovered rather than hand-maintained. A failed `get_template_summary` call aborts the deploy before any SSM or stack change
+- `mark_cfn_secrets_for_previous_value!`: Flags those parameters, unioned with the `CFN_KNOWN_SECRET_PARAMETERS` backstop, plus any parameter whose value is the `****` mask, as `use_previous_value` so secrets are never re-sent to CloudFormation. `describe_stacks` reports a `NoEcho` value as `****`, and resending that string would overwrite the real secret with asterisks
 - `create_ami`: Creates an AMI from the standalone instance and waits on `Aws::EC2::Waiters::ImageAvailable`
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling

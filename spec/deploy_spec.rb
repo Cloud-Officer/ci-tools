@@ -484,11 +484,12 @@ RSpec.describe(Deploy) do
 
   describe '#mark_cfn_secrets_for_previous_value!' do
     let(:secret)      { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword') }
-    let(:no_echo)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'StripeSecret') }
-    let(:non_secret)  { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId')   }
+    let(:no_echo)     { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'StripeSecret', parameter_value: '****')  }
+    let(:non_secret)  { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId', parameter_value: 'ami-old') }
+    let(:masked)      { instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'UnlistedToken', parameter_value: '****') }
 
     before do
-      [secret, no_echo, non_secret].each do |parameter|
+      [secret, no_echo, non_secret, masked].each do |parameter|
         allow(parameter).to(receive(:parameter_value=))
         allow(parameter).to(receive(:use_previous_value=))
       end
@@ -510,6 +511,13 @@ RSpec.describe(Deploy) do
       mark_cfn_secrets_for_previous_value!([secret, no_echo, non_secret], %w[StripeSecret])
       expect(non_secret).not_to(have_received(:parameter_value=))
     end
+
+    it 'marks a masked parameter even when its key was not discovered', :aggregate_failures do
+      mark_cfn_secrets_for_previous_value!([masked, non_secret], [])
+      expect(masked).to(have_received(:parameter_value=).with(nil))
+      expect(masked).to(have_received(:use_previous_value=).with(true))
+      expect(non_secret).not_to(have_received(:use_previous_value=))
+    end
   end
 
   describe '#fetch_no_echo_parameter_keys' do
@@ -523,9 +531,10 @@ RSpec.describe(Deploy) do
       expect(fetch_no_echo_parameter_keys(cfn, 'api-stack')).to(eq(%w[StripeSecret]))
     end
 
-    it 'falls back to an empty list when the summary cannot be read' do
-      cfn.stub_responses(:get_template_summary, 'ServiceError')
-      expect(fetch_no_echo_parameter_keys(cfn, 'api-stack')).to(eq([]))
+    it 'raises when the summary cannot be read' do
+      cfn.stub_responses(:get_template_summary, 'Throttling')
+      expect { fetch_no_echo_parameter_keys(cfn, 'api-stack') }
+        .to(raise_error(Aws::CloudFormation::Errors::Throttling))
     end
   end
 
