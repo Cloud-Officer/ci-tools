@@ -201,10 +201,8 @@ def resolve_parameter_value(key, prefix, ami_id, asg, options)
 end
 
 # Backstop only. The authoritative set of secret parameters is read from the
-# template's NoEcho flags by fetch_no_echo_parameter_keys; these three are kept so
-# a get_template_summary failure cannot silently expose the secrets we already
-# know about. Adding a name here is not how a new secret gets protected -- marking
-# it NoEcho in the template is.
+# template's NoEcho flags by fetch_no_echo_parameter_keys. Adding a name here is
+# not how a new secret gets protected -- marking it NoEcho in the template is.
 CFN_KNOWN_SECRET_PARAMETERS = %w[DbPassword MqPassword SendGridApiKey].freeze
 
 def update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
@@ -225,16 +223,15 @@ def fetch_no_echo_parameter_keys(cfn, stack_name)
   cfn.get_template_summary({ stack_name: stack_name }).parameters.filter_map do |parameter|
     parameter.parameter_key if parameter.no_echo
   end
-rescue StandardError => e
-  warn("Unable to read NoEcho parameters for #{stack_name}, falling back to the known list: #{e.message}")
-  []
 end
+
+CFN_MASKED_PARAMETER_VALUE = '****'
 
 def mark_cfn_secrets_for_previous_value!(parameters, secret_keys)
   protected_keys = CFN_KNOWN_SECRET_PARAMETERS | secret_keys
 
   parameters.each do |parameter|
-    next unless protected_keys.include?(parameter.parameter_key)
+    next unless protected_keys.include?(parameter.parameter_key) || parameter.parameter_value == CFN_MASKED_PARAMETER_VALUE
 
     parameter.parameter_value = nil
     parameter.use_previous_value = true
