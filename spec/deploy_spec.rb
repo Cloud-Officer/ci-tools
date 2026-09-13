@@ -50,8 +50,8 @@ RSpec.describe(Deploy) do
     { auto_scaling_groups: [{ auto_scaling_group_name: name, min_size: min, max_size: max, desired_capacity: desired, default_cooldown: 300, availability_zones: ['us-east-1a'], health_check_type: 'EC2', created_time: Time.now, instances: instances }] }
   end
 
-  def build_asg_instance(id)
-    { instance_id: id, lifecycle_state: 'InService', availability_zone: 'us-east-1a', health_status: 'Healthy', protected_from_scale_in: false }
+  def build_asg_instance(id, lifecycle_state: 'InService')
+    { instance_id: id, lifecycle_state: lifecycle_state, availability_zone: 'us-east-1a', health_status: 'Healthy', protected_from_scale_in: false }
   end
 
   def build_distribution_list(items, is_truncated: false, next_marker: nil)
@@ -611,8 +611,62 @@ RSpec.describe(Deploy) do
       end
 
       it 'waits until count matches' do
-        wait_for_asg_instance_count(asg_client, 'test-asg', 2)
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :up)
         expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+    end
+
+    context 'when scaling up and the ASG overshoots the target' do
+      before do
+        overshoot = build_asg_data('test-asg', instances: %w[i-1 i-2 i-3].map { |id| build_asg_instance(id) })
+        asg_client.stub_responses(:describe_auto_scaling_groups, overshoot)
+      end
+
+      it 'returns on the first poll' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :up)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).once)
+      end
+    end
+
+    context 'when scaling up and an instance is still pending' do
+      before do
+        pending = build_asg_data('test-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2', lifecycle_state: 'Pending')])
+        ready = build_asg_data('test-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2')])
+        asg_client.stub_responses(:describe_auto_scaling_groups, [pending, ready])
+      end
+
+      it 'waits until the pending instance is in service' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :up)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+    end
+
+    context 'when scaling down and the ASG undershoots the target' do
+      before { asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('test-asg', instances: [build_asg_instance('i-1')])) }
+
+      it 'returns on the first poll' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :down)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).once)
+      end
+    end
+
+    context 'when scaling down and an instance is still terminating' do
+      before do
+        terminating = build_asg_data('test-asg', instances: [build_asg_instance('i-1'), build_asg_instance('i-2', lifecycle_state: 'Terminating')])
+        gone = build_asg_data('test-asg', instances: [build_asg_instance('i-1')])
+        asg_client.stub_responses(:describe_auto_scaling_groups, [terminating, gone])
+      end
+
+      it 'waits until the terminating instance is detached' do
+        wait_for_asg_instance_count(asg_client, 'test-asg', 1, direction: :down)
+        expect(self).to(have_received(:sleep).with(POLL_INTERVAL).twice)
+      end
+    end
+
+    context 'when direction is invalid' do
+      it 'raises an argument error' do
+        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 2, direction: :sideways) }
+          .to(raise_error(ArgumentError, /direction/))
       end
     end
 
@@ -620,7 +674,7 @@ RSpec.describe(Deploy) do
       before { asg_client.stub_responses(:describe_auto_scaling_groups, { auto_scaling_groups: [] }) }
 
       it 'raises an error' do
-        expect { wait_for_asg_instance_count(asg_client, 'missing-asg', 2) }
+        expect { wait_for_asg_instance_count(asg_client, 'missing-asg', 2, direction: :up) }
           .to(raise_error(RuntimeError, /Unable to describe ASG/))
       end
     end
@@ -633,7 +687,7 @@ RSpec.describe(Deploy) do
 
       it 'raises after max attempts' do
         stub_const('MAX_POLL_ATTEMPTS', 2)
-        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 3) }
+        expect { wait_for_asg_instance_count(asg_client, 'test-asg', 3, direction: :up) }
           .to(raise_error(RuntimeError, /Timed out waiting for ASG/))
       end
     end

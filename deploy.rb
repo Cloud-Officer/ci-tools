@@ -56,14 +56,17 @@ def wait_for_healthy_instances(elb, target_group_arn)
   end
 end
 
-def wait_for_asg_instance_count(asg_client, asg_name, target_count)
+def wait_for_asg_instance_count(asg_client, asg_name, target_count, direction:)
+  raise(ArgumentError, "Invalid direction #{direction.inspect}, expected :up or :down") unless %i[up down].include?(direction)
+
   poll_until(description: "waiting for ASG #{asg_name} to reach #{target_count} instances") do
     response = asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [asg_name] }).auto_scaling_groups
     raise("Unable to describe ASG #{asg_name}") if response.empty?
 
-    count = response.first.instances.count
+    instances = response.first.instances
+    count = direction == :up ? instances.count { |i| i.lifecycle_state == 'InService' } : instances.count
     puts("Waiting on instances #{count}/#{target_count}...")
-    count == target_count
+    direction == :up ? count >= target_count : count <= target_count
   end
 end
 
@@ -427,13 +430,13 @@ def scale_down_after_deploy(asg_resources, asg, mixed_params, new_capacity, elb,
   end
 
   puts('Waiting for auto scaling group to stop the instances...')
-  wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity])
+  wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity], direction: :down)
 end
 
 def run_rolling_deploy(asg_resources, asg, mixed_params, new_capacity, elb, target_group_arn, options)
   if new_capacity > asg[:desired_capacity]
     puts('Waiting for auto scaling group to start the instances...')
-    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity)
+    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity, direction: :up)
     warm_up_after_scale_up(elb, target_group_arn, options)
   end
 
