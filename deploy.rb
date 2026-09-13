@@ -75,19 +75,24 @@ def find_matching_distribution(cloudfront, environment)
   matches.first
 end
 
+def viewer_request_association(associations)
+  Array(associations.items).find { |item| item.event_type == 'viewer-request' }
+end
+
 def update_distribution_lambda(cloudfront, distribution, function_arn)
-  associations = distribution.default_cache_behavior.lambda_function_associations
-  return if !associations.quantity.zero? && associations.items.first.lambda_function_arn == function_arn
+  current = viewer_request_association(distribution.default_cache_behavior.lambda_function_associations)
+  return if current&.lambda_function_arn == function_arn
 
   puts("Updating distribution #{distribution.id} lambda function associations to #{function_arn}...")
   config = cloudfront.get_distribution_config({ id: distribution.id })
   config_assoc = config.distribution_config.default_cache_behavior.lambda_function_associations
+  target = viewer_request_association(config_assoc)
 
-  if config_assoc.quantity.zero?
-    config_assoc.items.push({ event_type: 'viewer-request', include_body: false, lambda_function_arn: function_arn })
-    config_assoc.quantity = 1
+  if target
+    target.lambda_function_arn = function_arn
   else
-    config_assoc.items.first.lambda_function_arn = function_arn
+    config_assoc.items.push({ event_type: 'viewer-request', include_body: false, lambda_function_arn: function_arn })
+    config_assoc.quantity += 1
   end
 
   cloudfront.update_distribution({ id: distribution.id, if_match: config.etag, distribution_config: config.distribution_config })
