@@ -282,10 +282,10 @@
     "license": "MIT",
     "description": "A pure Ruby library for parsing INI documents",
     "website": "http://github.com/antw/iniparse",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-09-13",
     "risk_level": "Medium",
     "requirements": "Parse AWS credentials INI files for key rotation",
-    "verification_reasoning": "Actively maintained Ruby INI file parser used for reading and writing AWS credentials"
+    "verification_reasoning": "Dormant upstream: no release or commit since 1.5.0 (2020-02-27). Accepted because the INI subset used (read profiles, replace two keys, save) is stable, no advisories are published (OSV), the version is pinned in Gemfile.lock, and no maintained Ruby INI alternative exists (inifile, parseconfig, iniparser, configparser and inih are also dormant)"
   },
   "jmespath": {
     "language": "Ruby",
