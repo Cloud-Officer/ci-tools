@@ -589,6 +589,27 @@ Scanner suppressions are deliberate risk acceptances, so each one is recorded wi
 
 The accepted Trivy findings fall into three groups: conditions Trivy cannot evaluate (`AWS-0021`, `AWS-0079` set `StorageEncrypted` through `Fn::If`), baseline decisions to use AWS-managed keys instead of customer-managed keys (`AWS-0015`, `AWS-0017`, `AWS-0022`, `AWS-0078`, `AWS-0098`, `AWS-0132`), and intentional design choices (`AWS-0053` public load balancers, `AWS-0104` unrestricted egress with ingress restricted per security group, `AWS-0089` central log buckets that cannot log to themselves, `AWS-0070` RabbitMQ brokers, `AWS-0066` Lambda@Edge without X-Ray, `AWS-0123` MFA enforced through a customer-managed policy rather than an inline one).
 
+### Container Image Scanning
+
+The Docker image published to Docker Hub is deliberately **not** vulnerability-scanned (for example with Trivy in `image`
+mode), neither on pull requests nor at publish time. This is a recorded decision, not a gap, and code reviews should not
+raise it as a finding.
+
+What the project controls is already checked on every pull request:
+
+- **Ruby dependencies:** the `trivy` job in `.github/workflows/build.yml` scans the repository, including `Gemfile.lock`,
+  which pins the gems the image installs
+- **Dockerfile:** `hadolint` and Trivy's misconfiguration scanner check it, with waivers recorded in `.hadolint.yaml`
+- **Image build:** the `Docker Build (amd64)` and `Docker Build (arm64)` jobs build the image without publishing it, so a
+  Dockerfile or package-install regression fails the pull request instead of the release tag
+
+An image scan adds only findings in content the project does not author: the `ubuntu:26.04` base image, its distribution
+packages, and the upstream AWS CLI and Session Manager plugin binaries. Those are resolved when their maintainers publish
+fixed releases, not by a change in this repository. The same evaluation on `soup`, which uses the same base image, found
+every fixable HIGH finding in `/usr/bin/pebble`, a Go binary Canonical ships unpackaged in `ubuntu:26.04`. As a required
+check, an image scan would block every pull request on upstream release timing without pointing at anything the project
+can change.
+
 ### Error Handling
 
 | Control                | Implementation                                                     | Location                                                   |
