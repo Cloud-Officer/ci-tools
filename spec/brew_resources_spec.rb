@@ -47,23 +47,42 @@ RSpec.describe(BrewResources) do
     # 'spec/fixtures' from wherever rspec happened to be running. Dir.mktmpdir
     # keeps the fixture out of the working tree and removes it for us, so nothing
     # deletes a relative path it does not own.
-    let(:fixture_dir)   { Dir.mktmpdir                              }
-    let(:lockfile_path) { File.join(fixture_dir, 'Gemfile.lock')    }
+    let(:fixture_dir)   { Dir.mktmpdir                           }
+    let(:lockfile_path) { File.join(fixture_dir, 'Gemfile.lock') }
+    let(:gemfile_path)  { File.join(fixture_dir, 'Gemfile')      }
 
     after { FileUtils.remove_entry(fixture_dir) }
 
     before do
+      File.write(gemfile_path, <<~GEMFILE)
+        source 'https://rubygems.org'
+
+        gem 'example'
+
+        group :development do
+          gem 'devonly'
+        end
+
+        group :test do
+          gem 'testonly'
+        end
+      GEMFILE
+
       File.write(lockfile_path, <<~LOCK)
         GEM
           remote: https://rubygems.org/
           specs:
+            devonly (4.5.6)
             example (1.2.3)
+            testonly (7.8.9)
 
         PLATFORMS
           ruby
 
         DEPENDENCIES
+          devonly
           example
+          testonly
 
         BUNDLED WITH
            2.5.0
@@ -71,9 +90,30 @@ RSpec.describe(BrewResources) do
       allow(self).to(receive(:fetch_gem_sha256).and_return('deadbeef' * 8))
     end
 
-    it 'parses the lockfile and prints a Homebrew resource block for each spec' do
+    it 'prints a Homebrew resource block for a default-group gem' do
       expect { run_brew_resources(lockfile_path) }
         .to(output(/resource 'example' do/).to_stdout)
+    end
+
+    it 'omits development-group gems' do
+      expect { run_brew_resources(lockfile_path) }
+        .not_to(output(/resource 'devonly' do/).to_stdout)
+    end
+
+    it 'omits test-group gems' do
+      expect { run_brew_resources(lockfile_path) }
+        .not_to(output(/resource 'testonly' do/).to_stdout)
+    end
+
+    it 'never emits bundler, which ships with Ruby' do
+      expect { run_brew_resources(lockfile_path) }
+        .not_to(output(/resource 'bundler' do/).to_stdout)
+    end
+
+    it 'raises a clear error when the Gemfile is missing' do
+      FileUtils.rm_f(gemfile_path)
+      expect { run_brew_resources(lockfile_path) }
+        .to(raise_error(RuntimeError, /needs the Gemfile/))
     end
 
     it 'writes no fixture into the repository working tree' do
