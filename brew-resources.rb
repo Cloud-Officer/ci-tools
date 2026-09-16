@@ -52,10 +52,36 @@ def format_resource(spec, sha256)
   lines
 end
 
-def run_brew_resources(lockfile_path = 'Gemfile.lock')
-  lock_file = Bundler::LockfileParser.new(Bundler.read_file(lockfile_path))
+def default_group_dependencies(gemfile_path, lockfile_path)
+  Bundler::Definition
+    .build(gemfile_path, lockfile_path, false)
+    .dependencies
+    .filter_map { |dependency| dependency.name if dependency.groups.include?(:default) }
+end
 
-  lock_file.specs.each do |spec|
+def runtime_specs(lockfile_path)
+  gemfile_path = File.join(File.dirname(lockfile_path), 'Gemfile')
+
+  raise("#{gemfile_path} not found: resolving the runtime closure needs the Gemfile, not just the lockfile") unless File.exist?(gemfile_path)
+
+  specs_by_name = Bundler::LockfileParser.new(Bundler.read_file(lockfile_path)).specs.group_by(&:name)
+  queue = default_group_dependencies(gemfile_path, lockfile_path)
+  reached = {}
+
+  until queue.empty?
+    name = queue.shift
+    next if reached.key?(name) || !specs_by_name.key?(name)
+
+    reached[name] = specs_by_name[name]
+    specs_by_name[name].each { |spec| queue.concat(spec.dependencies.map(&:name)) }
+  end
+
+  # bundler appears in the lockfile graph but ships with Ruby, so it is never vendored.
+  reached.except('bundler').values.flatten
+end
+
+def run_brew_resources(lockfile_path = 'Gemfile.lock')
+  runtime_specs(lockfile_path).each do |spec|
     sha256 = fetch_gem_sha256(spec)
     format_resource(spec, sha256).each { |line| puts(line) }
   end
