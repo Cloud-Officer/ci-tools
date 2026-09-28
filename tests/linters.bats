@@ -186,6 +186,67 @@ BANDIT
   [[ "$output" == *"bandit invoked"* ]]
 }
 
+# A flake8 whose --version output lacks the docstrings plugin, run through
+# `env` so the interpreter stub can itself be a script on macOS as well.
+stub_flake8_without_docstrings() {
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+  touch .flake8
+
+  cat > "${HOME}/bin/fakepython" <<'PY'
+#!/usr/bin/env bash
+echo "fakepython invoked: $*"
+PY
+  chmod 0755 "${HOME}/bin/fakepython"
+  printf '#!/usr/bin/env fakepython\n' > "${HOME}/bin/flake8"
+  chmod 0755 "${HOME}/bin/flake8"
+}
+
+@test "installs flake8-docstrings into the flake8 interpreter on macOS" {
+  skip_unless_bash4
+  stub_flake8_without_docstrings
+
+  function uname() { echo "Darwin"; }
+  export -f uname
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fakepython invoked: -m pip install --quiet flake8-docstrings"* ]]
+}
+
+@test "installs flake8-docstrings from apt on Linux" {
+  skip_unless_bash4
+  stub_flake8_without_docstrings
+
+  function uname() { echo "Linux"; }
+  function sudo() { echo "sudo invoked: $*"; }
+  export -f uname sudo
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"install --no-install-recommends python3-flake8-docstrings"* ]]
+}
+
+@test "does not reinstall flake8-docstrings when flake8 already has it" {
+  skip_unless_bash4
+  touch .flake8
+
+  function flake8() {
+    if [ "${1}" == "--version" ]; then
+      echo "7.4.1 (flake8-docstrings: 1.7.0, pydocstyle: 6.3.0) CPython"
+    fi
+  }
+  function sudo() { echo "sudo invoked: $*"; }
+  function brew() { echo "brew invoked: $*"; }
+  export -f flake8 sudo brew
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"flake8-docstrings"* ]]
+}
+
 @test "taps the protolint formula on macOS before installing" {
   skip_unless_bash4
 

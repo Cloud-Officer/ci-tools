@@ -223,7 +223,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - eslint: JavaScript
 - ktlint: Kotlin
 - bandit: Python security
-- flake8: Python style
+- flake8: Python style, with the flake8-docstrings plugin CI installs (added to the flake8 environment when missing)
 - protolint: Protocol Buffers
 - rubocop: Ruby code
 - semgrep: Security scanning
