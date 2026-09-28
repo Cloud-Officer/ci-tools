@@ -82,6 +82,20 @@ brew_or_apt_install() {
   fi
 }
 
+# Adds the flake8-docstrings plugin CI installs next to flake8, so the D rules
+# run locally too. On macOS it goes into the Python environment the flake8
+# script runs under (the Homebrew formula's own venv); on Linux it is the apt
+# package that sits next to python3-flake8.
+install_flake8_docstrings() {
+  if is_darwin; then
+    local interpreter
+    read -r -a interpreter <<< "$(head -n 1 "$(command -v flake8)" | sed 's/^#![[:space:]]*//')"
+    "${interpreter[@]}" -m pip install --quiet flake8-docstrings
+  else
+    sudo apt-get --yes install --no-install-recommends python3-flake8-docstrings
+  fi
+}
+
 # Installs a Go-based tool: Homebrew on macOS, `go install` on Linux, where the
 # module bin dir also has to join PATH for the very next command to find it.
 # $3 is an optional Homebrew tap for formulae outside homebrew-core (protolint).
@@ -477,6 +491,10 @@ if [ -f .flake8 ]; then
 
   if ! command -v flake8 &>/dev/null; then
     brew_or_apt_install flake8
+  fi
+
+  if ! flake8 --version | grep -q "flake8-docstrings"; then
+    install_flake8_docstrings
   fi
 
   flake8 . || FAILED=1
