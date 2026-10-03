@@ -5,13 +5,13 @@
 | Ruby | addressable | 2.9.0 | Apache-2.0 | Addressable is an alternative implementation to the URI implementation that is | <https://github.com/sporkmonger/addressable> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | ast | 2.4.3 | MIT | A library for working with Abstract Syntax Trees. | <https://whitequark.github.io/ast/> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | aws-eventstream | 1.4.0 | Apache-2.0 | Amazon Web Services event stream library | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Dependency | Dependency |
-| Ruby | aws-partitions | 1.1291.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-09-30 | Low | Dependency | Dependency |
+| Ruby | aws-partitions | 1.1292.0 | Apache-2.0 | Provides interfaces to enumerate AWS partitions, regions, and services. | <https://github.com/aws/aws-sdk-ruby> | 2026-10-03 | Low | Dependency | Dependency |
 | Ruby | aws-sdk-autoscaling | 1.168.0 | Apache-2.0 | Official AWS Ruby gem for Auto Scaling | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudformation | 1.159.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-cloudfront | 1.155.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2026-09-23 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-cloudfront | 1.156.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2026-10-03 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudwatchlogs | 1.165.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-09-30 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.257.0 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2026-09-21 | Low | Access AWS services | Official AWS Ruby SDK |
-| Ruby | aws-sdk-ec2 | 1.654.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-09-30 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-ec2 | 1.655.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-10-03 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.159.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-iam | 1.154.0 | Apache-2.0 | Official AWS Ruby gem for AWS Identity and Access Management (IAM) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | High | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-kms | 1.132.0 | Apache-2.0 | Official AWS Ruby gem for AWS Key Management Service (KMS) | <https://github.com/aws/aws-sdk-ruby> | 2026-05-22 | High | Access AWS services | Official AWS Ruby SDK |
@@ -34,7 +34,7 @@
 | Ruby | mini_mime | 1.1.5 | MIT | A minimal mime type library | <https://github.com/discourse/mini_mime> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | multi_xml | 0.9.1 | MIT | Provides swappable XML backends utilizing LibXML, Nokogiri, Ox, or REXML. | <https://github.com/sferik/multi_xml> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | optparse | 0.8.1 | Ruby | OptionParser is a class for command-line option analysis | <https://github.com/ruby/optparse> | 2026-05-22 | Low | Parse command line options | Most popular gem on rubygems |
-| Ruby | parallel | 2.2.0 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2026-05-22 | Low | Dependency | Dependency |
+| Ruby | parallel | 2.3.0 | MIT | Run any kind of code in parallel processes | <https://github.com/grosser/parallel> | 2026-10-03 | Low | Dependency | Dependency |
 | Ruby | parser | 3.3.12.0 | MIT | A Ruby parser written in pure Ruby. | <https://github.com/whitequark/parser> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | prism | 1.9.0 | MIT | Prism Ruby parser | <https://github.com/ruby/prism> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | public_suffix | 7.0.5 | MIT | PublicSuffix can parse and decompose a domain name into top level domain, domain and subdomains. | <https://simonecarletti.com/code/publicsuffix-ruby> | 2026-05-22 | Low | Dependency | Dependency |
@@ -51,7 +51,7 @@
 | Ruby | rubocop-ast | 1.50.0 | MIT | RuboCop's Node and NodePattern classes. | <https://www.rubocop.org/> | 2026-05-22 | Low | Dependency | Dependency |
 | Ruby | rubocop-capybara | 3.0.0 | MIT | Code style checking for Capybara test files (RSpec, Cucumber, Minitest). | <https://github.com/rubocop/rubocop-capybara> | 2026-05-22 | Low | Ruby linter | Most popular gem |
 | Ruby | rubocop-graphql | 1.8.0 | MIT | A collection of RuboCop cops to improve GraphQL-related code | <https://github.com/DmitryTsepelev/rubocop-graphql> | 2026-05-22 | Low | Ruby linter | Most popular gem |
-| Ruby | rubocop-minitest | 0.40.0 | MIT | Automatic Minitest code style checking tool. | <https://docs.rubocop.org/rubocop-minitest/> | 2026-05-22 | Low | Ruby linter | Most popular gem |
+| Ruby | rubocop-minitest | 0.41.0 | MIT | Automatic Minitest code style checking tool. | <https://docs.rubocop.org/rubocop-minitest/> | 2026-10-03 | Low | Ruby linter | Most popular gem |
 | Ruby | rubocop-performance | 1.27.0 | MIT | A collection of RuboCop cops to check for performance optimizations | <https://docs.rubocop.org/rubocop-performance/> | 2026-05-22 | Low | A collection of RuboCop cops to check for performance optimizations in Ruby code | Most popular gem |
 | Ruby | rubocop-rspec | 3.10.2 | MIT | Code style checking for RSpec files. | <https://github.com/rubocop/rubocop-rspec> | 2026-05-22 | Low | Code style checking for RSpec files. A plugin for the RuboCop code style enforcing & linting tool | Most popular gem |
 | Ruby | rubocop-thread_safety | 0.8.0 | MIT | Thread-safety checks via static analysis. | <https://github.com/rubocop/rubocop-thread_safety> | 2026-09-14 | Low | Ruby linter | Most popular gem |
