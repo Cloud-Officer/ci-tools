@@ -58,9 +58,10 @@ Required:
 Required by individual scripts:
 
 * [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — `ssm-jump`
+* [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) — `ssm-jump` (required by `aws ssm start-session`)
 * [jq](https://jqlang.github.io/jq/) — `ssm-jump`, `generate-codeowners`
 * [GitHub CLI (`gh`)](https://cli.github.com/) — `sync-jira-release` (the `jira` CLI is auto-installed on first run)
-* [`github-build`](https://github.com/Cloud-Officer/ci-actions) — `generate-codeowners` (used to resolve ignored folders; not installed in the Docker image, so run `generate-codeowners` with `GHB_IGNORED_EXCLUDES` set instead)
+* [`github-build`](https://github.com/Cloud-Officer/github-build) — `generate-codeowners` (used to resolve ignored folders; not installed in the Docker image, so run `generate-codeowners` with `GHB_IGNORED_EXCLUDES` set instead)
 * Bash >= 4 — `linters` (macOS ships Bash 3.2; the script re-execs under a newer Bash if one is installed, otherwise install it with `brew install bash`)
 * Go and `pipx` — `linters` (only when it self-installs Go-based linters such as actionlint, golangci-lint and protolint, or pipx-based ones such as cfn-lint and semgrep; on Linux `pipx` is bootstrapped through `apt` when missing)
 
@@ -81,7 +82,7 @@ You can install via [Homebrew](https://github.com/Cloud-Officer/homebrew-ci).
 
 You can use the [Docker images](https://hub.docker.com/r/ydesgagne/ci-tools).
 
-The examples below invoke the Ruby scripts by file name (`brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`), which is how they are run from a source checkout. The Homebrew formula and the Docker image put them on `PATH` without the `.rb` suffix, so use `brew-resources`, `cycle-keys`, `deploy` and `encrypt-logs` there.
+The examples below invoke the Ruby scripts by file name (`brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`), which is how they are run from a source checkout. The Homebrew formula and the Docker image put them on `PATH` without the `.rb` suffix, so use `brew-resources`, `cycle-keys`, `deploy` and `encrypt-logs` there. The Docker image also puts `generate-codeowners`, `linters` and `ssm-jump` on `PATH`; `sync-jira-release` is copied into the image at `/home/citools/ci-tools/sync-jira-release` but is not on `PATH`.
 
 ## Usage
 
@@ -372,7 +373,7 @@ sync-jira-release v2023.10.01 v2023.11.01 "November 2023 Release"
 
 ### brew-resources
 
-Generate Homebrew formula `resource` blocks from a `Gemfile.lock`. For every gem in the lockfile it downloads the gem from rubygems.org, computes its SHA256, and prints the matching `resource` stanza — wrapping platform-specific gems in `on_macos`/`on_linux` and `on_intel`/`on_arm` blocks. Run it from a directory containing a `Gemfile.lock`.
+Generate Homebrew formula `resource` blocks from a `Gemfile.lock`. For every runtime gem — the default-group dependencies declared in the `Gemfile` and everything they pull in, excluding development-group gems and `bundler` — it downloads the gem from rubygems.org, computes its SHA256, and prints the matching `resource` stanza — wrapping platform-specific gems in `on_macos`/`on_linux` and `on_intel`/`on_arm` blocks. Run it from a directory containing both a `Gemfile` and its `Gemfile.lock`.
 
 #### Examples brew-resources
 

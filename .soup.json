@@ -38,11 +38,11 @@
   "Ruby:aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1293.0",
+    "version": "1.1294.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-07",
+    "last_verified_at": "2026-10-12",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -62,11 +62,11 @@
   "Ruby:aws-sdk-cloudformation": {
     "language": "Ruby",
     "package": "aws-sdk-cloudformation",
-    "version": "1.159.0",
+    "version": "1.160.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-10-12",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -158,11 +158,11 @@
   "Ruby:aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.196.0",
+    "version": "1.198.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-10-12",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -542,11 +542,11 @@
   "Ruby:rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.91.0",
+    "version": "1.92.0",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-10-12",
     "risk_level": "Low",
     "requirements": "Ruby linter",
     "verification_reasoning": "Most popular gem on rubygems"
@@ -686,11 +686,11 @@
   "Ruby:webmock": {
     "language": "Ruby",
     "package": "webmock",
-    "version": "3.26.4",
+    "version": "3.30.0",
     "license": "MIT",
     "description": "WebMock allows stubbing HTTP requests and setting expectations on HTTP requests.",
     "website": "https://github.com/bblimke/webmock",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-10-12",
     "risk_level": "Low",
     "requirements": "Stub HTTP requests in the RSpec suite",
     "verification_reasoning": "Standard Ruby HTTP stubbing library, integrates directly with RSpec and is actively maintained"
