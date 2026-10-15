@@ -302,7 +302,7 @@ Note: the SSM agent on macOS AMIs takes a few minutes to come up after boot, so 
 
 #### Windows Installation
 
-`ssm-jump.install.bat` installs what `ssm-jump` and the `query-db` Claude Code skill need on a Windows machine, and configures nothing. With `winget`, it installs the AWS CLI, the Session Manager plugin, Git for Windows, jq and MySQL (for the `mysql` client). It saves `ssm-jump` as `%USERPROFILE%\bin\ssm-jump` and adds that folder and the MySQL `bin` folder to the user `PATH`. Git for Windows is required even when the user works in PowerShell: `ssm-jump` is a bash script, and Claude Code runs it, like every `query-db` command, through its Bash tool, which uses Git Bash on Windows.
+`ssm-jump.install.bat` installs what `ssm-jump` and the `query-db` Claude Code skill need on a Windows machine, and configures nothing. With `winget`, it installs the AWS CLI, the Session Manager plugin, Git for Windows, jq and MySQL (for the `mysql` client). It saves `ssm-jump` as `%USERPROFILE%\bin\ssm-jump`, writes a `ssm-jump.cmd` wrapper next to it, and adds that folder and the MySQL `bin` folder to the user `PATH`. `ssm-jump` is a bash script, so Git for Windows is required even when the user only works in PowerShell 7: the wrapper runs the script through Git Bash, so the same `ssm-jump ...` command works in PowerShell, cmd and Git Bash, whichever shell Claude Code uses.
 
 The administrator, before sending the script:
 

@@ -283,8 +283,8 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 **Functionality:**
 
 - Installs the AWS CLI, Session Manager plugin, Git for Windows, jq and MySQL (for the `mysql` client) using `winget`, and verifies each one is present
-- Downloads the `ssm-jump` script from GitHub to `%USERPROFILE%\bin\ssm-jump` and adds that folder and the MySQL `bin` folder to the user `PATH`
-- Checks that `ssm-jump`, `jq` and `mysql` run from Git bash
+- Downloads the `ssm-jump` script from GitHub to `%USERPROFILE%\bin\ssm-jump`, writes a `ssm-jump.cmd` wrapper that runs it through Git bash so PowerShell and cmd can call `ssm-jump` by name, and adds that folder and the MySQL `bin` folder to the user `PATH`
+- Checks that `ssm-jump`, `jq` and `mysql` run from Git bash, and that the `ssm-jump.cmd` wrapper runs
 - Configures nothing else: the AWS profile and the database environment variables (`DB_ENVS`, `MYSQL_*`, `MYSQL_TUNNEL_<ENV>`) are left to the user
 
 **Internal Dependencies:** None

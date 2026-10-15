@@ -26,3 +26,11 @@ setup() {
 @test "does not write anything to the desktop" {
   ! grep -qiE 'Desktop' "${INSTALLER}"
 }
+
+@test "writes an ssm-jump.cmd wrapper that runs ssm-jump through Git bash" {
+  grep -qE '^>"%BIN_DIR%\\ssm-jump\.cmd" ECHO @"%GIT_BASH%" "%%~dp0ssm-jump" %%\*$' "${INSTALLER}"
+}
+
+@test "checks the ssm-jump.cmd wrapper runs" {
+  grep -qE '^CALL "%BIN_DIR%\\ssm-jump\.cmd" --help' "${INSTALLER}"
+}
