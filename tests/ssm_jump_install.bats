@@ -5,43 +5,24 @@ setup() {
 }
 
 # cmd.exe is not available on the Linux/macOS CI runners, so these tests assert
-# the generated batch script is written defensively (quoted expansions and
-# non-empty input validation) via static checks (see issue #509).
+# the batch script's behaviour via static checks (see issue #509).
 
-@test "validates SHORTCUT_NAME is non-empty before use" {
-  # The empty check must appear before the shortcut is written to disk.
-  guard_line="$(grep -niE 'IF[[:space:]]+"%SHORTCUT_NAME%"==""' "${INSTALLER}" | head -n 1 | cut -d: -f1)"
-  [ -n "${guard_line}" ]
-  use_line="$(grep -niE 'EXIST[[:space:]]+"%SHORTCUT_NAME%\.bat"' "${INSTALLER}" | head -n 1 | cut -d: -f1)"
-  [ -n "${use_line}" ]
-  [ "${guard_line}" -lt "${use_line}" ]
+@test "does not configure AWS or set environment variables" {
+  ! grep -qiE 'aws[[:space:]]+(--profile|configure|sts|ec2)' "${INSTALLER}"
+  ! grep -qiE 'SET[[:space:]]+/P|setx' "${INSTALLER}"
 }
 
-@test "rejects an empty SHORTCUT_NAME with a clear message and non-zero exit" {
-  grep -qiE 'Desktop shortcut name cannot be empty' "${INSTALLER}"
-  grep -qiE 'EXIT[[:space:]]+/B[[:space:]]+1' "${INSTALLER}"
+@test "installs every ssm-jump and query-db prerequisite" {
+  for id in Amazon.AWSCLI Amazon.SessionManagerPlugin Git.Git jqlang.jq Oracle.MySQL; do
+    grep -qE "winget install --exact --id ${id} " "${INSTALLER}"
+  done
 }
 
-@test "quotes %SHORTCUT_NAME% in the IF EXIST test" {
-  grep -qiE 'IF[[:space:]]+NOT[[:space:]]+EXIST[[:space:]]+"%SHORTCUT_NAME%\.bat"' "${INSTALLER}"
+@test "installs ssm-jump without an extension into the user bin folder" {
+  grep -qE -- '--output "%BIN_DIR%\\ssm-jump"' "${INSTALLER}"
+  grep -qE 'SET "BIN_DIR=%USERPROFILE%\\bin"' "${INSTALLER}"
 }
 
-@test "quotes %SHORTCUT_NAME% in the redirection target" {
-  grep -qiE '>"%SHORTCUT_NAME%\.bat"' "${INSTALLER}"
-}
-
-@test "does not redirect into an unquoted %SHORTCUT_NAME%.bat target" {
-  ! grep -qiE '>[[:space:]]*%SHORTCUT_NAME%\.bat' "${INSTALLER}"
-}
-
-@test "does not use an unquoted %SHORTCUT_NAME% in the IF EXIST test" {
-  ! grep -qiE 'EXIST[[:space:]]+%SHORTCUT_NAME%\.bat' "${INSTALLER}"
-}
-
-@test "quotes %AWS_INSTANCE% in the generated helper" {
-  grep -qiE '"%AWS_INSTANCE%"' "${INSTALLER}"
-}
-
-@test "quotes %FORWARD_HOST% in the generated helper" {
-  grep -qiE '"%FORWARD_HOST%"' "${INSTALLER}"
+@test "does not write anything to the desktop" {
+  ! grep -qiE 'Desktop' "${INSTALLER}"
 }

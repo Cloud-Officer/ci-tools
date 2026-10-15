@@ -302,21 +302,41 @@ Note: the SSM agent on macOS AMIs takes a few minutes to come up after boot, so 
 
 #### Windows Installation
 
-To install `ssm-jump`, dependencies and associated helpers on a Windows machine:
+`ssm-jump.install.bat` installs what `ssm-jump` and the `query-db` Claude Code skill need on a Windows machine, and configures nothing. With `winget`, it installs the AWS CLI, the Session Manager plugin, Git for Windows, jq and MySQL (for the `mysql` client). It saves `ssm-jump` as `%USERPROFILE%\bin\ssm-jump` and adds that folder and the MySQL `bin` folder to the user `PATH`. Git for Windows is required even when the user works in PowerShell: `ssm-jump` is a bash script, and Claude Code runs it, like every `query-db` command, through its Bash tool, which uses Git Bash on Windows.
 
-1. Ensure the user has AWS access/secret keys
-2. Ensure the user has access to `aws ec2 describe-instances`
-3. Ensure the user has access to `aws ssm start-session` and the associated SSM document
-4. Send `ssm-jump.install.bat` to the user (using Slack, email, etc.)
-5. Execute the installation script by double-clicking on it, and follow the prompts to configure the AWS profile, instance name, forward host, SSM document, and desktop shortcut name
+The administrator, before sending the script:
 
-Once complete, a batch script shortcut will be present on the Windows desktop.
+1. Creates the user's AWS access key and secret key
+2. Grants `ec2:DescribeInstances`, and `ssm:StartSession` on the instance and the SSM document the user needs
+3. Sends `ssm-jump.install.bat` (using Slack, email, etc.) with the keys, the region, the profile name and the exact `ssm-jump` command for each database, including `--document` when it is not the default `AWS-StartPortForwardingSessionToRemoteHost`
 
-To use/connect to a database:
+The user:
 
-1. Double-click the generated desktop shortcut to create a tunnel to the database (leave that window open until you want to disconnect)
-2. Configure your database client to use `127.0.0.1` for the host and the local port specified during installation
-3. The tunnelled connection should be established
+1. Double-clicks `ssm-jump.install.bat` (or runs it from PowerShell) and approves the Windows administrator prompts
+2. Closes and reopens every terminal and Claude Code so the new `PATH` applies
+3. Configures the AWS profile in PowerShell with `aws configure --profile myprofile`, entering the access key ID, secret access key and region, and pressing Enter for the output format
+4. Checks it with `aws --profile myprofile sts get-caller-identity`
+
+Then the user sets the variables `query-db` reads as Windows user environment variables (Start menu, "Edit environment variables for your account"), so Claude Code and its MCP servers see them however they are started. Example for one environment, `rc`, reaching MySQL through a tunnel on local port 6033 with a non-default SSM document:
+
+| Variable          | Value                                                                                                                                      |
+|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| `DB_ENVS`         | `rc`                                                                                                                                       |
+| `MYSQL_HOST`      | `127.0.0.1`                                                                                                                                |
+| `MYSQL_PORT_RC`   | `6033`                                                                                                                                     |
+| `MYSQL_USER`      | database user                                                                                                                              |
+| `MYSQL_PASS`      | database password                                                                                                                          |
+| `MYSQL_DB`        | database name                                                                                                                              |
+| `MYSQL_TUNNEL_RC` | `ssm-jump --profile myprofile --document MyPortForwardingDocument --autoselect-first api-rc-standalone --forward db.example.com:6033:6033` |
+
+In the tunnel command:
+
+* `--profile` is the profile the script set up
+* `--document` is the SSM document the administrator named; leave it out only for the default document
+* `--autoselect-first` is required, because `query-db` runs the command in the background and cannot answer the instance selection prompt
+* The last number of `--forward` must equal `MYSQL_PORT_<ENV>`
+
+Add one `<ENV>` to `DB_ENVS` per environment, each with its own `MYSQL_PORT_<ENV>`, `MYSQL_TUNNEL_<ENV>` and local port. To use a desktop database client instead, run the same tunnel command in Git Bash, leave it open, and connect to `127.0.0.1` on the local port.
 
 ### sync-jira-release
 
