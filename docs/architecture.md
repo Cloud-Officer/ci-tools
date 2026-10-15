@@ -51,8 +51,8 @@
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                     Windows Installer                               │   │
 │  │  ┌──────────────────────┐                                           │   │
-│  │  │ ssm-jump.install.bat │  winget: AWS CLI, SSM plugin, Git bash    │   │
-│  │  └──────────────────────┘  desktop shortcut that runs ssm-jump      │   │
+│  │  │ ssm-jump.install.bat │  winget: AWS CLI, SSM plugin, Git bash,   │   │
+│  │  └──────────────────────┘  jq, MySQL client, ssm-jump on PATH       │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -95,7 +95,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - **Ruby scripts** share `lib/cli_main.rb` (the `CliMain` module) for top-level error handling and command-line option parsing
 - **Bash scripts** utilize external CLI tools (AWS CLI, GitHub CLI, Jira CLI) for service integration
 - **Linters script** orchestrates multiple language-specific linting tools, reading the rule sets and exclusions from the root configuration files (`.rubocop.yml`, `.hadolint.yaml`, `trivy.yaml`, `.semgrepignore`, and the rest)
-- **Windows installer** (`ssm-jump.install.bat`) provisions the `ssm-jump` prerequisites with `winget` and writes a desktop launcher
+- **Windows installer** (`ssm-jump.install.bat`) provisions the `ssm-jump` and `query-db` prerequisites with `winget` and puts `ssm-jump` on the user `PATH`
 - **GitHub Actions workflows** lint, scan, and test every pull request, and publish the Docker image on tag pushes
 - **Distribution** is supported via Docker containers, Homebrew formulas, or direct Ruby bundler installation
 
@@ -271,27 +271,25 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 ### ssm-jump.install.bat
 
-**Purpose:** Windows installer that provisions the prerequisites for `ssm-jump` and generates a desktop connection shortcut.
+**Purpose:** Windows installer that provisions the prerequisites for `ssm-jump` and the `query-db` Claude Code skill.
 
 **Location:** `ssm-jump.install.bat`
 
 **Key Components:**
 
-- Interactive prompts for AWS profile, instance name, forward host, SSM document, and shortcut name
 - Prerequisite installation via `winget`
-- AWS authentication check with fallback to `aws configure`
-- Desktop shortcut (`.bat`) generation that invokes `ssm-jump` through Git-for-Windows bash
+- User `PATH` update through PowerShell
 
 **Functionality:**
 
-- Installs the AWS CLI, Session Manager plugin, and Git for Windows using `winget`
-- Verifies AWS credentials with `sts get-caller-identity`, running `aws configure` and re-checking if authentication fails
-- Downloads the `ssm-jump` script from GitHub into `%USERPROFILE%\.ssm-jump`
-- Writes a per-instance launcher shortcut on the Desktop that runs `ssm-jump` via `bash.exe` with the chosen profile, document, instance, and forward host
+- Installs the AWS CLI, Session Manager plugin, Git for Windows, jq and MySQL (for the `mysql` client) using `winget`, and verifies each one is present
+- Downloads the `ssm-jump` script from GitHub to `%USERPROFILE%\bin\ssm-jump` and adds that folder and the MySQL `bin` folder to the user `PATH`
+- Checks that `ssm-jump`, `jq` and `mysql` run from Git bash
+- Configures nothing else: the AWS profile and the database environment variables (`DB_ENVS`, `MYSQL_*`, `MYSQL_TUNNEL_<ENV>`) are left to the user
 
 **Internal Dependencies:** None
 
-**External Dependencies:** winget, Git-for-Windows bash, AWS CLI, Session Manager plugin, curl
+**External Dependencies:** winget, PowerShell, Git-for-Windows bash, AWS CLI, Session Manager plugin, jq, MySQL client, curl
 
 ### sync-jira-release
 

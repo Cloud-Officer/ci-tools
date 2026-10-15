@@ -1,56 +1,71 @@
 @ECHO OFF
+SETLOCAL
 
-SET /P AWS_PROFILE=Enter AWS CLI profile name:
-SET /P AWS_INSTANCE=Enter EC2 instance name (e.g. api-prod-standalone):
-SET /P FORWARD_HOST=Enter forward host (e.g. db-slave.example.com:3306:3306):
-SET /P SSM_DOCUMENT=Enter SSM document name (default: AWS-StartPortForwardingSessionToRemoteHost):
-SET /P SHORTCUT_NAME=Enter desktop shortcut name (e.g. my-project-prod):
+ECHO Install AWS CLI and session manager plugin
+winget install --exact --id Amazon.AWSCLI --accept-package-agreements --accept-source-agreements
+winget install --exact --id Amazon.SessionManagerPlugin --accept-package-agreements --accept-source-agreements
 
-IF "%SSM_DOCUMENT%"=="" SET SSM_DOCUMENT=AWS-StartPortForwardingSessionToRemoteHost
+ECHO Install git, which provides the bash that runs ssm-jump
+winget install --exact --id Git.Git --accept-package-agreements --accept-source-agreements
 
-IF "%SHORTCUT_NAME%"=="" (
+ECHO Install jq, required by ssm-jump port forwarding
+winget install --exact --id jqlang.jq --accept-package-agreements --accept-source-agreements
+
+ECHO Install MySQL, required for the mysql client
+winget install --exact --id Oracle.MySQL --accept-package-agreements --accept-source-agreements
+
+SET "AWS_CLI_DIR=%ProgramFiles%\Amazon\AWSCLIV2"
+SET "SSM_PLUGIN_DIR=%ProgramFiles%\Amazon\SessionManagerPlugin\bin"
+SET "GIT_BASH=%ProgramFiles%\Git\bin\bash.exe"
+SET "BIN_DIR=%USERPROFILE%\bin"
+SET "MYSQL_BIN_DIR="
+FOR /D %%D IN ("%ProgramFiles%\MySQL\MySQL Server *") DO IF EXIST "%%D\bin\mysql.exe" SET "MYSQL_BIN_DIR=%%D\bin"
+
+IF NOT EXIST "%AWS_CLI_DIR%\aws.exe" (
 	ECHO .
-	ECHO Desktop shortcut name cannot be empty. Exiting.
+	ECHO AWS CLI not found in %AWS_CLI_DIR%. Exiting.
 	ECHO .
 	PAUSE
 	EXIT /B 1
 )
 
-ECHO Install AWS CLI and session manager
-winget install --exact --id Amazon.AWSCLI --accept-package-agreements --accept-source-agreements
-winget install --exact --id Amazon.SessionManagerPlugin
-
-ECHO Install git, mainly because bash and other GNU tools are well packaged
-winget install --exact --id Git.Git
-
-ECHO Ensure AWS CLI is available in PATH
-SET PATH=%PATH%;C:\Program Files\Amazon\AWSCLIV2
-
-ECHO Check AWS authentication
-aws --profile %AWS_PROFILE% sts get-caller-identity && (
+IF NOT EXIST "%SSM_PLUGIN_DIR%\session-manager-plugin.exe" (
 	ECHO .
-	ECHO AWS authentication successful
+	ECHO Session Manager plugin not found in %SSM_PLUGIN_DIR%. Exiting.
 	ECHO .
-) || (
-	ECHO .
-	ECHO Missing AWS credentials, triggering configuration
-	ECHO .
-
-	aws --profile %AWS_PROFILE% configure
-
-	aws --profile %AWS_PROFILE% sts get-caller-identity || (
-		ECHO .
-		ECHO Failed to authenticate against AWS. Exiting.
-		ECHO .
-		PAUSE
-		EXIT /B 1
-	)
+	PAUSE
+	EXIT /B 1
 )
 
-ECHO Install SSM jump script
-IF NOT EXIST "%USERPROFILE%\.ssm-jump" MKDIR "%USERPROFILE%\.ssm-jump"
-CD "%USERPROFILE%\.ssm-jump"
-curl.exe -SL --fail --progress-bar https://raw.githubusercontent.com/Cloud-Officer/ci-tools/refs/heads/master/ssm-jump --output ssm-jump.sh || (
+IF NOT EXIST "%GIT_BASH%" (
+	ECHO .
+	ECHO Git bash not found at %GIT_BASH%. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
+IF "%MYSQL_BIN_DIR%"=="" (
+	ECHO .
+	ECHO mysql client not found under %ProgramFiles%\MySQL. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
+SET "PATH=%AWS_CLI_DIR%;%SSM_PLUGIN_DIR%;%MYSQL_BIN_DIR%;%BIN_DIR%;%LOCALAPPDATA%\Microsoft\WinGet\Links;%ProgramFiles%\WinGet\Links;%PATH%"
+
+WHERE /Q jq || (
+	ECHO .
+	ECHO jq not found. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
+ECHO Install ssm-jump script
+IF NOT EXIST "%BIN_DIR%" MKDIR "%BIN_DIR%"
+curl.exe -SL --fail --progress-bar https://raw.githubusercontent.com/Cloud-Officer/ci-tools/refs/heads/master/ssm-jump --output "%BIN_DIR%\ssm-jump" || (
 	ECHO .
 	ECHO Failed to download ssm-jump script from GitHub. Exiting.
 	ECHO .
@@ -58,9 +73,28 @@ curl.exe -SL --fail --progress-bar https://raw.githubusercontent.com/Cloud-Offic
 	EXIT /B 1
 )
 
-ECHO Generate connect helper on desktop
-SET CMD_COMMON="C:\Program Files\Git\bin\bash.exe" "%USERPROFILE%\.ssm-jump\ssm-jump.sh" --profile %AWS_PROFILE% --document %SSM_DOCUMENT%
-CD "%USERPROFILE%\Desktop"
-IF NOT EXIST "%SHORTCUT_NAME%.bat" ECHO %CMD_COMMON% "%AWS_INSTANCE%" --forward "%FORWARD_HOST%" >"%SHORTCUT_NAME%.bat"
+ECHO Add ssm-jump and mysql to the user PATH
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$entries = @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ }); foreach ($dir in @($env:BIN_DIR, $env:MYSQL_BIN_DIR)) { if ($entries -notcontains $dir) { $entries += $dir } }; [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')" || (
+	ECHO .
+	ECHO Failed to update the user PATH. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
+"%GIT_BASH%" -lc "ssm-jump --help >/dev/null && command -v jq >/dev/null && command -v mysql >/dev/null" || (
+	ECHO .
+	ECHO ssm-jump, jq or mysql cannot be run from Git bash. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
+ECHO .
+ECHO Installation complete.
+ECHO Next, configure your AWS profile and the database environment variables:
+ECHO https://github.com/Cloud-Officer/ci-tools#windows-installation
+ECHO Close and reopen your terminals and Claude Code so the new PATH applies.
+ECHO .
 
 PAUSE
