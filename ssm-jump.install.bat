@@ -73,6 +73,9 @@ curl.exe -SL --fail --progress-bar https://raw.githubusercontent.com/Cloud-Offic
 	EXIT /B 1
 )
 
+ECHO Install ssm-jump.cmd so PowerShell and cmd can run ssm-jump
+>"%BIN_DIR%\ssm-jump.cmd" ECHO @"%GIT_BASH%" "%%~dp0ssm-jump" %%*
+
 ECHO Add ssm-jump and mysql to the user PATH
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$entries = @([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' | Where-Object { $_ }); foreach ($dir in @($env:BIN_DIR, $env:MYSQL_BIN_DIR)) { if ($entries -notcontains $dir) { $entries += $dir } }; [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')" || (
 	ECHO .
@@ -85,6 +88,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$entries = @([Enviro
 "%GIT_BASH%" -lc "ssm-jump --help >/dev/null && command -v jq >/dev/null && command -v mysql >/dev/null" || (
 	ECHO .
 	ECHO ssm-jump, jq or mysql cannot be run from Git bash. Exiting.
+	ECHO .
+	PAUSE
+	EXIT /B 1
+)
+
+CALL "%BIN_DIR%\ssm-jump.cmd" --help >NUL || (
+	ECHO .
+	ECHO ssm-jump cannot be run from PowerShell or cmd. Exiting.
 	ECHO .
 	PAUSE
 	EXIT /B 1
