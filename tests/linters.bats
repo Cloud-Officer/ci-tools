@@ -302,6 +302,21 @@ PROTO
   [[ "$output" != *"node_modules/Dockerfile"* ]]
 }
 
+@test "find_lintable excludes Claude Code worktrees" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  mkdir -p .claude/worktrees/agent-1
+  touch .claude/worktrees/agent-1/Dockerfile
+
+  function hadolint() { echo "hadolint invoked: $*"; }
+  export -f hadolint
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hadolint invoked: ./Dockerfile"* ]]
+  [[ "$output" != *".claude/worktrees"* ]]
+}
+
 @test "runs yamllint when its config is present" {
   skip_unless_bash4
   touch .yamllint.yml
@@ -866,4 +881,71 @@ SH
   [ "$status" -eq 0 ]
   [[ "$output" != *"SL0001"* ]]
   [[ "$output" == *"All checks passed"* ]]
+}
+
+extract_linters_functions() {
+  for name in "${@}"; do
+    sed -n "/^${name}()/,/^}/p" "${BATS_TEST_DIRNAME}/../linters"
+  done > "${BATS_TEST_TMPDIR}/functions.sh"
+}
+
+@test "trivy_scanners defaults to the secret scanner only" {
+  skip_unless_bash4
+  extract_linters_functions trivy_scanners
+  run bash -c "source '${BATS_TEST_TMPDIR}/functions.sh'; trivy_scanners"
+  [ "$status" -eq 0 ]
+  [ "$output" == "secret" ]
+}
+
+@test "trivy_scanners adds misconfig and vuln when IaC and lock files exist" {
+  skip_unless_bash4
+  touch Dockerfile go.sum
+  extract_linters_functions trivy_scanners
+  run bash -c "source '${BATS_TEST_TMPDIR}/functions.sh'; trivy_scanners"
+  [ "$output" == "secret,misconfig,vuln" ]
+}
+
+@test "trivy_scanners ignores lock files inside submodules" {
+  skip_unless_bash4
+  mkdir -p libs/sub
+  touch libs/sub/package-lock.json
+  printf '[submodule "sub"]\n\tpath = libs/sub\n' > .gitmodules
+  extract_linters_functions trivy_scanners
+  run bash -c "source '${BATS_TEST_TMPDIR}/functions.sh'; trivy_scanners"
+  [ "$output" == "secret" ]
+}
+
+@test "lint_with installs a missing tool, runs it and records the failure" {
+  skip_unless_bash4
+  extract_linters_functions lint_with
+  run bash -c "set -euo pipefail
+    FAILED=0
+    source '${BATS_TEST_TMPDIR}/functions.sh'
+    fake_install() { echo \"installed \$*\"; }
+    lint_with 'Checking fake...' definitely-not-a-real-tool fake_install a b -- false
+    echo \"FAILED=\${FAILED}\""
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" == "Checking fake..." ]
+  [ "${lines[1]}" == "installed a b" ]
+  [ "${lines[2]}" == "FAILED=1" ]
+}
+
+@test "lint_with skips the installer when the tool is already present" {
+  skip_unless_bash4
+  extract_linters_functions lint_with
+  run bash -c "FAILED=0
+    source '${BATS_TEST_TMPDIR}/functions.sh'
+    fake_install() { echo installed; }
+    lint_with 'Checking bash...' bash fake_install -- true
+    echo \"FAILED=\${FAILED}\""
+  [ "$output" == $'Checking bash...\nFAILED=0' ]
+}
+
+@test "run_linter does nothing when its config file is absent" {
+  skip_unless_bash4
+  extract_linters_functions lint_with run_linter
+  run bash -c "source '${BATS_TEST_TMPDIR}/functions.sh'
+    run_linter .absent 'Checking absent...' bash true -- true"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
