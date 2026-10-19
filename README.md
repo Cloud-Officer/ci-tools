@@ -306,16 +306,16 @@ Note: the SSM agent on macOS AMIs takes a few minutes to come up after boot, so 
 
 The administrator, before sending the script:
 
-1. Creates the user's AWS access key and secret key
-2. Grants `ec2:DescribeInstances`, and `ssm:StartSession` on the instance and the SSM document the user needs
-3. Sends `ssm-jump.install.bat` (using Slack, email, etc.) with the keys, the region, the profile name and the exact `ssm-jump` command for each database, including `--document` when it is not the default `AWS-StartPortForwardingSessionToRemoteHost`
+1. Grants `ec2:DescribeInstances`, and `ssm:StartSession` on the instance and the SSM document the user needs
+2. Sends `ssm-jump.install.bat` (using Slack, email, etc.) with the region, the profile name and the exact `ssm-jump` command for each database, including `--document` when it is not the default `AWS-StartPortForwardingSessionToRemoteHost`
 
 The user:
 
-1. Double-clicks `ssm-jump.install.bat` (or runs it from PowerShell) and approves the Windows administrator prompts
-2. Closes and reopens every terminal and Claude Code so the new `PATH` applies
-3. Configures the AWS profile in PowerShell with `aws configure --profile myprofile`, entering the access key ID, secret access key and region, and pressing Enter for the output format
-4. Checks it with `aws --profile myprofile sts get-caller-identity`
+1. Creates their own AWS access key and secret key in the AWS console (IAM, Security credentials), so the secret key never leaves their machine
+2. Double-clicks `ssm-jump.install.bat` (or runs it from PowerShell) and approves the Windows administrator prompts
+3. Closes and reopens every terminal and Claude Code so the new `PATH` applies
+4. Configures the AWS profile in PowerShell with `aws configure --profile myprofile`, entering the access key ID, secret access key and region, and pressing Enter for the output format
+5. Checks it with `aws --profile myprofile sts get-caller-identity`
 
 Then the user sets the variables `query-db` reads as Windows user environment variables (Start menu, "Edit environment variables for your account"), so Claude Code and its MCP servers see them however they are started. Example for one environment, `rc`, reaching MySQL through a tunnel on local port 6033 with a non-default SSM document:
 
