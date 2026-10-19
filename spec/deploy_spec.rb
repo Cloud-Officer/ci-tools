@@ -62,6 +62,14 @@ RSpec.describe(Deploy) do
     { target_groups: names.map { |name| { target_group_name: name, target_group_arn: "arn:aws:tg/#{name}" } } }
   end
 
+  def build_deploy_context(parameters: [], ami_id: 'ami-123', asg: { min_size: 1, max_size: 4, desired_capacity: 2 }, options: { type: 't3.micro' })
+    DeployContext.new(options: options, asg: asg, ami_id: ami_id, stack: { stack_name: 'test-stack', parameters: parameters, prefix: 'API', ssm_prefix: '/beta/1' })
+  end
+
+  def build_rollout(asg_client, asg, mixed_params, options, elb: nil, target_group_arn: nil)
+    RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: elb, target_group_arn: target_group_arn, options: options)
+  end
+
   def build_asg_data(name, min: 1, max: 4, desired: 2, instances: [])
     { auto_scaling_groups: [{ auto_scaling_group_name: name, min_size: min, max_size: max, desired_capacity: desired, default_cooldown: 300, availability_zones: ['us-east-1a'], health_check_type: 'EC2', created_time: Time.now, instances: instances }] }
   end
@@ -160,41 +168,38 @@ RSpec.describe(Deploy) do
   end
 
   describe '#resolve_parameter_value' do
-    let(:prefix)  { 'API'                                             }
-    let(:ami_id)  { 'ami-12345678'                                    }
-    let(:asg)     { { min_size: 1, max_size: 4, desired_capacity: 2 } }
-    let(:options) { { type: 't3.micro', spot_target_capacity: 50 }    }
+    let(:deploy) { build_deploy_context(ami_id: 'ami-12345678', options: { type: 't3.micro', spot_target_capacity: 50 }) }
 
     it 'resolves ImageId' do
-      expect(resolve_parameter_value('APIImageId', prefix, ami_id, asg, options)).to(eq('ami-12345678'))
+      expect(resolve_parameter_value('APIImageId', deploy)).to(eq('ami-12345678'))
     end
 
     it 'resolves MinSize' do
-      expect(resolve_parameter_value('APIMinSize', prefix, ami_id, asg, options)).to(eq('1'))
+      expect(resolve_parameter_value('APIMinSize', deploy)).to(eq('1'))
     end
 
     it 'resolves MaxSize' do
-      expect(resolve_parameter_value('APIMaxSize', prefix, ami_id, asg, options)).to(eq('4'))
+      expect(resolve_parameter_value('APIMaxSize', deploy)).to(eq('4'))
     end
 
     it 'resolves DesiredCapacity' do
-      expect(resolve_parameter_value('APIDesiredCapacity', prefix, ami_id, asg, options)).to(eq('2'))
+      expect(resolve_parameter_value('APIDesiredCapacity', deploy)).to(eq('2'))
     end
 
     it 'resolves InstanceType' do
-      expect(resolve_parameter_value('APIInstanceType', prefix, ami_id, asg, options)).to(eq('t3.micro'))
+      expect(resolve_parameter_value('APIInstanceType', deploy)).to(eq('t3.micro'))
     end
 
     it 'resolves SpotTargetCapacity' do
-      expect(resolve_parameter_value('SpotTargetCapacity', prefix, ami_id, asg, options)).to(eq('50'))
+      expect(resolve_parameter_value('SpotTargetCapacity', deploy)).to(eq('50'))
     end
 
     it 'returns nil for unknown key' do
-      expect(resolve_parameter_value('Unknown', prefix, ami_id, asg, options)).to(be_nil)
+      expect(resolve_parameter_value('Unknown', deploy)).to(be_nil)
     end
 
     it 'returns nil for SpotTargetCapacity when not set' do
-      expect(resolve_parameter_value('SpotTargetCapacity', prefix, ami_id, asg, {})).to(be_nil)
+      expect(resolve_parameter_value('SpotTargetCapacity', build_deploy_context(options: {}))).to(be_nil)
     end
   end
 
@@ -570,7 +575,7 @@ RSpec.describe(Deploy) do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId', parameter_value: nil, use_previous_value: nil)
         allow(parameter).to(receive(:parameter_value=))
         allow(parameter).to(receive(:use_previous_value=))
-        update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, '/beta/1')
+        update_ssm_parameters(build_deploy_context(parameters: [parameter], ami_id: 'ami-12345678'))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(value: 'ami-12345678')))
       end
     end
@@ -578,7 +583,7 @@ RSpec.describe(Deploy) do
     context 'when parameter is a known CFN secret' do
       it 'does not call put_parameter on the secret' do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'DbPassword')
-        update_ssm_parameters([parameter], 'API', 'ami-12345678', { min_size: 1, max_size: 4, desired_capacity: 2 }, { type: 't3.micro' }, '/beta/1')
+        update_ssm_parameters(build_deploy_context(parameters: [parameter], ami_id: 'ami-12345678'))
         expect(ssm).not_to(have_received(:put_parameter))
       end
     end
@@ -872,7 +877,7 @@ RSpec.describe(Deploy) do
     end
 
     it 'updates the stack and waits for completion' do
-      update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123')
+      update_cloudformation_stack(cfn, build_deploy_context)
       expect(cfn).to(have_received(:update_stack).with(hash_including(stack_name: 'test-stack')))
     end
 
@@ -880,7 +885,7 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'No updates are to be performed'))) }
 
       it 'exits with code 0', :aggregate_failures do
-        expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
+        expect { update_cloudformation_stack(cfn, build_deploy_context) }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
       end
     end
@@ -889,12 +894,12 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'Template validation failed'))) }
 
       it 'exits with code 1', :aggregate_failures do
-        expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
+        expect { update_cloudformation_stack(cfn, build_deploy_context) }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
       end
 
       it 'reports the stop reason on stderr' do
-        expect { update_cloudformation_stack(cfn, 'test-stack', [], 'API', 'ami-123') }
+        expect { update_cloudformation_stack(cfn, build_deploy_context) }
           .to(raise_error(SystemExit).and(output(/Stopping here: Template validation failed/).to_stderr))
       end
     end
@@ -1061,7 +1066,7 @@ RSpec.describe(Deploy) do
       before { elb.stub_responses(:describe_target_health, { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'healthy' } }] }) }
 
       it 'sleeps WARMUP_SHORT then waits for healthy then sleeps WARMUP_LONG', :aggregate_failures do
-        warm_up_after_scale_up(elb, 'arn:tg', { instance: 'grpc' })
+        warm_up_after_scale_up(build_rollout(nil, nil, nil, { instance: 'grpc' }, elb: elb, target_group_arn: 'arn:tg'))
         expect(self).to(have_received(:sleep).with(WARMUP_SHORT))
         expect(self).to(have_received(:sleep).with(WARMUP_LONG))
       end
@@ -1069,14 +1074,13 @@ RSpec.describe(Deploy) do
 
     context 'with worker instance (not load-balanced)' do
       it 'skips ELB checks and sleeps WARMUP_SHORT', :aggregate_failures do
-        warm_up_after_scale_up(nil, nil, { instance: 'worker' })
+        warm_up_after_scale_up(build_rollout(nil, nil, nil, { instance: 'worker' }))
         expect(self).to(have_received(:sleep).with(WARMUP_SHORT))
       end
     end
   end
 
   describe '#scale_down_after_deploy' do
-    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
     let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)              }
     let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 }     }
     let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                     }
@@ -1088,7 +1092,7 @@ RSpec.describe(Deploy) do
 
     context 'when --skip_scale_down' do
       it 'sets max_size and skips scale-down wait', :aggregate_failures do
-        scale_down_after_deploy(asg_resources, asg, mixed_params, 6, nil, nil, { instance: 'worker', skip_scale_down: true })
+        scale_down_after_deploy(build_rollout(asg_client, asg, mixed_params, { instance: 'worker', skip_scale_down: true }), 6)
         expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(max_size: 4)))
       end
     end
@@ -1101,14 +1105,13 @@ RSpec.describe(Deploy) do
       it 'restores desired capacity and waits for healthy + count', :aggregate_failures do
         elb = Aws::ElasticLoadBalancingV2::Client.new(stub_responses: true)
         elb.stub_responses(:describe_target_health, { target_health_descriptions: [{ target: { id: 'i-1' }, target_health: { state: 'healthy' } }] })
-        scale_down_after_deploy(asg_resources, asg, mixed_params, 6, elb, 'arn:tg', { instance: 'api' })
+        scale_down_after_deploy(build_rollout(asg_client, asg, mixed_params, { instance: 'api' }, elb: elb, target_group_arn: 'arn:tg'), 6)
         expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(desired_capacity: 2, max_size: 4)))
       end
     end
   end
 
   describe '#run_rolling_deploy' do
-    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
     let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
     let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
     let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
@@ -1122,21 +1125,20 @@ RSpec.describe(Deploy) do
     it 'always restores the mixed-instances policy via ensure' do
       captured_params = []
       allow(asg_client).to(receive(:update_auto_scaling_group)) { |params| captured_params << params }
-      run_rolling_deploy(asg_resources, asg, mixed_params, 2, nil, nil, { instance: 'worker' })
+      run_rolling_deploy(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), 2)
       expect(captured_params.last.dig(:mixed_instances_policy, :instances_distribution, :on_demand_percentage_above_base_capacity)).to(eq('50'))
     end
 
     it 'still restores policy when scale-up wait raises', :aggregate_failures do
       stub_const('MAX_POLL_ATTEMPTS', 1)
       asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg', instances: [build_asg_instance('i-1')]))
-      expect { run_rolling_deploy(asg_resources, asg, mixed_params, 6, nil, nil, { instance: 'worker' }) }
+      expect { run_rolling_deploy(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), 6) }
         .to(raise_error(RuntimeError, /Timed out/))
       expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(mixed_instances_policy: hash_including(instances_distribution: hash_including(on_demand_percentage_above_base_capacity: '50')))))
     end
   end
 
   describe '#run_rolling_deploy_with_capacity_rollback' do
-    let(:asg_resources) { instance_double(Aws::AutoScaling::Resource, client: asg_client) }
     let(:asg_client)    { Aws::AutoScaling::Client.new(stub_responses: true)          }
     let(:asg)           { { name: 'beta1-api-asg', desired_capacity: 2, max_size: 4 } }
     let(:mixed_params)  { { base_capacity: '0', percent_above: '50' }                 }
@@ -1148,7 +1150,7 @@ RSpec.describe(Deploy) do
       before { allow(self).to(receive(:update_asg_capacity)) }
 
       it 'reports the capacity restore on stderr and re-raises' do
-        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
           .to(raise_error(RuntimeError, 'deploy boom').and(output(/Rolling deploy failed, restoring desired capacity to 2/).to_stderr))
       end
     end
@@ -1160,7 +1162,7 @@ RSpec.describe(Deploy) do
       end
 
       it 'restores the original capacity and re-raises the interrupt', :aggregate_failures do
-        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
           .to(raise_error(Interrupt).and(output(/Rolling deploy failed, restoring desired capacity to 2/).to_stderr))
         expect(self).to(have_received(:update_asg_capacity).with(asg_client, 'beta1-api-asg', hash_including(desired_capacity: 2)))
       end
@@ -1173,7 +1175,7 @@ RSpec.describe(Deploy) do
       end
 
       it 'restores the original capacity and re-raises the signal', :aggregate_failures do
-        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
           .to(raise_error(SignalException, 'SIGTERM').and(output(/Rolling deploy failed/).to_stderr))
         expect(self).to(have_received(:update_asg_capacity).with(asg_client, 'beta1-api-asg', hash_including(desired_capacity: 2)))
       end
@@ -1183,12 +1185,12 @@ RSpec.describe(Deploy) do
       before { allow(self).to(receive(:update_asg_capacity).and_raise(RuntimeError, 'restore boom')) }
 
       it 'warns on stderr with the full restore error message and re-raises the deploy error' do
-        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
           .to(raise_error(RuntimeError, 'deploy boom').and(output(/WARNING: failed to restore auto scaling group capacity - beta1-api-asg.*restore boom \(RuntimeError\)/m).to_stderr))
       end
 
       it 'writes nothing about the failed restore to stdout' do
-        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
           .to(raise_error(RuntimeError, 'deploy boom').and(output('').to_stdout))
       end
     end
@@ -1252,7 +1254,7 @@ RSpec.describe(Deploy) do
 
       it 'routes the SSM parameter update through the rollback-protected path with the snapshot' do
         run_deployment({ environment: 'beta', instance: 'api', profile: nil })
-        expect(self).to(have_received(:update_ssm_parameters_with_rollback).with([], 'API', 'ami-new', anything, anything, '/beta/1', snapshot))
+        expect(self).to(have_received(:update_ssm_parameters_with_rollback).with(have_attributes(ami_id: 'ami-new', parameters: [], prefix: 'API', ssm_prefix: '/beta/1'), snapshot))
       end
 
       it 'looks up the ASG and target group from the discovered stack', :aggregate_failures do
@@ -1346,7 +1348,7 @@ RSpec.describe(Deploy) do
       end
 
       it 'does not restore SSM parameters' do
-        update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot)
+        update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot)
         expect(ssm).not_to(have_received(:put_parameter))
       end
     end
@@ -1355,13 +1357,13 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(StandardError.new('boom'))) }
 
       it 'restores SSM parameters and re-raises', :aggregate_failures do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot) }
           .to(raise_error(StandardError, 'boom'))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
 
       it 'reports the rollback on stderr' do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot) }
           .to(raise_error(StandardError, 'boom').and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
       end
     end
@@ -1370,7 +1372,7 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'No updates are to be performed'))) }
 
       it 'does NOT restore SSM parameters (success path)', :aggregate_failures do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot) }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(0)) })
         expect(ssm).not_to(have_received(:put_parameter))
       end
@@ -1380,13 +1382,13 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(Aws::CloudFormation::Errors::ValidationError.new(nil, 'Template validation failed'))) }
 
       it 'restores SSM parameters and re-raises SystemExit(1)', :aggregate_failures do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot) }
           .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
 
       it 'reports the rollback on stderr' do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot) }
           .to(raise_error(SystemExit).and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
       end
     end
@@ -1395,7 +1397,7 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(Interrupt)) }
 
       it 'restores SSM parameters and re-raises the interrupt', :aggregate_failures do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, ssm_snapshot) }
           .to(raise_error(Interrupt).and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
@@ -1405,7 +1407,7 @@ RSpec.describe(Deploy) do
       before { allow(cfn).to(receive(:update_stack).and_raise(StandardError.new('boom'))) }
 
       it 'still re-raises but does not call put_parameter', :aggregate_failures do
-        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', {}) }
+        expect { update_stack_with_ssm_rollback(cfn, build_deploy_context, {}) }
           .to(raise_error(StandardError, 'boom'))
         expect(ssm).not_to(have_received(:put_parameter))
       end
@@ -1427,7 +1429,7 @@ RSpec.describe(Deploy) do
       before { allow(ssm).to(receive(:put_parameter).and_call_original) }
 
       it 'writes the new values and does NOT restore the snapshot', :aggregate_failures do
-        update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot)
+        update_ssm_parameters_with_rollback(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg), ssm_snapshot)
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-new')))
         expect(ssm).not_to(have_received(:put_parameter).with(hash_including(value: 'ami-old')))
       end
@@ -1442,13 +1444,13 @@ RSpec.describe(Deploy) do
       end
 
       it 'restores the snapshot and re-raises', :aggregate_failures do
-        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+        expect { update_ssm_parameters_with_rollback(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg), ssm_snapshot) }
           .to(raise_error(Aws::SSM::Errors::ThrottlingException))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
 
       it 'reports the rollback on stderr' do
-        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+        expect { update_ssm_parameters_with_rollback(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg), ssm_snapshot) }
           .to(raise_error(Aws::SSM::Errors::ThrottlingException).and(output(/SSM parameter update failed, rolling back SSM parameters/).to_stderr))
       end
     end
@@ -1461,7 +1463,7 @@ RSpec.describe(Deploy) do
       end
 
       it 'restores the snapshot and re-raises the signal', :aggregate_failures do
-        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+        expect { update_ssm_parameters_with_rollback(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg), ssm_snapshot) }
           .to(raise_error(SignalException).and(output(/SSM parameter update failed, rolling back SSM parameters/).to_stderr))
         expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
@@ -1475,7 +1477,7 @@ RSpec.describe(Deploy) do
       end
 
       it 're-raises but performs no restore writes', :aggregate_failures do
-        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', {}) }
+        expect { update_ssm_parameters_with_rollback(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg), {}) }
           .to(raise_error(Aws::SSM::Errors::ThrottlingException))
         expect(ssm).not_to(have_received(:put_parameter).with(hash_including(value: 'ami-old')))
       end
@@ -1495,7 +1497,7 @@ RSpec.describe(Deploy) do
 
       it 'returns a hash of parameter names to values' do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'APIImageId')
-        result = capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, '/beta/1')
+        result = capture_ssm_snapshot(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg, options: options))
         expect(result).to(eq(param_name => 'ami-old'))
       end
     end
@@ -1503,7 +1505,7 @@ RSpec.describe(Deploy) do
     context 'when no parameters need updating' do
       it 'returns empty hash' do
         parameter = instance_double(Aws::CloudFormation::Types::Parameter, parameter_key: 'Unknown')
-        expect(capture_ssm_snapshot([parameter], 'API', 'ami-new', asg, options, '/beta/1')).to(eq({}))
+        expect(capture_ssm_snapshot(build_deploy_context(parameters: [parameter], ami_id: 'ami-new', asg: asg, options: options))).to(eq({}))
       end
     end
   end

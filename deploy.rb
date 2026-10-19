@@ -207,14 +207,35 @@ def parameter_prefix_for(instance)
   end
 end
 
-def resolve_parameter_value(key, prefix, ami_id, asg, options)
+DeployContext =
+  Struct.new(:options, :asg, :ami_id, :stack) do
+    def stack_name
+      stack[:stack_name]
+    end
+
+    def parameters
+      stack[:parameters]
+    end
+
+    def prefix
+      stack[:prefix]
+    end
+
+    def ssm_prefix
+      stack[:ssm_prefix]
+    end
+  end
+
+RollingDeploy = Struct.new(:asg_client, :asg, :mixed_params, :elb, :target_group_arn, :options)
+
+def resolve_parameter_value(key, deploy)
   case key
-  when "#{prefix}ImageId" then ami_id
-  when "#{prefix}MinSize" then asg[:min_size].to_s
-  when "#{prefix}MaxSize" then asg[:max_size].to_s
-  when "#{prefix}DesiredCapacity" then asg[:desired_capacity].to_s
-  when "#{prefix}InstanceType" then options[:type]
-  when 'SpotTargetCapacity' then options[:spot_target_capacity]&.to_s
+  when "#{deploy.prefix}ImageId" then deploy.ami_id
+  when "#{deploy.prefix}MinSize" then deploy.asg[:min_size].to_s
+  when "#{deploy.prefix}MaxSize" then deploy.asg[:max_size].to_s
+  when "#{deploy.prefix}DesiredCapacity" then deploy.asg[:desired_capacity].to_s
+  when "#{deploy.prefix}InstanceType" then deploy.options[:type]
+  when 'SpotTargetCapacity' then deploy.options[:spot_target_capacity]&.to_s
   end
 end
 
@@ -223,14 +244,14 @@ end
 # not how a new secret gets protected -- marking it NoEcho in the template is.
 CFN_KNOWN_SECRET_PARAMETERS = %w[DbPassword MqPassword SendGridApiKey].freeze
 
-def update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
+def update_ssm_parameters(deploy)
   ssm = Aws::SSM::Client.new
-  parameters.each do |parameter|
-    replace_with = resolve_parameter_value(parameter.parameter_key, prefix, ami_id, asg, options)
+  deploy.parameters.each do |parameter|
+    replace_with = resolve_parameter_value(parameter.parameter_key, deploy)
     next if replace_with.nil?
 
-    puts("Updating SSM parameter '#{ssm_prefix}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
-    ssm.put_parameter({ name: "#{ssm_prefix}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
+    puts("Updating SSM parameter '#{deploy.ssm_prefix}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
+    ssm.put_parameter({ name: "#{deploy.ssm_prefix}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
   end
 end
 
@@ -256,12 +277,12 @@ def mark_cfn_secrets_for_previous_value!(parameters, secret_keys)
   end
 end
 
-def capture_ssm_snapshot(parameters, prefix, ami_id, asg, options, ssm_prefix)
+def capture_ssm_snapshot(deploy)
   names =
-    parameters.filter_map do |parameter|
-      next if resolve_parameter_value(parameter.parameter_key, prefix, ami_id, asg, options).nil?
+    deploy.parameters.filter_map do |parameter|
+      next if resolve_parameter_value(parameter.parameter_key, deploy).nil?
 
-      "#{ssm_prefix}/#{parameter.parameter_key}"
+      "#{deploy.ssm_prefix}/#{parameter.parameter_key}"
     end
 
   return {} if names.empty?
@@ -300,28 +321,28 @@ def wait_for_stack_update(cfn, stack_name)
   end
 end
 
-def update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
-  puts("Updating cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}...")
+def update_cloudformation_stack(cfn, deploy)
+  puts("Updating cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}...")
   begin
-    cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
+    cfn.update_stack({ stack_name: deploy.stack_name, use_previous_template: true, parameters: deploy.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
   rescue Aws::CloudFormation::Errors::ValidationError => e
     warn("Stopping here: #{e.message}")
     exit(e.message.include?('No updates are to be performed') ? 0 : 1)
   end
-  wait_for_stack_update(cfn, stack_name)
-  puts("Update completed successfully for cloudformation stack #{stack_name} with #{prefix}ImageId #{ami_id}.")
+  wait_for_stack_update(cfn, deploy.stack_name)
+  puts("Update completed successfully for cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}.")
 end
 
-def update_ssm_parameters_with_rollback(parameters, prefix, ami_id, asg, options, ssm_prefix, ssm_snapshot)
-  update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
+def update_ssm_parameters_with_rollback(deploy, ssm_snapshot)
+  update_ssm_parameters(deploy)
 rescue StandardError, SignalException
   warn('SSM parameter update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
 end
 
-def update_stack_with_ssm_rollback(cfn, stack_name, parameters, prefix, ami_id, ssm_snapshot)
-  update_cloudformation_stack(cfn, stack_name, parameters, prefix, ami_id)
+def update_stack_with_ssm_rollback(cfn, deploy, ssm_snapshot)
+  update_cloudformation_stack(cfn, deploy)
 rescue SystemExit => e
   if e.status.nonzero?
     warn('CloudFormation update failed, rolling back SSM parameters...')
@@ -420,54 +441,58 @@ def discover_cfn_stack_context(cfn, options)
   }
 end
 
-def warm_up_after_scale_up(elb, target_group_arn, options)
-  if load_balanced_instance?(options[:instance])
-    sleep(WARMUP_SHORT) if options[:instance] == 'grpc'
-    wait_for_healthy_instances(elb, target_group_arn)
+def warm_up_after_scale_up(rollout)
+  if load_balanced_instance?(rollout.options[:instance])
+    sleep(WARMUP_SHORT) if rollout.options[:instance] == 'grpc'
+    wait_for_healthy_instances(rollout.elb, rollout.target_group_arn)
   end
 
   puts('Waiting for cache/instances to warm up...')
-  sleep(options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
+  sleep(rollout.options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
 end
 
-def scale_down_after_deploy(asg_resources, asg, mixed_params, new_capacity, elb, target_group_arn, options)
-  if options[:skip_scale_down]
+def scale_down_after_deploy(rollout, new_capacity)
+  asg = rollout.asg
+  mixed_params = rollout.mixed_params
+
+  if rollout.options[:skip_scale_down]
     puts("Setting max_size to #{asg[:max_size]}...")
-    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
+    update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
     return
   end
 
   puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
-  update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
+  update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
 
-  if load_balanced_instance?(options[:instance])
+  if load_balanced_instance?(rollout.options[:instance])
     sleep(POLL_INTERVAL)
-    wait_for_healthy_instances(elb, target_group_arn)
+    wait_for_healthy_instances(rollout.elb, rollout.target_group_arn)
   end
 
   puts('Waiting for auto scaling group to stop the instances...')
-  wait_for_asg_instance_count(asg_resources.client, asg[:name], asg[:desired_capacity], direction: :down)
+  wait_for_asg_instance_count(rollout.asg_client, asg[:name], asg[:desired_capacity], direction: :down)
 end
 
-def run_rolling_deploy(asg_resources, asg, mixed_params, new_capacity, elb, target_group_arn, options)
-  if new_capacity > asg[:desired_capacity]
+def run_rolling_deploy(rollout, new_capacity)
+  if new_capacity > rollout.asg[:desired_capacity]
     puts('Waiting for auto scaling group to start the instances...')
-    wait_for_asg_instance_count(asg_resources.client, asg[:name], new_capacity, direction: :up)
-    warm_up_after_scale_up(elb, target_group_arn, options)
+    wait_for_asg_instance_count(rollout.asg_client, rollout.asg[:name], new_capacity, direction: :up)
+    warm_up_after_scale_up(rollout)
   end
 
-  scale_down_after_deploy(asg_resources, asg, mixed_params, new_capacity, elb, target_group_arn, options)
+  scale_down_after_deploy(rollout, new_capacity)
 ensure
   puts('Restoring ASG mixed-instances policy...')
-  update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above])
+  update_asg_capacity(rollout.asg_client, rollout.asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: rollout.mixed_params[:percent_above])
 end
 
-def run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
-  run_rolling_deploy(asg_resources, asg, mixed_params, plan[:new_capacity], elb, target_group_arn, options)
+def run_rolling_deploy_with_capacity_rollback(rollout, plan)
+  run_rolling_deploy(rollout, plan[:new_capacity])
 rescue StandardError, SignalException
+  asg = rollout.asg
   warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
   begin
-    update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])
+    update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: rollout.mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])
   rescue StandardError => e
     warn("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
     warn(e.full_message)
@@ -508,11 +533,12 @@ def run_deployment(options)
   asg = find_auto_scaling_group(asg_resources, ctx[:stack_name], options)
   elb, target_group_arn = discover_load_balancer(ctx[:stack_name], options)
 
-  ssm_snapshot = capture_ssm_snapshot(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix])
-  update_ssm_parameters_with_rollback(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix], ssm_snapshot)
-  mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
+  deploy = DeployContext.new(options: options, asg: asg, ami_id: ami_id, stack: ctx)
+  ssm_snapshot = capture_ssm_snapshot(deploy)
+  update_ssm_parameters_with_rollback(deploy, ssm_snapshot)
+  mark_cfn_secrets_for_previous_value!(deploy.parameters, ctx[:secret_parameter_keys])
 
-  update_stack_with_ssm_rollback(cfn, ctx[:stack_name], ctx[:parameters], ctx[:prefix], ami_id, ssm_snapshot)
+  update_stack_with_ssm_rollback(cfn, deploy, ssm_snapshot)
 
   mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
   plan = compute_asg_capacity_plan(asg, **factors)
@@ -520,7 +546,8 @@ def run_deployment(options)
   puts("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
   update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: plan[:new_capacity], max_size: plan[:new_max])
 
-  run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
+  rollout = RollingDeploy.new(asg_client: asg_resources.client, asg: asg, mixed_params: mixed_params, elb: elb, target_group_arn: target_group_arn, options: options)
+  run_rolling_deploy_with_capacity_rollback(rollout, plan)
 
   puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
   puts('Deployment completed successfully.')
