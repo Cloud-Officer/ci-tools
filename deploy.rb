@@ -462,10 +462,6 @@ ensure
   update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above])
 end
 
-# The scale-up above doubles desired_capacity (and raises max_size when the plan
-# needs it). run_rolling_deploy's own ensure restores the mixed-instances policy,
-# but nothing restored the capacity: a failure between the scale-up and the
-# scale-down left the group running at the inflated size indefinitely.
 def run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
   run_rolling_deploy(asg_resources, asg, mixed_params, plan[:new_capacity], elb, target_group_arn, options)
 rescue StandardError, SignalException
