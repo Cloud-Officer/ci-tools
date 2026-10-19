@@ -46,6 +46,22 @@ RSpec.describe(Deploy) do
     { reservations: [{ instances: [{ instance_id: id, state: { code: state_code, name: state_name }, tags: [{ key: 'Name', value: name }] }] }] }
   end
 
+  def build_instances_response(names)
+    { reservations: [{ instances: names.each_with_index.map { |name, i| { instance_id: "i-#{i}", state: { code: 16, name: 'running' }, tags: [{ key: 'Name', value: name }] } } }] }
+  end
+
+  def build_asg_list(names)
+    { auto_scaling_groups: names.flat_map { |name| build_asg_data(name)[:auto_scaling_groups] } }
+  end
+
+  def build_stack_list(names)
+    { stack_summaries: names.map { |name| { stack_name: name, stack_status: 'UPDATE_COMPLETE', creation_time: Time.now } } }
+  end
+
+  def build_target_group_list(names)
+    { target_groups: names.map { |name| { target_group_name: name, target_group_arn: "arn:aws:tg/#{name}" } } }
+  end
+
   def build_asg_data(name, min: 1, max: 4, desired: 2, instances: [])
     { auto_scaling_groups: [{ auto_scaling_group_name: name, min_size: min, max_size: max, desired_capacity: desired, default_cooldown: 300, availability_zones: ['us-east-1a'], health_check_type: 'EC2', created_time: Time.now, instances: instances }] }
   end
@@ -232,6 +248,23 @@ RSpec.describe(Deploy) do
           .to(raise_error(RuntimeError, 'Unable to find standalone instance'))
       end
     end
+
+    context 'when other environments and instances share the name prefix' do
+      before { ec2.client.stub_responses(:describe_instances, build_instances_response(%w[api-prod12-standalone apiworker-prod1-standalone api-preprod1-standalone api-prod1-standalone])) }
+
+      it 'returns only the exact match' do
+        expect(find_standalone_instance(ec2, { instance: 'api', environment: 'prod1' })).to(eq(%w[i-3 api-prod1-standalone]))
+      end
+    end
+
+    context 'when several subnets match the environment' do
+      before { ec2.client.stub_responses(:describe_instances, build_instances_response(%w[api-beta1-standalone api-beta3-standalone])) }
+
+      it 'raises an error listing the matches' do
+        expect { find_standalone_instance(ec2, options) }
+          .to(raise_error(RuntimeError, 'Multiple standalone instances match: api-beta1-standalone, api-beta3-standalone'))
+      end
+    end
   end
 
   describe '#create_ami' do
@@ -298,66 +331,93 @@ RSpec.describe(Deploy) do
 
   describe '#find_auto_scaling_group' do
     let(:asg_resources) { Aws::AutoScaling::Resource.new(stub_responses: true) }
+    let(:stack_name)    { 'beta1-StackInstances-ABC'                           }
     let(:options)       { { environment: 'beta', instance: 'api' }             }
 
     context 'when matching ASG exists' do
-      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg')) }
+      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-StackInstances-ABC-api-XYZ')) }
 
       it 'returns ASG details', :aggregate_failures do
-        result = find_auto_scaling_group(asg_resources, options)
-        expect(result[:name]).to(eq('beta1-api-asg'))
+        result = find_auto_scaling_group(asg_resources, stack_name, options)
+        expect(result[:name]).to(eq('beta1-StackInstances-ABC-api-XYZ'))
         expect(result[:desired_capacity]).to(eq(2))
         expect(result[:min_size]).to(eq(1))
         expect(result[:max_size]).to(eq(4))
       end
     end
 
-    context 'when matching DR ASG exists' do
-      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta3-api-asg')) }
+    context 'when no matching ASG exists' do
+      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('prod1-StackInstances-DEF-worker-XYZ')) }
 
-      it 'returns ASG details for DR environment' do
-        result = find_auto_scaling_group(asg_resources, { environment: 'beta3', instance: 'api' })
-        expect(result[:name]).to(eq('beta3-api-asg'))
+      it 'raises an error' do
+        expect { find_auto_scaling_group(asg_resources, stack_name, options) }
+          .to(raise_error(RuntimeError, 'Unable to find auto scaling group'))
       end
     end
 
-    context 'when no matching ASG exists' do
-      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('prod1-worker-asg')) }
+    context 'when other stacks and instances share the name prefix' do
+      before do
+        names = %w[beta12-StackInstances-ABC-api-XYZ beta1-StackInstances-OTHER-api-XYZ beta1-StackInstances-ABC-apiworker-XYZ beta1-StackInstances-ABC-api-XYZ]
+        asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_list(names))
+      end
 
-      it 'raises an error' do
-        expect { find_auto_scaling_group(asg_resources, options) }
-          .to(raise_error(RuntimeError, 'Unable to find auto scaling group'))
+      it 'returns the ASG that belongs to the discovered stack' do
+        expect(find_auto_scaling_group(asg_resources, stack_name, options)[:name]).to(eq('beta1-StackInstances-ABC-api-XYZ'))
+      end
+    end
+
+    context 'when several ASGs match' do
+      before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_list(%w[beta1-StackInstances-ABC-api-ONE beta1-StackInstances-ABC-api-TWO])) }
+
+      it 'raises an error listing the matches' do
+        expect { find_auto_scaling_group(asg_resources, stack_name, options) }
+          .to(raise_error(RuntimeError, 'Multiple auto scaling groups match: beta1-StackInstances-ABC-api-ONE, beta1-StackInstances-ABC-api-TWO'))
       end
     end
   end
 
   describe '#find_target_group' do
-    let(:elb) { Aws::ElasticLoadBalancingV2::Client.new(stub_responses: true) }
+    let(:elb)        { Aws::ElasticLoadBalancingV2::Client.new(stub_responses: true) }
+    let(:stack_name) { 'beta1-StackInstances-ABC'                                    }
 
     context 'with api instance' do
-      before { elb.stub_responses(:describe_target_groups, { target_groups: [{ target_group_name: 'beta1-443', target_group_arn: 'arn:aws:tg/beta1-443' }] }) }
+      before { elb.stub_responses(:describe_target_groups, build_target_group_list(%w[beta1-443])) }
 
       it 'finds target group' do
-        result = find_target_group(elb, { environment: 'beta', instance: 'api' })
-        expect(result).to(eq('arn:aws:tg/beta1-443'))
+        expect(find_target_group(elb, stack_name, { instance: 'api' })).to(eq('arn:aws:tg/beta1-443'))
       end
     end
 
     context 'with grpc instance' do
-      before { elb.stub_responses(:describe_target_groups, { target_groups: [{ target_group_name: 'beta1-8443-HTTP2', target_group_arn: 'arn:aws:tg/beta1-8443' }] }) }
+      before { elb.stub_responses(:describe_target_groups, build_target_group_list(%w[beta1-443 beta1-8443-HTTP2])) }
 
       it 'finds target group' do
-        result = find_target_group(elb, { environment: 'beta', instance: 'grpc' })
-        expect(result).to(eq('arn:aws:tg/beta1-8443'))
+        expect(find_target_group(elb, stack_name, { instance: 'grpc' })).to(eq('arn:aws:tg/beta1-8443-HTTP2'))
       end
     end
 
     context 'with DR environment' do
-      before { elb.stub_responses(:describe_target_groups, { target_groups: [{ target_group_name: 'beta3-443', target_group_arn: 'arn:aws:tg/beta3-443' }] }) }
+      before { elb.stub_responses(:describe_target_groups, build_target_group_list(%w[beta1-443 beta3-443])) }
 
       it 'finds target group for DR environment' do
-        result = find_target_group(elb, { environment: 'beta3', instance: 'api' })
-        expect(result).to(eq('arn:aws:tg/beta3-443'))
+        expect(find_target_group(elb, 'beta3-StackInstances-XYZ', { instance: 'api' })).to(eq('arn:aws:tg/beta3-443'))
+      end
+    end
+
+    context 'when another subnet shares the name prefix' do
+      before { elb.stub_responses(:describe_target_groups, build_target_group_list(%w[beta12-443 beta1-443])) }
+
+      it 'returns only the exact match' do
+        expect(find_target_group(elb, stack_name, { instance: 'api' })).to(eq('arn:aws:tg/beta1-443'))
+      end
+    end
+
+    context 'when several target groups match' do
+      before { elb.stub_responses(:describe_target_groups, build_target_group_list(%w[beta1-80 beta1-443])) }
+
+      it 'raises an error listing the matches' do
+        expect { find_target_group(elb, stack_name, { instance: 'api' }) }
+          .to(raise_error(RuntimeError, 'Multiple load balancer target groups match: beta1-80, beta1-443'))
       end
     end
 
@@ -365,7 +425,7 @@ RSpec.describe(Deploy) do
       before { elb.stub_responses(:describe_target_groups, { target_groups: [] }) }
 
       it 'raises an error' do
-        expect { find_target_group(elb, { environment: 'beta', instance: 'api' }) }
+        expect { find_target_group(elb, stack_name, { instance: 'api' }) }
           .to(raise_error(RuntimeError, 'Unable to find load balancer target group'))
       end
     end
@@ -376,7 +436,7 @@ RSpec.describe(Deploy) do
     let(:options) { { environment: 'beta' }                               }
 
     context 'when matching stack exists' do
-      before { cfn.stub_responses(:list_stacks, { stack_summaries: [{ stack_name: 'beta1-StackInstances-abc', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] }) }
+      before { cfn.stub_responses(:list_stacks, build_stack_list(%w[beta1-StackInstances-abc])) }
 
       it 'returns stack name' do
         expect(find_cloudformation_stack(cfn, options)).to(eq('beta1-StackInstances-abc'))
@@ -384,7 +444,7 @@ RSpec.describe(Deploy) do
     end
 
     context 'when matching DR stack exists' do
-      before { cfn.stub_responses(:list_stacks, { stack_summaries: [{ stack_name: 'beta3-StackInstances-xyz', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] }) }
+      before { cfn.stub_responses(:list_stacks, build_stack_list(%w[beta1-StackInstances-abc beta3-StackInstances-xyz])) }
 
       it 'returns DR stack name' do
         expect(find_cloudformation_stack(cfn, { environment: 'beta3' })).to(eq('beta3-StackInstances-xyz'))
@@ -401,14 +461,27 @@ RSpec.describe(Deploy) do
     end
 
     context 'when matching stack is on a later page' do
-      before do
-        page1 = { stack_summaries: [{ stack_name: 'other1-StackInstances-abc', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }], next_token: 'page2' }
-        page2 = { stack_summaries: [{ stack_name: 'beta1-StackInstances-abc', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] }
-        cfn.stub_responses(:list_stacks, [page1, page2])
-      end
+      before { cfn.stub_responses(:list_stacks, [build_stack_list(%w[other1-StackInstances-abc]).merge(next_token: 'page2'), build_stack_list(%w[beta1-StackInstances-abc])]) }
 
       it 'scans past the first page to find the stack' do
         expect(find_cloudformation_stack(cfn, options)).to(eq('beta1-StackInstances-abc'))
+      end
+    end
+
+    context 'when other environments share the name prefix' do
+      before { cfn.stub_responses(:list_stacks, build_stack_list(%w[prod12-StackInstances-abc preprod1-StackInstances-abc prod1-StackDatabases-abc prod1-StackInstances-abc])) }
+
+      it 'returns only the exact match' do
+        expect(find_cloudformation_stack(cfn, { environment: 'prod1' })).to(eq('prod1-StackInstances-abc'))
+      end
+    end
+
+    context 'when several subnets match the environment' do
+      before { cfn.stub_responses(:list_stacks, build_stack_list(%w[beta1-StackInstances-abc beta3-StackInstances-xyz])) }
+
+      it 'raises an error listing the matches' do
+        expect { find_cloudformation_stack(cfn, options) }
+          .to(raise_error(RuntimeError, 'Multiple cloudformation stacks match: beta1-StackInstances-abc, beta3-StackInstances-xyz'))
       end
     end
   end
@@ -927,7 +1000,7 @@ RSpec.describe(Deploy) do
       end
 
       it 'returns the ELB client and the target group arn', :aggregate_failures do
-        client, arn = discover_load_balancer({ instance: 'api', environment: 'beta1' })
+        client, arn = discover_load_balancer('beta1-StackInstances-x', { instance: 'api' })
         expect(client).to(be(elb))
         expect(arn).to(eq('arn:beta1-80'))
       end
@@ -937,11 +1010,11 @@ RSpec.describe(Deploy) do
       before { allow(Aws::ElasticLoadBalancingV2::Client).to(receive(:new)) }
 
       it 'returns [nil, nil]' do
-        expect(discover_load_balancer({ instance: 'worker' })).to(eq([nil, nil]))
+        expect(discover_load_balancer('beta1-StackInstances-x', { instance: 'worker' })).to(eq([nil, nil]))
       end
 
       it 'does not instantiate an ELB client' do
-        discover_load_balancer({ instance: 'worker' })
+        discover_load_balancer('beta1-StackInstances-x', { instance: 'worker' })
         expect(Aws::ElasticLoadBalancingV2::Client).not_to(have_received(:new))
       end
     end
@@ -1156,6 +1229,12 @@ RSpec.describe(Deploy) do
         expect(self).to(have_received(:update_ssm_parameters_with_rollback).with([], 'API', 'ami-new', anything, anything, '/beta/1', snapshot))
       end
 
+      it 'looks up the ASG and target group from the discovered stack', :aggregate_failures do
+        run_deployment({ environment: 'beta', instance: 'api', profile: nil })
+        expect(self).to(have_received(:find_auto_scaling_group).with(anything, 'beta1-StackInstances-x', anything))
+        expect(self).to(have_received(:discover_load_balancer).with('beta1-StackInstances-x', anything))
+      end
+
       it 'passes the template-discovered NoEcho keys to the secret marker' do
         run_deployment({ environment: 'beta', instance: 'api', profile: nil })
         expect(self).to(have_received(:mark_cfn_secrets_for_previous_value!).with([], %w[DbPassword]))
@@ -1203,8 +1282,8 @@ RSpec.describe(Deploy) do
         # is the marker for "the deployment actually started". Nothing beyond it
         # is stubbed here, and nothing beyond it should run.
         allow(self).to(receive_messages(resolve_ami_id: 'ami-new', resolve_capacity_factors: { asg_increase: 1, asg_multiplier: 2 }))
-        allow(Aws::AutoScaling::Resource).to(receive(:new).and_return(instance_double(Aws::AutoScaling::Resource, client: nil)))
-        allow(self).to(receive(:find_auto_scaling_group).and_raise(StandardError.new('reached the ASG path')))
+        allow(Aws::CloudFormation::Client).to(receive(:new).and_return(instance_double(Aws::CloudFormation::Client)))
+        allow(self).to(receive(:discover_cfn_stack_context).and_raise(StandardError.new('reached the deploy path')))
       end
 
       it 'returns after creating the AMI without starting a deployment', :aggregate_failures do
@@ -1217,7 +1296,7 @@ RSpec.describe(Deploy) do
         # --create_ami_only only short-circuits when it did the creating; with an
         # AMI handed in there is nothing to create and the deploy proceeds.
         expect { run_deployment({ environment: 'beta', instance: 'api', profile: nil, create_ami_only: true, ami: 'ami-supplied' }) }
-          .to(raise_error(StandardError, 'reached the ASG path'))
+          .to(raise_error(StandardError, 'reached the deploy path'))
       end
     end
   end

@@ -120,21 +120,32 @@ def publish_lambda_and_update_cloudfront(options)
   update_distribution_lambda(cloudfront, distribution, version.function_arn)
 end
 
+def environment_pattern(environment)
+  escaped = Regexp.escape(environment)
+  environment.match?(/\d\z/) ? escaped : "#{escaped}\\d*"
+end
+
+def single_match!(matches, description)
+  raise("Unable to find #{description}") if matches.empty?
+  raise("Multiple #{description}s match: #{matches.keys.join(', ')}") if matches.length > 1
+
+  matches.first
+end
+
 def find_standalone_instance(ec2, options)
   puts("Searching for #{options[:instance]} standalone instance...")
+  pattern = /\A#{Regexp.escape(options[:instance])}-#{environment_pattern(options[:environment])}-standalone\z/
+  matches = {}
+
   ec2.instances.each do |instance|
     next unless %w[running stopped].include?(instance.data.state.name)
 
-    instance.tags.each do |tag|
-      next unless tag.key == 'Name'
-      next unless tag.value[/#{Regexp.escape(options[:instance])}-#{Regexp.escape(options[:environment])}.*-standalone/]
-
-      puts("Standalone instance #{tag.value} found with id #{instance.id}.")
-      return [instance.id, tag.value]
-    end
+    instance.tags.each { |tag| matches[tag.value] = instance.id if tag.key == 'Name' && tag.value.match?(pattern) }
   end
 
-  raise('Unable to find standalone instance')
+  name, instance_id = single_match!(matches, 'standalone instance')
+  puts("Standalone instance #{name} found with id #{instance_id}.")
+  [instance_id, name]
 end
 
 def create_ami(ec2, instance_id, instance_name, options)
@@ -152,45 +163,41 @@ def create_ami(ec2, instance_id, instance_name, options)
   ami.image_id
 end
 
-def find_auto_scaling_group(asg_resources, options)
+def find_auto_scaling_group(asg_resources, stack_name, options)
   puts('Checking auto scaling groups...')
-  asg_resources.groups.each do |group|
-    next unless group.auto_scaling_group_name[/#{Regexp.escape(options[:environment])}.*-#{Regexp.escape(options[:instance])}.*/]
+  pattern = /\A#{Regexp.escape(stack_name)}-#{Regexp.escape(options[:instance])}-[^-]+\z/
+  matches = asg_resources.groups.each_with_object({}) { |group, found| found[group.auto_scaling_group_name] = group if group.auto_scaling_group_name.match?(pattern) }
+  name, group = single_match!(matches, 'auto scaling group')
 
-    puts("Auto scaling group #{group.auto_scaling_group_name} found with desired capacity at #{group.desired_capacity}.")
-    return { name: group.auto_scaling_group_name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
-  end
-
-  raise('Unable to find auto scaling group')
+  puts("Auto scaling group #{name} found with desired capacity at #{group.desired_capacity}.")
+  { name: name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
 end
 
-def find_target_group(elb, options)
+def find_target_group(elb, stack_name, options)
   ports = options[:instance] == 'grpc' ? ['8443-HTTP2'] : %w[80 443]
+  names = ports.map { |port| "#{stack_name.split('-').first}-#{port}" }
   puts('Checking load balancer target groups...')
 
-  elb.describe_target_groups.each do |targets|
-    targets.target_groups.each do |group|
-      ports.each do |port|
-        return group.target_group_arn if group.target_group_name[/#{Regexp.escape(options[:environment])}\d*-#{Regexp.escape(port)}$/]
-      end
+  matches =
+    elb.describe_target_groups.each_with_object({}) do |page, found|
+      page.target_groups.each { |group| found[group.target_group_name] = group.target_group_arn if names.include?(group.target_group_name) }
     end
-  end
 
-  raise('Unable to find load balancer target group')
+  single_match!(matches, 'load balancer target group').last
 end
 
 def find_cloudformation_stack(cfn, options)
   puts('Checking cloudformation stacks...')
-  cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).each do |page|
-    page.stack_summaries.each do |stack|
-      next unless stack.stack_name[/#{Regexp.escape(options[:environment])}.*-StackInstances.*/]
+  pattern = /\A#{environment_pattern(options[:environment])}-StackInstances-[^-]+\z/
 
-      puts("Stack #{stack.stack_name} found with status #{stack.stack_status}.")
-      return stack.stack_name
+  matches =
+    cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).each_with_object({}) do |page, found|
+      page.stack_summaries.each { |stack| found[stack.stack_name] = stack.stack_status if stack.stack_name.match?(pattern) }
     end
-  end
 
-  raise('Unable to find cloudformation stack')
+  name, status = single_match!(matches, 'cloudformation stack')
+  puts("Stack #{name} found with status #{status}.")
+  name
 end
 
 def parameter_prefix_for(instance)
@@ -473,11 +480,11 @@ rescue StandardError
   raise
 end
 
-def discover_load_balancer(options)
+def discover_load_balancer(stack_name, options)
   return [nil, nil] unless load_balanced_instance?(options[:instance])
 
   elb = Aws::ElasticLoadBalancingV2::Client.new
-  [elb, find_target_group(elb, options)]
+  [elb, find_target_group(elb, stack_name, options)]
 end
 
 def run_deployment(options)
@@ -498,12 +505,12 @@ def run_deployment(options)
   end
 
   factors = resolve_capacity_factors(options)
-  asg_resources = Aws::AutoScaling::Resource.new
-  asg = find_auto_scaling_group(asg_resources, options)
-  elb, target_group_arn = discover_load_balancer(options)
-
   cfn = Aws::CloudFormation::Client.new
   ctx = discover_cfn_stack_context(cfn, options)
+
+  asg_resources = Aws::AutoScaling::Resource.new
+  asg = find_auto_scaling_group(asg_resources, ctx[:stack_name], options)
+  elb, target_group_arn = discover_load_balancer(ctx[:stack_name], options)
 
   ssm_snapshot = capture_ssm_snapshot(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix])
   update_ssm_parameters_with_rollback(ctx[:parameters], ctx[:prefix], ami_id, asg, options, ctx[:ssm_prefix], ssm_snapshot)
