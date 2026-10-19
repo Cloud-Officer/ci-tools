@@ -252,237 +252,128 @@ shell_lint_custom() {
   ' "${sh_files[@]}"
 }
 
-yml_files=(.github/workflows/*.yml)
-yaml_files=(.github/workflows/*.yaml)
 
-if [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]; then
-  echo "Checking GitHub Actions workflow files..."
-
-  if ! command -v actionlint &>/dev/null; then
-    brew_or_go_install actionlint github.com/rhysd/actionlint/cmd/actionlint@latest
-  fi
-
-  actionlint || FAILED=1
-fi
-
-if [ -f .markdownlint-cli2.yaml ]; then
-  echo "Checking Markdown..."
-
-  if ! command -v markdownlint-cli2 &>/dev/null; then
-    if is_darwin; then
-      brew install markdownlint-cli2
-    else
-      npm_install markdownlint-cli2
-    fi
-  fi
-
-  markdownlint-cli2 "**/*.md" || FAILED=1
-fi
-
-if [ -f .yamllint.yml ]; then
-  echo "Checking YAML..."
-
-  if ! command -v yamllint &>/dev/null; then
-    brew_or_apt_install yamllint
-  fi
-
-  yamllint --strict . || FAILED=1
-fi
-
-if [ -f .shellcheckrc ]; then
-  echo "Checking shell scripts..."
-
-  if ! command -v shellcheck &>/dev/null; then
-    brew_or_apt_install shellcheck
-  fi
-
-  # Feed the file list through an array: unquoted $(find_shell_scripts) word-splits,
-  # and when nothing matches it expands to no operands at all, which exits
-  # non-zero on a usage dump and fails the build for a tree with no shell files.
-  mapfile -t SHELL_FILES < <(find_shell_scripts)
-
-  if [ ${#SHELL_FILES[@]} -gt 0 ]; then
-    shellcheck --external-sources "${SHELL_FILES[@]}" || FAILED=1
+brew_or_npm_install() {
+  if is_darwin; then
+    brew install "${1}"
   else
-    echo "No shell scripts found, skipping"
+    npm_install "${1}"
   fi
+}
 
-  echo "Checking shell scripts (custom rules)..."
-  shell_lint_custom || FAILED=1
-fi
-
-if [ -f .hadolint.yaml ]; then
-  echo "Checking Dockerfiles..."
-
-  if ! command -v hadolint &>/dev/null; then
-    if is_darwin; then
-      brew install hadolint
-    else
-      # Download to a temp file the current user can always write, verify it, then
-      # elevate only for the move into /usr/local/bin -- writing there directly
-      # fails for every non-root user (the project image runs as `citools`), and
-      # the other Linux branches elevate the same way (sudo apt-get, sudo sh -s).
-      # Asset names are lowercase and arch-suffixed (hadolint-linux-x86_64 /
-      # hadolint-linux-arm64), and the per-asset .sha256 files no longer exist --
-      # every hash now lives in one checksums.sha256, keyed by asset name.
-      HADOLINT_ASSET="hadolint-linux-$(release_arch)"
-      HADOLINT_TMP=$(mktemp)
-      wget -qO "${HADOLINT_TMP}" "https://github.com/hadolint/hadolint/releases/latest/download/${HADOLINT_ASSET}"
-      EXPECTED_CHECKSUM=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/checksums.sha256 | awk -v asset="*${HADOLINT_ASSET}" '$2 == asset {print $1}' || true)
-
-      if [ -z "${EXPECTED_CHECKSUM}" ]; then
-        echo "Error: no published checksum for ${HADOLINT_ASSET}"
-        rm -f "${HADOLINT_TMP}"
-        exit 1
-      fi
-
-      if command -v sha256sum &> /dev/null; then
-        ACTUAL_CHECKSUM=$(sha256sum "${HADOLINT_TMP}" | awk '{print $1}')
-      else
-        ACTUAL_CHECKSUM=$(shasum -a 256 "${HADOLINT_TMP}" | awk '{print $1}')
-      fi
-
-      if [ "${EXPECTED_CHECKSUM}" != "${ACTUAL_CHECKSUM}" ]; then
-        echo "Error: Checksum verification failed for hadolint!"
-        echo "Expected: ${EXPECTED_CHECKSUM}"
-        echo "Actual:   ${ACTUAL_CHECKSUM}"
-        rm -f "${HADOLINT_TMP}"
-        exit 1
-      fi
-
-      sudo install -m 0755 "${HADOLINT_TMP}" /usr/local/bin/hadolint
-      rm -f "${HADOLINT_TMP}"
-    fi
-  fi
-
-  # Same zero-match guard as shellcheck above. The pattern is Dockerfile* -- not
-  # the exact name -- to match the scanner-selection test further down, so a repo
-  # holding only Dockerfile.ci is linted rather than failing on no operands.
-  mapfile -t DOCKERFILES < <(find_lintable "Dockerfile*")
-
-  if [ ${#DOCKERFILES[@]} -gt 0 ]; then
-    hadolint "${DOCKERFILES[@]}" || FAILED=1
+brew_or_pipx_install() {
+  if is_darwin; then
+    brew install "${1}"
   else
-    echo "No Dockerfiles found, skipping"
+    pipx_install "${1}"
   fi
-fi
+}
 
-if [ -f .cfnlintrc ]; then
-  echo "Checking CloudFormation templates..."
-
-  if ! command -v cfn-lint &>/dev/null; then
-    if is_darwin; then
-      brew install cfn-lint
-    else
-      pipx_install cfn-lint
-    fi
+install_hadolint() {
+  if is_darwin; then
+    brew install hadolint
+    return
   fi
 
-  cfn-lint --non-zero-exit-code error || FAILED=1
-fi
+  local asset tmp expected actual
+  asset="hadolint-linux-$(release_arch)"
+  tmp=$(mktemp)
+  wget -qO "${tmp}" "https://github.com/hadolint/hadolint/releases/latest/download/${asset}"
+  expected=$(wget -qO - https://github.com/hadolint/hadolint/releases/latest/download/checksums.sha256 | awk -v asset="*${asset}" '$2 == asset {print $1}' || true)
 
-if [ -f .golangci.yml ]; then
-  echo "Checking Go..."
-
-  if ! command -v golangci-lint &>/dev/null; then
-    brew_or_go_install golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+  if [ -z "${expected}" ]; then
+    echo "Error: no published checksum for ${asset}"
+    rm -f "${tmp}"
+    exit 1
   fi
 
-  golangci-lint run || FAILED=1
-fi
-
-if [ -f .pmd.xml ]; then
-  echo "Checking Java/JS/SQL with pmd..."
-
-  if ! command -v pmd &>/dev/null; then
-    if is_darwin; then
-      brew install pmd
-    else
-      # pmd is not packaged for apt, so install the official distribution zip and
-      # verify its detached GPG signature against PMD's published release key.
-      # The version stays floating-latest (discovered at run time, like the jira
-      # CLI); the key fingerprint is the trust anchor, not a version pin.
-      PMD_SIGNING_KEY="2EFA55D0785C31F956F2F87EA0B5CA1A4E086838"
-      sudo apt-get --yes install --no-install-recommends gnupg unzip
-      PMD_VERSION=$(curl -fsS https://api.github.com/repos/pmd/pmd/releases/latest | grep '"tag_name"' | sed -E 's|.*"pmd_releases/([^"]+)".*|\1|' || true)
-
-      if [ -z "${PMD_VERSION}" ]; then
-        echo "Error: Could not determine latest pmd version"
-        exit 1
-      fi
-
-      PMD_TMP=$(mktemp -d)
-      PMD_URL="https://github.com/pmd/pmd/releases/download/pmd_releases/${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
-      wget -qO "${PMD_TMP}/pmd.zip" "${PMD_URL}"
-      wget -qO "${PMD_TMP}/pmd.zip.asc" "${PMD_URL}.asc"
-      gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "${PMD_SIGNING_KEY}"
-
-      if ! gpg --batch --verify "${PMD_TMP}/pmd.zip.asc" "${PMD_TMP}/pmd.zip"; then
-        echo "Error: Signature verification failed for pmd ${PMD_VERSION}!"
-        rm -rf "${PMD_TMP}"
-        exit 1
-      fi
-
-      unzip -qd "${PMD_TMP}" "${PMD_TMP}/pmd.zip"
-      sudo rm -rf "/opt/pmd-bin-${PMD_VERSION}"
-      sudo mv "${PMD_TMP}/pmd-bin-${PMD_VERSION}" /opt/
-      sudo ln -sf "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd
-      rm -rf "${PMD_TMP}"
-    fi
+  if command -v sha256sum &> /dev/null; then
+    actual=$(sha256sum "${tmp}" | awk '{print $1}')
+  else
+    actual=$(shasum -a 256 "${tmp}" | awk '{print $1}')
   fi
 
-  pmd check --dir . --format textcolor --rulesets ".pmd.xml" || FAILED=1
-  echo
-fi
+  if [ "${expected}" != "${actual}" ]; then
+    echo "Error: Checksum verification failed for hadolint!"
+    echo "Expected: ${expected}"
+    echo "Actual:   ${actual}"
+    rm -f "${tmp}"
+    exit 1
+  fi
 
-# .eslintrc.json is the legacy config format, which requires eslint@8.
-# eslint v9+ only supports the flat config format (eslint.config.js/mjs).
-if [ -f .eslintrc.json ]; then
-  echo "Checking JS with eslint..."
+  sudo install -m 0755 "${tmp}" /usr/local/bin/hadolint
+  rm -f "${tmp}"
+}
 
-  INSTALL_ESLINT=0
+# Floating-latest release; PMD's signing key fingerprint is the trust anchor.
+install_pmd() {
+  if is_darwin; then
+    brew install pmd
+    return
+  fi
+
+  local signing_key="2EFA55D0785C31F956F2F87EA0B5CA1A4E086838"
+  local version tmp url
+  sudo apt-get --yes install --no-install-recommends gnupg unzip
+  version=$(curl -fsS https://api.github.com/repos/pmd/pmd/releases/latest | grep '"tag_name"' | sed -E 's|.*"pmd_releases/([^"]+)".*|\1|' || true)
+
+  if [ -z "${version}" ]; then
+    echo "Error: Could not determine latest pmd version"
+    exit 1
+  fi
+
+  tmp=$(mktemp -d)
+  url="https://github.com/pmd/pmd/releases/download/pmd_releases/${version}/pmd-dist-${version}-bin.zip"
+  wget -qO "${tmp}/pmd.zip" "${url}"
+  wget -qO "${tmp}/pmd.zip.asc" "${url}.asc"
+  gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "${signing_key}"
+
+  if ! gpg --batch --verify "${tmp}/pmd.zip.asc" "${tmp}/pmd.zip"; then
+    echo "Error: Signature verification failed for pmd ${version}!"
+    rm -rf "${tmp}"
+    exit 1
+  fi
+
+  unzip -qd "${tmp}" "${tmp}/pmd.zip"
+  sudo rm -rf "/opt/pmd-bin-${version}"
+  sudo mv "${tmp}/pmd-bin-${version}" /opt/
+  sudo ln -sf "/opt/pmd-bin-${version}/bin/pmd" /usr/local/bin/pmd
+  rm -rf "${tmp}"
+}
+
+install_trivy() {
+  if is_darwin; then
+    brew install trivy
+    return
+  fi
+
+  sudo apt-get --yes install --no-install-recommends wget apt-transport-https gnupg
+  wget -qO - https://get.trivy.dev/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+  echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
+  sudo apt-get update
+  sudo apt-get --yes install --no-install-recommends trivy
+}
+
+# .eslintrc.json is the legacy config format, which only eslint@8 supports.
+install_eslint8() {
+  local install=0
 
   if ! command -v eslint &>/dev/null; then
     echo "Installing eslint@8 because not present"
-    INSTALL_ESLINT=1
+    install=1
   fi
 
   if ! eslint --version | grep "^v8\." &>/dev/null; then
     echo "Installing eslint@8 because wrong version"
-    INSTALL_ESLINT=1
+    install=1
   fi
 
-  if [ "${INSTALL_ESLINT}" -eq 1 ]; then
+  if [ "${install}" -eq 1 ]; then
     npm_install eslint@8
   fi
+}
 
-  eslint . || FAILED=1
-fi
-
-if [ -f .editorconfig ]; then
-  echo "Checking Kotlin with ktlint..."
-
-  if ! command -v ktlint &>/dev/null; then
-    brew_or_apt_install ktlint
-  fi
-
-  ktlint || FAILED=1
-fi
-
-if [ -f .bandit ]; then
-  echo "Checking Python with bandit..."
-
-  if ! command -v bandit &>/dev/null; then
-    brew_or_apt_install bandit python3-bandit
-  fi
-
-  bandit -ll --ini .bandit --silent . || FAILED=1
-  echo
-fi
-
-if [ -f .flake8 ]; then
-  echo "Checking Python with flake8..."
-
+install_flake8() {
   if ! command -v flake8 &>/dev/null; then
     brew_or_apt_install flake8
   fi
@@ -490,84 +381,44 @@ if [ -f .flake8 ]; then
   if ! flake8 --version | grep -q "flake8-docstrings"; then
     install_flake8_docstrings
   fi
+}
 
-  flake8 . || FAILED=1
-fi
+install_rubocop() {
+  local gems=(rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety)
 
-if [ -f .protolint.yaml ]; then
-  echo "Checking Protocol Buffer with protolint..."
-
-  if ! command -v protolint &>/dev/null; then
-    brew_or_go_install protolint github.com/yoheimuta/protolint/cmd/protolint@latest yoheimuta/protolint
+  if rubocop --version &>/dev/null; then
+    return
   fi
 
-  protolint . || FAILED=1
-fi
-
-if [ -f .rubocop.yml ]; then
-  echo "Checking Ruby..."
-
-  if ! rubocop --version &>/dev/null; then
-    if is_darwin; then
-      gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
-    else
-      $(sudo_for_user_command gem) gem install rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety
-    fi
+  if is_darwin; then
+    gem install "${gems[@]}"
+  else
+    $(sudo_for_user_command gem) gem install "${gems[@]}"
   fi
+}
 
-  rubocop || FAILED=1
-  echo
-fi
-
-if [ -f .semgrepignore ]; then
-  echo "Checking with semgrep..."
-
-  if ! command -v semgrep &>/dev/null; then
-    if is_darwin; then
-      brew install semgrep
-    else
-      pipx_install semgrep
-    fi
+install_swiftlint() {
+  if is_darwin; then
+    brew install swiftlint
+  else
+    echo "Error: only supported on MacOS!"
+    exit 1
   fi
+}
 
-  semgrep scan --config=auto --severity=ERROR --error --quiet . || FAILED=1
-fi
-
-if [ -f .trivyignore ]; then
-  echo "Checking with trivy..."
-
-  if ! command -v trivy &>/dev/null; then
-    if is_darwin; then
-      brew install trivy
-    else
-      # Install from Aqua's own signed apt repository rather than piping
-      # contrib/install.sh from the mutable main branch into a root shell: apt
-      # verifies the GPG signature on every package, and the version stays
-      # floating-latest exactly as it was before.
-      sudo apt-get --yes install --no-install-recommends wget apt-transport-https gnupg
-      wget -qO - https://get.trivy.dev/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-      echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://get.trivy.dev/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
-      sudo apt-get update
-      sudo apt-get --yes install --no-install-recommends trivy
-    fi
-  fi
-
-  SCANNERS="secret"
+trivy_scanners() {
+  local scanners="secret" sm_path lock_file
+  local submodule_prune=()
 
   if [ -f .cfnlintrc ] || [ -f .hadolint.yaml ] || \
      find . -maxdepth 3 -name "*.tf" -print -quit 2>/dev/null | grep -q . || \
      find . -maxdepth 3 -name "Dockerfile*" -print -quit 2>/dev/null | grep -q .; then
-    SCANNERS="${SCANNERS},misconfig"
+    scanners="${scanners},misconfig"
   fi
 
-  # Build submodule exclusion paths for find. Expanded as ${arr[@]+"${arr[@]}"}
-  # because this script re-execs under "bash 4 or newer", which admits 4.0-4.3,
-  # where expanding an empty array under `set -u` aborts as an unbound variable --
-  # and a repository with no .gitmodules leaves it empty.
-  SUBMODULE_PRUNE=()
   if [ -f .gitmodules ]; then
     while IFS= read -r sm_path; do
-      SUBMODULE_PRUNE+=("-path" "./${sm_path}" "-prune" "-o")
+      submodule_prune+=("-path" "./${sm_path}" "-prune" "-o")
     done < <(grep 'path = ' .gitmodules | sed 's/.*path = //')
   fi
 
@@ -576,30 +427,107 @@ if [ -f .trivyignore ]; then
                    Gemfile.lock composer.lock \
                    pom.xml build.gradle build.gradle.kts \
                    Cargo.lock Package.resolved; do
-    if find . ${SUBMODULE_PRUNE[@]+"${SUBMODULE_PRUNE[@]}"} -name "${lock_file}" -print -quit 2>/dev/null | grep -q .; then
-      SCANNERS="${SCANNERS},vuln"
+    if find . ${submodule_prune[@]+"${submodule_prune[@]}"} -name "${lock_file}" -print -quit 2>/dev/null | grep -q .; then
+      scanners="${scanners},vuln"
       break
     fi
   done
 
-  echo "Trivy scanners: ${SCANNERS}"
-  trivy fs --scanners "${SCANNERS}" --exit-code 1 . || FAILED=1
-fi
+  echo "${scanners}"
+}
 
-if [ -f .swiftlint.yml ]; then
-  echo "Checking Swift..."
+lint_shell_scripts() {
+  local rc=0 shell_files=()
+  mapfile -t shell_files < <(find_shell_scripts)
 
-  if ! command -v swiftlint &>/dev/null; then
-    if is_darwin; then
-      brew install swiftlint
-    else
-      echo "Error: only supported on MacOS!"
-      exit 1
-    fi
+  if [ ${#shell_files[@]} -gt 0 ]; then
+    shellcheck --external-sources "${shell_files[@]}" || rc=1
+  else
+    echo "No shell scripts found, skipping"
   fi
 
-  swiftlint lint --strict || FAILED=1
+  echo "Checking shell scripts (custom rules)..."
+  shell_lint_custom || rc=1
+  return "${rc}"
+}
+
+lint_dockerfiles() {
+  local dockerfiles=()
+  mapfile -t dockerfiles < <(find_lintable "Dockerfile*")
+
+  if [ ${#dockerfiles[@]} -gt 0 ]; then
+    hadolint "${dockerfiles[@]}"
+  else
+    echo "No Dockerfiles found, skipping"
+  fi
+}
+
+lint_trivy() {
+  local scanners
+  scanners=$(trivy_scanners)
+  echo "Trivy scanners: ${scanners}"
+  trivy fs --scanners "${scanners}" --exit-code 1 .
+}
+
+with_trailing_blank_line() {
+  local rc=0
+  "${@}" || rc=$?
+  echo
+  return "${rc}"
+}
+
+has_workflow_files() {
+  local yml_files=(.github/workflows/*.yml) yaml_files=(.github/workflows/*.yaml)
+  [[ -e ${yml_files[0]} ]] || [[ -e ${yaml_files[0]} ]]
+}
+
+# Usage: lint_with <message> <tool|""> <install cmd...> -- <lint cmd...>; an empty tool always runs the installer.
+lint_with() {
+  local message="${1}" tool="${2}" install=()
+  shift 2
+
+  while [ "${1}" != "--" ]; do
+    install+=("${1}")
+    shift
+  done
+
+  shift
+  echo "${message}"
+
+  if [ -z "${tool}" ] || ! command -v "${tool}" &>/dev/null; then
+    "${install[@]}"
+  fi
+
+  "${@}" || FAILED=1
+}
+
+# Usage: run_linter <config file> <lint_with args...>
+run_linter() {
+  if [ -f "${1}" ]; then
+    lint_with "${@:2}"
+  fi
+}
+
+if has_workflow_files; then
+  lint_with "Checking GitHub Actions workflow files..." actionlint brew_or_go_install actionlint github.com/rhysd/actionlint/cmd/actionlint@latest -- actionlint
 fi
+
+run_linter .markdownlint-cli2.yaml "Checking Markdown..." markdownlint-cli2 brew_or_npm_install markdownlint-cli2 -- markdownlint-cli2 "**/*.md"
+run_linter .yamllint.yml "Checking YAML..." yamllint brew_or_apt_install yamllint -- yamllint --strict .
+run_linter .shellcheckrc "Checking shell scripts..." shellcheck brew_or_apt_install shellcheck -- lint_shell_scripts
+run_linter .hadolint.yaml "Checking Dockerfiles..." hadolint install_hadolint -- lint_dockerfiles
+run_linter .cfnlintrc "Checking CloudFormation templates..." cfn-lint brew_or_pipx_install cfn-lint -- cfn-lint --non-zero-exit-code error
+run_linter .golangci.yml "Checking Go..." golangci-lint brew_or_go_install golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest -- golangci-lint run
+run_linter .pmd.xml "Checking Java/JS/SQL with pmd..." pmd install_pmd -- with_trailing_blank_line pmd check --dir . --format textcolor --rulesets ".pmd.xml"
+run_linter .eslintrc.json "Checking JS with eslint..." "" install_eslint8 -- eslint .
+run_linter .editorconfig "Checking Kotlin with ktlint..." ktlint brew_or_apt_install ktlint -- ktlint
+run_linter .bandit "Checking Python with bandit..." bandit brew_or_apt_install bandit python3-bandit -- with_trailing_blank_line bandit -ll --ini .bandit --silent .
+run_linter .flake8 "Checking Python with flake8..." "" install_flake8 -- flake8 .
+run_linter .protolint.yaml "Checking Protocol Buffer with protolint..." protolint brew_or_go_install protolint github.com/yoheimuta/protolint/cmd/protolint@latest yoheimuta/protolint -- protolint .
+run_linter .rubocop.yml "Checking Ruby..." "" install_rubocop -- with_trailing_blank_line rubocop
+run_linter .semgrepignore "Checking with semgrep..." semgrep brew_or_pipx_install semgrep -- semgrep scan --config=auto --severity=ERROR --error --quiet .
+run_linter .trivyignore "Checking with trivy..." trivy install_trivy -- lint_trivy
+run_linter .swiftlint.yml "Checking Swift..." swiftlint install_swiftlint -- swiftlint lint --strict
 
 if [ "${FAILED}" -eq 1 ]; then
   echo "Some checks failed."
