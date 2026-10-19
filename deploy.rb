@@ -314,7 +314,7 @@ end
 
 def update_ssm_parameters_with_rollback(parameters, prefix, ami_id, asg, options, ssm_prefix, ssm_snapshot)
   update_ssm_parameters(parameters, prefix, ami_id, asg, options, ssm_prefix)
-rescue StandardError
+rescue StandardError, SignalException
   warn('SSM parameter update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
@@ -329,7 +329,7 @@ rescue SystemExit => e
   end
 
   raise
-rescue StandardError
+rescue StandardError, SignalException
   warn('CloudFormation update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
@@ -468,7 +468,7 @@ end
 # scale-down left the group running at the inflated size indefinitely.
 def run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, elb, target_group_arn, options)
   run_rolling_deploy(asg_resources, asg, mixed_params, plan[:new_capacity], elb, target_group_arn, options)
-rescue StandardError
+rescue StandardError, SignalException
   warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
   begin
     update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])

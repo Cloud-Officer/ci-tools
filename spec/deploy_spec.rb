@@ -1153,6 +1153,32 @@ RSpec.describe(Deploy) do
       end
     end
 
+    context 'when the job is cancelled' do
+      before do
+        allow(self).to(receive(:run_rolling_deploy).and_raise(Interrupt))
+        allow(self).to(receive(:update_asg_capacity))
+      end
+
+      it 'restores the original capacity and re-raises the interrupt', :aggregate_failures do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(Interrupt).and(output(/Rolling deploy failed, restoring desired capacity to 2/).to_stderr))
+        expect(self).to(have_received(:update_asg_capacity).with(asg_client, 'beta1-api-asg', hash_including(desired_capacity: 2)))
+      end
+    end
+
+    context 'when the job is terminated' do
+      before do
+        allow(self).to(receive(:run_rolling_deploy).and_raise(SignalException, 'TERM'))
+        allow(self).to(receive(:update_asg_capacity))
+      end
+
+      it 'restores the original capacity and re-raises the signal', :aggregate_failures do
+        expect { run_rolling_deploy_with_capacity_rollback(asg_resources, asg, mixed_params, plan, nil, nil, { instance: 'worker' }) }
+          .to(raise_error(SignalException, 'SIGTERM').and(output(/Rolling deploy failed/).to_stderr))
+        expect(self).to(have_received(:update_asg_capacity).with(asg_client, 'beta1-api-asg', hash_including(desired_capacity: 2)))
+      end
+    end
+
     context 'when the capacity restore fails' do
       before { allow(self).to(receive(:update_asg_capacity).and_raise(RuntimeError, 'restore boom')) }
 
@@ -1365,6 +1391,16 @@ RSpec.describe(Deploy) do
       end
     end
 
+    context 'when the job is cancelled during the stack update' do
+      before { allow(cfn).to(receive(:update_stack).and_raise(Interrupt)) }
+
+      it 'restores SSM parameters and re-raises the interrupt', :aggregate_failures do
+        expect { update_stack_with_ssm_rollback(cfn, 'test-stack', [], 'API', 'ami-123', ssm_snapshot) }
+          .to(raise_error(Interrupt).and(output(/CloudFormation update failed, rolling back SSM parameters/).to_stderr))
+        expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
+      end
+    end
+
     context 'with empty snapshot' do
       before { allow(cfn).to(receive(:update_stack).and_raise(StandardError.new('boom'))) }
 
@@ -1414,6 +1450,20 @@ RSpec.describe(Deploy) do
       it 'reports the rollback on stderr' do
         expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
           .to(raise_error(Aws::SSM::Errors::ThrottlingException).and(output(/SSM parameter update failed, rolling back SSM parameters/).to_stderr))
+      end
+    end
+
+    context 'when the job is terminated mid-loop' do
+      before do
+        allow(ssm).to(receive(:put_parameter)) do |args|
+          raise(SignalException, 'TERM') if args[:value] == 'ami-new'
+        end
+      end
+
+      it 'restores the snapshot and re-raises the signal', :aggregate_failures do
+        expect { update_ssm_parameters_with_rollback([parameter], 'API', 'ami-new', asg, { type: 't3.micro' }, '/beta/1', ssm_snapshot) }
+          .to(raise_error(SignalException).and(output(/SSM parameter update failed, rolling back SSM parameters/).to_stderr))
+        expect(ssm).to(have_received(:put_parameter).with(hash_including(name: param_name, value: 'ami-old')))
       end
     end
 
