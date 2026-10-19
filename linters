@@ -130,18 +130,12 @@ npm_install() {
   $(sudo_for_user_command npm) npm install -g "${1}"
 }
 
-# Common find filter used for files-to-lint discovery. Pass the -name pattern as $1.
-# The exclusion set is the same one github-build generates into the
-# `ghb:excluded-dirs` blocks of trivy.yaml and .semgrepignore from
-# config/languages.yaml. Keep the three in step: a directory listed there but not
-# here means build output and vendored code get linted by the tools driven from
-# this script, which is how the two lists drifted apart in the first place.
-# Extra find predicates may follow the pattern ("${@:2}"), so callers needing a
-# narrower search reuse this exclusion set instead of copying it and drifting.
+# Mirrors the ghb:excluded-dirs list in trivy.yaml/.semgrepignore; extra find predicates may follow the -name pattern.
 find_lintable() {
   find . -name "${1}" ${2+"${@:2}"} \
     -not -path "*/.build/*" \
     -not -path "*/.bundle/*" \
+    -not -path "*/.claude/worktrees/*" \
     -not -path "*/.git/*" \
     -not -path "*/.gradle/*" \
     -not -path "*/.hg/*" \

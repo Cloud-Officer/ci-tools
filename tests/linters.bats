@@ -302,6 +302,21 @@ PROTO
   [[ "$output" != *"node_modules/Dockerfile"* ]]
 }
 
+@test "find_lintable excludes Claude Code worktrees" {
+  skip_unless_bash4
+  touch .hadolint.yaml Dockerfile
+  mkdir -p .claude/worktrees/agent-1
+  touch .claude/worktrees/agent-1/Dockerfile
+
+  function hadolint() { echo "hadolint invoked: $*"; }
+  export -f hadolint
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hadolint invoked: ./Dockerfile"* ]]
+  [[ "$output" != *".claude/worktrees"* ]]
+}
+
 @test "runs yamllint when its config is present" {
   skip_unless_bash4
   touch .yamllint.yml
