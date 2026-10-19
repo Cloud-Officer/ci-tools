@@ -265,11 +265,40 @@ RSpec.describe(Deploy) do
         expect(Aws::EC2::Waiters::ImageAvailable).to(have_received(:new).with(hash_including(max_attempts: 256)))
       end
     end
+
+    context 'when waiting for the image' do
+      let(:waiter) { instance_double(Aws::EC2::Waiters::ImageAvailable, wait: nil) }
+
+      before { allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_return(waiter)) }
+
+      it 'filters only on the image id so the failed state stays visible' do
+        create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options)
+        expect(waiter).to(have_received(:wait).with({ filters: [{ name: 'image-id', values: ['ami-new123'] }] }))
+      end
+    end
+
+    context 'when the image creation fails' do
+      before do
+        ec2.client.stub_responses(:describe_images, { images: [{ state: 'failed', image_id: 'ami-new123', state_reason: { code: 'Client.InternalError', message: 'snapshot failed' } }] })
+        allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_wrap_original { |original, waiter_options| original.call(waiter_options.merge(delay: 0)) })
+      end
+
+      it 'raises with the image state reason' do
+        expect { create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options) }
+          .to(raise_error(RuntimeError, 'Image ami-new123 creation failed: snapshot failed'))
+      end
+
+      it 'raises without a reason when the image reports none' do
+        ec2.client.stub_responses(:describe_images, { images: [{ state: 'failed', image_id: 'ami-new123' }] })
+        expect { create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options) }
+          .to(raise_error(RuntimeError, 'Image ami-new123 creation failed'))
+      end
+    end
   end
 
   describe '#find_auto_scaling_group' do
     let(:asg_resources) { Aws::AutoScaling::Resource.new(stub_responses: true) }
-    let(:options) { { environment: 'beta', instance: 'api' } }
+    let(:options)       { { environment: 'beta', instance: 'api' }             }
 
     context 'when matching ASG exists' do
       before { asg_resources.client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg')) }

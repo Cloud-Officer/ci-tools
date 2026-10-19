@@ -141,9 +141,12 @@ def create_ami(ec2, instance_id, instance_name, options)
   ami = ec2.client.create_image({ instance_id: instance_id, name: instance_name.sub('standalone', Time.now.strftime('%Y-%m-%d-%H%M%S')) })
   puts("Creating image #{ami.image_id}...")
   max_attempts = options[:instance] == 'worker' ? 1024 : 256
-  Aws::EC2::Waiters::ImageAvailable.new({ client: ec2.client, max_attempts: max_attempts, delay: 30 }).wait(
-    { filters: [{ name: 'image-id', values: [ami.image_id] }, { name: 'state', values: ['available'] }] }
-  )
+  begin
+    Aws::EC2::Waiters::ImageAvailable.new({ client: ec2.client, max_attempts: max_attempts, delay: 30 }).wait({ filters: [{ name: 'image-id', values: [ami.image_id] }] })
+  rescue Aws::Waiters::Errors::FailureStateError => e
+    reason = e.response.images.first.state_reason&.message
+    raise("Image #{ami.image_id} creation failed#{": #{reason}" unless reason.to_s.empty?}")
+  end
 
   puts("Image creation completed for #{ami.image_id}.")
   ami.image_id
