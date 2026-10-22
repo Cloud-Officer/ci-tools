@@ -26,11 +26,11 @@
   "Ruby:aws-eventstream": {
     "language": "Ruby",
     "package": "aws-eventstream",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "license": "Apache-2.0",
     "description": "Amazon Web Services event stream library",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -38,11 +38,11 @@
   "Ruby:aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1296.0",
+    "version": "1.1297.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-18",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -50,11 +50,11 @@
   "Ruby:aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.170.0",
+    "version": "1.171.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -62,11 +62,11 @@
   "Ruby:aws-sdk-cloudformation": {
     "language": "Ruby",
     "package": "aws-sdk-cloudformation",
-    "version": "1.162.0",
+    "version": "1.163.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -74,11 +74,11 @@
   "Ruby:aws-sdk-cloudfront": {
     "language": "Ruby",
     "package": "aws-sdk-cloudfront",
-    "version": "1.159.0",
+    "version": "1.160.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -86,11 +86,11 @@
   "Ruby:aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.167.0",
+    "version": "1.168.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -98,11 +98,11 @@
   "Ruby:aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.259.0",
+    "version": "3.260.0",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -110,11 +110,11 @@
   "Ruby:aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.657.0",
+    "version": "1.659.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -122,11 +122,11 @@
   "Ruby:aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.160.0",
+    "version": "1.162.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -134,11 +134,11 @@
   "Ruby:aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.155.0",
+    "version": "1.157.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -146,11 +146,11 @@
   "Ruby:aws-sdk-kms": {
     "language": "Ruby",
     "package": "aws-sdk-kms",
-    "version": "1.134.0",
+    "version": "1.135.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -158,11 +158,11 @@
   "Ruby:aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.200.0",
+    "version": "1.202.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -170,11 +170,11 @@
   "Ruby:aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.224.0",
+    "version": "1.226.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-10-20",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -542,11 +542,11 @@
   "Ruby:rubocop": {
     "language": "Ruby",
     "package": "rubocop",
-    "version": "1.92.0",
+    "version": "1.92.1",
     "license": "MIT",
     "description": "RuboCop is a Ruby code style checking and code formatting tool.",
     "website": "https://rubocop.org/",
-    "last_verified_at": "2026-10-12",
+    "last_verified_at": "2026-10-22",
     "risk_level": "Low",
     "requirements": "Ruby linter",
     "verification_reasoning": "Most popular gem on rubygems"
