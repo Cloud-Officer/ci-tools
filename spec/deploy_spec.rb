@@ -131,6 +131,22 @@ RSpec.describe(Deploy) do
     end
   end
 
+  describe '#log' do
+    it 'prefixes stdout messages with a fixed-width 24h local timestamp' do
+      allow(Time).to(receive(:now).and_return(Time.new(2026, 1, 2, 3, 4, 5)))
+      expect { log('hello') }
+        .to(output("2026-01-02 03:04:05 hello\n").to_stdout)
+    end
+  end
+
+  describe '#log_warn' do
+    it 'prefixes stderr messages with a fixed-width 24h local timestamp' do
+      allow(Time).to(receive(:now).and_return(Time.new(2026, 1, 2, 23, 4, 5)))
+      expect { log_warn('oops') }
+        .to(output("2026-01-02 23:04:05 oops\n").to_stderr)
+    end
+  end
+
   describe '#load_balanced_instance?' do
     it 'returns true for api' do
       expect(load_balanced_instance?('api')).to(be(true))
