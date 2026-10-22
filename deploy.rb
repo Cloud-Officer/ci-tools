@@ -26,6 +26,18 @@ LOAD_BALANCED_INSTANCES = %w[api grpc].freeze
 # CloudFormation stack statuses to query
 ACTIVE_STACK_STATUSES = %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE].freeze
 
+def log_timestamp
+  Time.now.strftime('%Y-%m-%d %H:%M:%S')
+end
+
+def log(message)
+  puts("#{log_timestamp} #{message}")
+end
+
+def log_warn(message)
+  warn("#{log_timestamp} #{message}")
+end
+
 def load_balanced_instance?(instance)
   LOAD_BALANCED_INSTANCES.include?(instance)
 end
@@ -41,17 +53,17 @@ def poll_until(description:, max_attempts: MAX_POLL_ATTEMPTS, interval: POLL_INT
 end
 
 def wait_for_healthy_instances(elb, target_group_arn)
-  puts('Waiting for all instances to be healthy...')
+  log('Waiting for all instances to be healthy...')
   poll_until(description: 'waiting for healthy instances') do
     descriptions = elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions
 
     if descriptions.empty?
-      puts('No targets registered yet...')
+      log('No targets registered yet...')
       next false
     end
 
     unhealthy = descriptions.count { |h| h.target_health.state != 'healthy' }
-    puts("Waiting on #{unhealthy} unhealthy targets...")
+    log("Waiting on #{unhealthy} unhealthy targets...")
     unhealthy.zero?
   end
 end
@@ -65,7 +77,7 @@ def wait_for_asg_instance_count(asg_client, asg_name, target_count, direction:)
 
     instances = response.first.instances
     count = direction == :up ? instances.count { |i| i.lifecycle_state == 'InService' } : instances.count
-    puts("Waiting on instances #{count}/#{target_count}...")
+    log("Waiting on instances #{count}/#{target_count}...")
     direction == :up ? count >= target_count : count <= target_count
   end
 end
@@ -91,7 +103,7 @@ def update_distribution_lambda(cloudfront, distribution, function_arn)
   current = viewer_request_association(distribution.default_cache_behavior.lambda_function_associations)
   return if current&.lambda_function_arn == function_arn
 
-  puts("Updating distribution #{distribution.id} lambda function associations to #{function_arn}...")
+  log("Updating distribution #{distribution.id} lambda function associations to #{function_arn}...")
   config = cloudfront.get_distribution_config({ id: distribution.id })
   config_assoc = config.distribution_config.default_cache_behavior.lambda_function_associations
   target = viewer_request_association(config_assoc)
@@ -104,15 +116,15 @@ def update_distribution_lambda(cloudfront, distribution, function_arn)
   end
 
   cloudfront.update_distribution({ id: distribution.id, if_match: config.etag, distribution_config: config.distribution_config })
-  puts("Update completed successfully for distribution #{distribution.id} and lambda function associations to #{function_arn}.")
+  log("Update completed successfully for distribution #{distribution.id} and lambda function associations to #{function_arn}.")
 end
 
 def publish_lambda_and_update_cloudfront(options)
-  puts("Publishing lambda version for function #{options[:lambda_publish_version]}...")
+  log("Publishing lambda version for function #{options[:lambda_publish_version]}...")
   lambda_client = Aws::Lambda::Client.new
   version = lambda_client.publish_version({ function_name: "#{options[:environment]}-#{options[:lambda_publish_version]}" })
-  puts("Publish completed successfully for function ARN = #{version.function_arn}.")
-  puts('Checking cloudfront distributions...')
+  log("Publish completed successfully for function ARN = #{version.function_arn}.")
+  log('Checking cloudfront distributions...')
   cloudfront = Aws::CloudFront::Client.new
   distribution = find_matching_distribution(cloudfront, options[:environment])
   raise('Unable to find cloudfront distribution') if distribution.nil?
@@ -133,7 +145,7 @@ def single_match!(matches, description)
 end
 
 def find_standalone_instance(ec2, options)
-  puts("Searching for #{options[:instance]} standalone instance...")
+  log("Searching for #{options[:instance]} standalone instance...")
   pattern = /\A#{Regexp.escape(options[:instance])}-#{environment_pattern(options[:environment])}-standalone\z/
   matches = {}
 
@@ -144,13 +156,13 @@ def find_standalone_instance(ec2, options)
   end
 
   name, instance_id = single_match!(matches, 'standalone instance')
-  puts("Standalone instance #{name} found with id #{instance_id}.")
+  log("Standalone instance #{name} found with id #{instance_id}.")
   [instance_id, name]
 end
 
 def create_ami(ec2, instance_id, instance_name, options)
   ami = ec2.client.create_image({ instance_id: instance_id, name: instance_name.sub('standalone', Time.now.strftime('%Y-%m-%d-%H%M%S')) })
-  puts("Creating image #{ami.image_id}...")
+  log("Creating image #{ami.image_id}...")
   max_attempts = options[:instance] == 'worker' ? 1024 : 256
   begin
     Aws::EC2::Waiters::ImageAvailable.new({ client: ec2.client, max_attempts: max_attempts, delay: 30 }).wait({ filters: [{ name: 'image-id', values: [ami.image_id] }] })
@@ -159,24 +171,24 @@ def create_ami(ec2, instance_id, instance_name, options)
     raise("Image #{ami.image_id} creation failed#{": #{reason}" unless reason.to_s.empty?}")
   end
 
-  puts("Image creation completed for #{ami.image_id}.")
+  log("Image creation completed for #{ami.image_id}.")
   ami.image_id
 end
 
 def find_auto_scaling_group(asg_resources, stack_name, options)
-  puts('Checking auto scaling groups...')
+  log('Checking auto scaling groups...')
   pattern = /\A#{Regexp.escape(stack_name)}-#{Regexp.escape(options[:instance])}-[^-]+\z/
   matches = asg_resources.groups.each_with_object({}) { |group, found| found[group.auto_scaling_group_name] = group if group.auto_scaling_group_name.match?(pattern) }
   name, group = single_match!(matches, 'auto scaling group')
 
-  puts("Auto scaling group #{name} found with desired capacity at #{group.desired_capacity}.")
+  log("Auto scaling group #{name} found with desired capacity at #{group.desired_capacity}.")
   { name: name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
 end
 
 def find_target_group(elb, stack_name, options)
   ports = options[:instance] == 'grpc' ? ['8443-HTTP2'] : %w[80 443]
   names = ports.map { |port| "#{stack_name.split('-').first}-#{port}" }
-  puts('Checking load balancer target groups...')
+  log('Checking load balancer target groups...')
 
   matches =
     elb.describe_target_groups.each_with_object({}) do |page, found|
@@ -187,7 +199,7 @@ def find_target_group(elb, stack_name, options)
 end
 
 def find_cloudformation_stack(cfn, options)
-  puts('Checking cloudformation stacks...')
+  log('Checking cloudformation stacks...')
   pattern = /\A#{environment_pattern(options[:environment])}-StackInstances-[^-]+\z/
 
   matches =
@@ -196,7 +208,7 @@ def find_cloudformation_stack(cfn, options)
     end
 
   name, status = single_match!(matches, 'cloudformation stack')
-  puts("Stack #{name} found with status #{status}.")
+  log("Stack #{name} found with status #{status}.")
   name
 end
 
@@ -250,7 +262,7 @@ def update_ssm_parameters(deploy)
     replace_with = resolve_parameter_value(parameter.parameter_key, deploy)
     next if replace_with.nil?
 
-    puts("Updating SSM parameter '#{deploy.ssm_prefix}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
+    log("Updating SSM parameter '#{deploy.ssm_prefix}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
     ssm.put_parameter({ name: "#{deploy.ssm_prefix}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
   end
 end
@@ -298,7 +310,7 @@ def restore_ssm_parameters(ssm_snapshot)
   ssm = Aws::SSM::Client.new
 
   ssm_snapshot.each do |name, value|
-    puts("Restoring SSM parameter '#{name}' to '#{value}'...")
+    log("Restoring SSM parameter '#{name}' to '#{value}'...")
     ssm.put_parameter({ name: name, value: value, type: 'String', overwrite: true })
   end
 end
@@ -322,21 +334,21 @@ def wait_for_stack_update(cfn, stack_name)
 end
 
 def update_cloudformation_stack(cfn, deploy)
-  puts("Updating cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}...")
+  log("Updating cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}...")
   begin
     cfn.update_stack({ stack_name: deploy.stack_name, use_previous_template: true, parameters: deploy.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
   rescue Aws::CloudFormation::Errors::ValidationError => e
-    warn("Stopping here: #{e.message}")
+    log_warn("Stopping here: #{e.message}")
     exit(e.message.include?('No updates are to be performed') ? 0 : 1)
   end
   wait_for_stack_update(cfn, deploy.stack_name)
-  puts("Update completed successfully for cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}.")
+  log("Update completed successfully for cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}.")
 end
 
 def update_ssm_parameters_with_rollback(deploy, ssm_snapshot)
   update_ssm_parameters(deploy)
 rescue StandardError, SignalException
-  warn('SSM parameter update failed, rolling back SSM parameters...')
+  log_warn('SSM parameter update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
 end
@@ -345,13 +357,13 @@ def update_stack_with_ssm_rollback(cfn, deploy, ssm_snapshot)
   update_cloudformation_stack(cfn, deploy)
 rescue SystemExit => e
   if e.status.nonzero?
-    warn('CloudFormation update failed, rolling back SSM parameters...')
+    log_warn('CloudFormation update failed, rolling back SSM parameters...')
     restore_ssm_parameters(ssm_snapshot)
   end
 
   raise
 rescue StandardError, SignalException
-  warn('CloudFormation update failed, rolling back SSM parameters...')
+  log_warn('CloudFormation update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
 end
@@ -447,7 +459,7 @@ def warm_up_after_scale_up(rollout)
     wait_for_healthy_instances(rollout.elb, rollout.target_group_arn)
   end
 
-  puts('Waiting for cache/instances to warm up...')
+  log('Waiting for cache/instances to warm up...')
   sleep(rollout.options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
 end
 
@@ -456,12 +468,12 @@ def scale_down_after_deploy(rollout, new_capacity)
   mixed_params = rollout.mixed_params
 
   if rollout.options[:skip_scale_down]
-    puts("Setting max_size to #{asg[:max_size]}...")
+    log("Setting max_size to #{asg[:max_size]}...")
     update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], max_size: asg[:max_size])
     return
   end
 
-  puts("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
+  log("Setting desired capacity from #{new_capacity} to #{asg[:desired_capacity]}...")
   update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
 
   if load_balanced_instance?(rollout.options[:instance])
@@ -469,20 +481,20 @@ def scale_down_after_deploy(rollout, new_capacity)
     wait_for_healthy_instances(rollout.elb, rollout.target_group_arn)
   end
 
-  puts('Waiting for auto scaling group to stop the instances...')
+  log('Waiting for auto scaling group to stop the instances...')
   wait_for_asg_instance_count(rollout.asg_client, asg[:name], asg[:desired_capacity], direction: :down)
 end
 
 def run_rolling_deploy(rollout, new_capacity)
   if new_capacity > rollout.asg[:desired_capacity]
-    puts('Waiting for auto scaling group to start the instances...')
+    log('Waiting for auto scaling group to start the instances...')
     wait_for_asg_instance_count(rollout.asg_client, rollout.asg[:name], new_capacity, direction: :up)
     warm_up_after_scale_up(rollout)
   end
 
   scale_down_after_deploy(rollout, new_capacity)
 ensure
-  puts('Restoring ASG mixed-instances policy...')
+  log('Restoring ASG mixed-instances policy...')
   update_asg_capacity(rollout.asg_client, rollout.asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: rollout.mixed_params[:percent_above])
 end
 
@@ -490,12 +502,12 @@ def run_rolling_deploy_with_capacity_rollback(rollout, plan)
   run_rolling_deploy(rollout, plan[:new_capacity])
 rescue StandardError, SignalException
   asg = rollout.asg
-  warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
+  log_warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
   begin
     update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: rollout.mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])
   rescue StandardError => e
-    warn("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
-    warn(e.full_message)
+    log_warn("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
+    log_warn(e.full_message)
   end
 
   raise
@@ -510,7 +522,7 @@ end
 
 def run_deployment(options)
   if options[:profile]
-    puts("Setting profile '#{options[:profile]}'...")
+    log("Setting profile '#{options[:profile]}'...")
     Aws.config.update({ profile: options[:profile] })
   end
 
@@ -521,7 +533,7 @@ def run_deployment(options)
 
   ami_id = resolve_ami_id(options)
   if options[:create_ami_only] && options[:ami].nil?
-    puts('Exiting now as --create_ami_only was supplied.')
+    log('Exiting now as --create_ami_only was supplied.')
     return
   end
 
@@ -543,14 +555,14 @@ def run_deployment(options)
   mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
   plan = compute_asg_capacity_plan(asg, **factors)
 
-  puts("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
+  log("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
   update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: plan[:new_capacity], max_size: plan[:new_max])
 
   rollout = RollingDeploy.new(asg_client: asg_resources.client, asg: asg, mixed_params: mixed_params, elb: elb, target_group_arn: target_group_arn, options: options)
   run_rolling_deploy_with_capacity_rollback(rollout, plan)
 
-  puts("Update completed successfully for Auto scaling group #{asg[:name]}.")
-  puts('Deployment completed successfully.')
+  log("Update completed successfully for Auto scaling group #{asg[:name]}.")
+  log('Deployment completed successfully.')
 end
 
 def parse_deploy_options(argv = ARGV)
@@ -572,7 +584,7 @@ end
 if __FILE__ == $PROGRAM_NAME
   CliMain.run! do
     options = parse_deploy_options
-    puts('Starting deployment...')
+    log('Starting deployment...')
     run_deployment(options)
   end
 end
