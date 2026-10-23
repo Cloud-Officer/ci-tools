@@ -109,20 +109,22 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 **Key Components:**
 
-- `poll_until`: Shared polling helper that raises after `MAX_POLL_ATTEMPTS` (120) attempts at `POLL_INTERVAL` (15 s) spacing
+- `poll_until`: Shared polling helper that checks first, sleeps `POLL_INTERVAL` (15 s) between checks, and raises after `MAX_POLL_ATTEMPTS` (120) checks
 - `wait_for_healthy_instances`: Polls ELB target group health status until all instances are healthy
-- `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count
+- `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count. On scale-down, instances in a `TERMINATING_STATES` state count as gone
 - `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
 - `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
 - `fetch_no_echo_parameter_keys`: Reads the stack's own template summary and returns every parameter declared `NoEcho`, so the secret set is discovered rather than hand-maintained. A failed `get_template_summary` call aborts the deploy before any SSM or stack change
 - `mark_cfn_secrets_for_previous_value!`: Flags those parameters, unioned with the `CFN_KNOWN_SECRET_PARAMETERS` backstop, plus any parameter whose value is the `****` mask, as `use_previous_value` so secrets are never re-sent to CloudFormation. `describe_stacks` reports a `NoEcho` value as `****`, and resending that string would overwrite the real secret with asterisks
 - `create_ami`: Creates an AMI from the standalone instance and waits on `Aws::EC2::Waiters::ImageAvailable`
+- `deploy_each`: Runs one step for every instance named in `--instance` (comma-separated), in parallel threads with a `[name]` log tag when there are several, and raises after all finish if any failed
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
 
 **Functionality:**
 
-- Creates EC2 AMIs from standalone instances
+- Creates EC2 AMIs from standalone instances, in parallel when several instances are deployed
+- Deploys several instances in one run with one SSM update and one CloudFormation stack update, then rolls the auto scaling groups out in parallel (or one at a time with `--sequential_rollout`)
 - Updates CloudFormation stack parameters via SSM
 - Captures SSM parameter snapshots and restores them if the CloudFormation update fails
 - Preserves existing values for secret CloudFormation parameters instead of transmitting them
@@ -486,9 +488,9 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 1. Scale up ASG to double capacity plus buffer (configurable for production)
 2. Wait for new instances to become healthy in target group
-3. Allow warm-up period for caches
+3. Allow a fixed 60 s warm-up period (`WARMUP`) for caches
 4. Scale down to original capacity
-5. Wait for old instances to terminate
+5. Wait until only the original count of instances is left outside the terminating states
 
 **Parameters:**
 
@@ -628,7 +630,7 @@ can change.
 |---------------------|-----------------------------------------------------------|-------------------------------------------------------|
 | Capacity Limits     | Respects ASG max_size constraints                         | `deploy.rb` in ASG update section                     |
 | Health Checks       | Waits for ELB target health before proceeding             | `deploy.rb` in `wait_for_healthy_instances`           |
-| Warm-up Periods     | Configurable sleep times for cache warming                | `deploy.rb` in `WARMUP_SHORT` / `WARMUP_LONG`         |
+| Warm-up Period      | Fixed 60 s sleep for cache warming                        | `deploy.rb` in `WARMUP`                               |
 | Polling Timeouts    | Wait loops raise after a bounded attempt count            | `deploy.rb` in `poll_until`                           |
 | Secret Preservation | CFN `NoEcho` parameters updated with `use_previous_value` | `deploy.rb` in `mark_cfn_secrets_for_previous_value!` |
 

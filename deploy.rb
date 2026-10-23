@@ -17,11 +17,13 @@ require_relative 'lib/cli_main'
 # Timing constants for polling and warmup periods
 POLL_INTERVAL = 15      # Seconds between status checks
 MAX_POLL_ATTEMPTS = 120 # Max polling attempts (30 minutes at 15-second intervals)
-WARMUP_SHORT = 60       # Short warmup period for standard instances
-WARMUP_LONG = 180       # Long warmup period for gRPC instances
+WARMUP = 60             # Warmup period after scale-up
 
 # Instance types that use load balancer health checks
 LOAD_BALANCED_INSTANCES = %w[api grpc].freeze
+
+# ASG lifecycle states of instances on their way out
+TERMINATING_STATES = %w[Terminating Terminating:Wait Terminating:Proceed Terminated].freeze
 
 # CloudFormation stack statuses to query
 ACTIVE_STACK_STATUSES = %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE].freeze
@@ -30,12 +32,104 @@ def log_timestamp
   Time.now.strftime('%Y-%m-%d %H:%M:%S')
 end
 
+def log_tag
+  tag = Thread.current[:deploy_log_tag]
+  tag.nil? ? '' : "[#{tag}] "
+end
+
 def log(message)
-  puts("#{log_timestamp} #{message}")
+  puts("#{log_timestamp} #{log_tag}#{message}")
 end
 
 def log_warn(message)
-  warn("#{log_timestamp} #{message}")
+  warn("#{log_timestamp} #{log_tag}#{message}")
+end
+
+def with_log_tag(tag)
+  previous = Thread.current[:deploy_log_tag]
+  Thread.current[:deploy_log_tag] = tag
+  yield
+ensure
+  Thread.current[:deploy_log_tag] = previous
+end
+
+def instance_names(options)
+  names = options[:instance].to_s.split(',').filter_map { |name| name.strip unless name.strip.empty? }
+  names.uniq!
+  names
+end
+
+def instance_options(options, name)
+  options.merge(instance: name)
+end
+
+def map_instances(names)
+  names.to_h { |name| [name, with_log_tag(names.one? ? nil : name) { yield(name) }] }
+end
+
+def capture_instance_outcome(name)
+  with_log_tag(name) do
+    { value: yield(name) }
+  rescue StandardError => e
+    log_warn("Failed: #{e.full_message}")
+    { error: e }
+  end
+end
+
+def join_quietly(thread)
+  thread.join
+rescue StandardError, SignalException
+  nil
+end
+
+def collect_thread_outcomes(threads)
+  threads.transform_values(&:value)
+rescue SignalException
+  threads.values.select(&:alive?).each { |thread| thread.raise(Interrupt) }
+  threads.each_value { |thread| join_quietly(thread) }
+  raise
+end
+
+def run_instances_in_parallel(names, &)
+  threads =
+    names.to_h do |name|
+      thread =
+        Thread.new do # rubocop:disable ThreadSafety/NewThread
+          Thread.current.report_on_exception = false
+          capture_instance_outcome(name, &)
+        end
+      [name, thread]
+    end
+
+  collect_thread_outcomes(threads)
+end
+
+def run_for_instances(names, parallel:, &)
+  return run_instances_in_parallel(names, &) if parallel
+
+  names.to_h { |name| [name, capture_instance_outcome(name, &)] }
+end
+
+def report_instance_outcomes(outcomes, label)
+  outcomes.each do |name, outcome|
+    if outcome.key?(:error)
+      log_warn("#{label} for #{name}: FAILED - #{outcome[:error].message}")
+    else
+      log("#{label} for #{name}: OK")
+    end
+  end
+
+  failed = outcomes.select { |_name, outcome| outcome.key?(:error) }
+                   .keys
+  raise("#{label} failed for: #{failed.join(', ')}") unless failed.empty?
+end
+
+def deploy_each(names, parallel:, label:, &)
+  return { names.first => yield(names.first) } if names.one?
+
+  outcomes = run_for_instances(names, parallel: parallel, &)
+  report_instance_outcomes(outcomes, label)
+  outcomes.transform_values { |outcome| outcome[:value] }
 end
 
 def load_balanced_instance?(instance)
@@ -45,10 +139,10 @@ end
 def poll_until(description:, max_attempts: MAX_POLL_ATTEMPTS, interval: POLL_INTERVAL)
   attempts = 0
   loop do
-    raise("Timed out #{description}") if (attempts += 1) > max_attempts
+    break if yield
+    raise("Timed out #{description}") if (attempts += 1) >= max_attempts
 
     sleep(interval)
-    break if yield
   end
 end
 
@@ -76,7 +170,7 @@ def wait_for_asg_instance_count(asg_client, asg_name, target_count, direction:)
     raise("Unable to describe ASG #{asg_name}") if response.empty?
 
     instances = response.first.instances
-    count = direction == :up ? instances.count { |i| i.lifecycle_state == 'InService' } : instances.count
+    count = direction == :up ? instances.count { |i| i.lifecycle_state == 'InService' } : instances.count { |i| !TERMINATING_STATES.include?(i.lifecycle_state) }
     log("Waiting on instances #{count}/#{target_count}...")
     direction == :up ? count >= target_count : count <= target_count
   end
@@ -333,35 +427,34 @@ def wait_for_stack_update(cfn, stack_name)
   end
 end
 
-def update_cloudformation_stack(cfn, deploy)
-  log("Updating cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}...")
+def update_cloudformation_stack(cfn, deploys)
+  stack_name = deploys.first.stack_name
+  images = deploys.map { |deploy| "#{deploy.prefix}ImageId #{deploy.ami_id}" }
+                  .join(', ')
+  log("Updating cloudformation stack #{stack_name} with #{images}...")
   begin
-    cfn.update_stack({ stack_name: deploy.stack_name, use_previous_template: true, parameters: deploy.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
+    cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: deploys.first.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
   rescue Aws::CloudFormation::Errors::ValidationError => e
+    raise unless e.message.include?('No updates are to be performed')
+
     log_warn("Stopping here: #{e.message}")
-    exit(e.message.include?('No updates are to be performed') ? 0 : 1)
+    return :no_updates
   end
-  wait_for_stack_update(cfn, deploy.stack_name)
-  log("Update completed successfully for cloudformation stack #{deploy.stack_name} with #{deploy.prefix}ImageId #{deploy.ami_id}.")
+  wait_for_stack_update(cfn, stack_name)
+  log("Update completed successfully for cloudformation stack #{stack_name} with #{images}.")
+  :updated
 end
 
-def update_ssm_parameters_with_rollback(deploy, ssm_snapshot)
-  update_ssm_parameters(deploy)
+def update_ssm_parameters_with_rollback(deploys, ssm_snapshot)
+  deploys.each { |deploy| update_ssm_parameters(deploy) }
 rescue StandardError, SignalException
   log_warn('SSM parameter update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
   raise
 end
 
-def update_stack_with_ssm_rollback(cfn, deploy, ssm_snapshot)
-  update_cloudformation_stack(cfn, deploy)
-rescue SystemExit => e
-  if e.status.nonzero?
-    log_warn('CloudFormation update failed, rolling back SSM parameters...')
-    restore_ssm_parameters(ssm_snapshot)
-  end
-
-  raise
+def update_stack_with_ssm_rollback(cfn, deploys, ssm_snapshot)
+  update_cloudformation_stack(cfn, deploys)
 rescue StandardError, SignalException
   log_warn('CloudFormation update failed, rolling back SSM parameters...')
   restore_ssm_parameters(ssm_snapshot)
@@ -425,14 +518,6 @@ def compute_asg_capacity_plan(asg, asg_increase:, asg_multiplier:)
   { new_capacity: new_capacity, new_max: new_max }
 end
 
-def resolve_ami_id(options)
-  return options[:ami] if options[:ami]
-
-  ec2 = Aws::EC2::Resource.new
-  instance_id, instance_name = find_standalone_instance(ec2, options)
-  create_ami(ec2, instance_id, instance_name, options)
-end
-
 def discover_cfn_stack_context(cfn, options)
   stack_name = find_cloudformation_stack(cfn, options)
   stacks_response = cfn.describe_stacks({ stack_name: stack_name }).stacks
@@ -454,13 +539,10 @@ def discover_cfn_stack_context(cfn, options)
 end
 
 def warm_up_after_scale_up(rollout)
-  if load_balanced_instance?(rollout.options[:instance])
-    sleep(WARMUP_SHORT) if rollout.options[:instance] == 'grpc'
-    wait_for_healthy_instances(rollout.elb, rollout.target_group_arn)
-  end
+  wait_for_healthy_instances(rollout.elb, rollout.target_group_arn) if load_balanced_instance?(rollout.options[:instance])
 
   log('Waiting for cache/instances to warm up...')
-  sleep(rollout.options[:instance] == 'grpc' ? WARMUP_LONG : WARMUP_SHORT)
+  sleep(WARMUP)
 end
 
 def scale_down_after_deploy(rollout, new_capacity)
@@ -531,53 +613,113 @@ def run_deployment(options)
     return
   end
 
-  ami_id = resolve_ami_id(options)
-  if options[:create_ami_only] && options[:ami].nil?
+  names = instance_names(options)
+  ami_only = options[:create_ami_only] && options[:ami].nil?
+  ec2 = Aws::EC2::Resource.new if options[:ami].nil?
+  standalones = options[:ami] ? {} : map_instances(names) { |name| find_standalone_instance(ec2, instance_options(options, name)) }
+  targets = discover_deploy_targets(names, options) unless ami_only
+  ami_ids = resolve_ami_ids(ec2, names, standalones, options)
+
+  if ami_only
     log('Exiting now as --create_ami_only was supplied.')
     return
   end
 
-  factors = resolve_capacity_factors(options)
+  deploy_to_targets(targets, ami_ids, options)
+end
+
+def resolve_ami_ids(ec2, names, standalones, options)
+  return names.to_h { |name| [name, options[:ami]] } if options[:ami]
+
+  deploy_each(names, parallel: true, label: 'AMI creation') do |name|
+    instance_id, instance_name = standalones[name]
+    create_ami(ec2, instance_id, instance_name, instance_options(options, name))
+  end
+end
+
+def discover_deploy_targets(names, options)
   cfn = Aws::CloudFormation::Client.new
-  ctx = discover_cfn_stack_context(cfn, options)
-
+  ctx = discover_cfn_stack_context(cfn, instance_options(options, names.first))
   asg_resources = Aws::AutoScaling::Resource.new
-  asg = find_auto_scaling_group(asg_resources, ctx[:stack_name], options)
-  elb, target_group_arn = discover_load_balancer(ctx[:stack_name], options)
 
-  deploy = DeployContext.new(options: options, asg: asg, ami_id: ami_id, stack: ctx)
-  ssm_snapshot = capture_ssm_snapshot(deploy)
-  update_ssm_parameters_with_rollback(deploy, ssm_snapshot)
-  mark_cfn_secrets_for_previous_value!(deploy.parameters, ctx[:secret_parameter_keys])
+  instances =
+    map_instances(names) do |name|
+      per_instance = instance_options(options, name)
+      asg = find_auto_scaling_group(asg_resources, ctx[:stack_name], per_instance)
+      elb, target_group_arn = discover_load_balancer(ctx[:stack_name], per_instance)
+      { options: per_instance, asg: asg, elb: elb, target_group_arn: target_group_arn }
+    end
 
-  update_stack_with_ssm_rollback(cfn, deploy, ssm_snapshot)
+  { cfn: cfn, ctx: ctx, asg_resources: asg_resources, instances: instances }
+end
+
+def deploy_to_targets(targets, ami_ids, options)
+  ctx = targets[:ctx]
+  deploys = targets[:instances].to_h { |name, target| [name, DeployContext.new(options: target[:options], asg: target[:asg], ami_id: ami_ids[name], stack: ctx.merge(prefix: parameter_prefix_for(name)))] }
+
+  ssm_snapshot = deploys.values.map { |deploy| capture_ssm_snapshot(deploy) }
+                        .reduce({}, :merge)
+  update_ssm_parameters_with_rollback(deploys.values, ssm_snapshot)
+  mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
+  return if update_stack_with_ssm_rollback(targets[:cfn], deploys.values, ssm_snapshot) == :no_updates
 
   mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
-  plan = compute_asg_capacity_plan(asg, **factors)
+  factors = resolve_capacity_factors(options)
+  asg_client = targets[:asg_resources].client
 
-  log("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
-  update_asg_capacity(asg_resources.client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: plan[:new_capacity], max_size: plan[:new_max])
+  deploy_each(deploys.keys, parallel: !options[:sequential_rollout], label: 'Deployment') do |name|
+    roll_out_instance(asg_client, deploys[name], targets[:instances][name], mixed_params, factors)
+  end
 
-  rollout = RollingDeploy.new(asg_client: asg_resources.client, asg: asg, mixed_params: mixed_params, elb: elb, target_group_arn: target_group_arn, options: options)
-  run_rolling_deploy_with_capacity_rollback(rollout, plan)
-
-  log("Update completed successfully for Auto scaling group #{asg[:name]}.")
   log('Deployment completed successfully.')
 end
 
+def roll_out_instance(asg_client, deploy, target, mixed_params, factors)
+  asg = deploy.asg
+  plan = compute_asg_capacity_plan(asg, **factors)
+
+  log("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
+  update_asg_capacity(asg_client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: plan[:new_capacity], max_size: plan[:new_max])
+
+  rollout = RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: target[:elb], target_group_arn: target[:target_group_arn], options: deploy.options)
+  run_rolling_deploy_with_capacity_rollback(rollout, plan)
+
+  log("Update completed successfully for Auto scaling group #{asg[:name]}.")
+end
+
+def validate_instance_list!(options)
+  names = instance_names(options)
+  error =
+    if names.empty?
+      'missing argument: instance'
+    elsif names.length > 1 && options[:ami]
+      '--ami cannot be used with more than one instance'
+    elsif names.length > 1 && options[:type]
+      '--type cannot be used with more than one instance'
+    end
+  return if error.nil?
+
+  warn(error)
+  exit(1)
+end
+
 def parse_deploy_options(argv = ARGV)
-  CliMain.parse_options!(mandatory: %i[environment instance profile], argv: argv) do |opts|
-    opts.on('--ami ami', String)
-    opts.on('--create_ami_only')
-    opts.on('--environment environment', String)
-    opts.on('--instance instance', String)
-    opts.on('--type instance_type', String)
-    opts.on('--lambda_publish_version function_name', String)
-    opts.on('--profile profile', String)
-    opts.on('--preserve_desired_capacity')
-    opts.on('--skip_scale_down')
-    opts.on('--spot_target_capacity spot_target_capacity', Integer)
-  end
+  options =
+    CliMain.parse_options!(mandatory: %i[environment instance profile], argv: argv) do |opts|
+      opts.on('--ami ami', String)
+      opts.on('--create_ami_only')
+      opts.on('--environment environment', String)
+      opts.on('--instance instance1,instance2', String)
+      opts.on('--type instance_type', String)
+      opts.on('--lambda_publish_version function_name', String)
+      opts.on('--profile profile', String)
+      opts.on('--preserve_desired_capacity')
+      opts.on('--sequential_rollout')
+      opts.on('--skip_scale_down')
+      opts.on('--spot_target_capacity spot_target_capacity', Integer)
+    end
+  validate_instance_list!(options)
+  options
 end
 
 # :nocov:
