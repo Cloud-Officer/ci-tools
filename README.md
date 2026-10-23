@@ -133,11 +133,12 @@ options
         --ami ami
         --create_ami_only
         --environment environment
-        --instance instance
+        --instance instance1,instance2
         --type instance_type
         --lambda_publish_version function_name
         --profile profile
         --preserve_desired_capacity
+        --sequential_rollout
         --skip_scale_down
         --spot_target_capacity spot_target_capacity
     -h, --help                       Print this help message
@@ -151,7 +152,15 @@ deploy.rb --profile in --environment beta --instance api
 
 # create a launch configuration and update the auto scaling group (and spot fleet if existing) from the provided AMI id
 deploy.rb --profile ugm --environment prod3 --instance worker --ami ami-09d6e0e85d7fba11d
+
+# create the api and grpc AMIs in parallel, update the stack once, then roll both auto scaling groups in parallel
+deploy.rb --profile ugm --environment rc --instance api,grpc
+
+# same, but roll the auto scaling groups one after another to limit the extra capacity
+deploy.rb --profile ugm --environment rc --instance api,grpc,worker --sequential_rollout
 ```
+
+With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others: its auto scaling group capacity is restored and the run exits 1. `--ami` and `--type` only apply to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
 
 ### encrypt-logs
 
