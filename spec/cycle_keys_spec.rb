@@ -658,5 +658,48 @@ RSpec.describe(CycleKeys) do
       disable_and_delete_old_key(iam, access_key, user_name, rollback)
       expect(rollback).not_to(have_received(:call))
     end
+
+    context 'when the new key has not propagated to IAM yet' do
+      let(:not_propagated_yet) { Aws::IAM::Errors::InvalidClientTokenId.new(nil, 'not yet valid') }
+
+      before { allow(self).to(receive(:sleep)) }
+
+      it 'retries the disable until the key is accepted', :aggregate_failures do
+        calls = 0
+        allow(iam).to(receive(:update_access_key)) { (calls += 1) < 3 ? raise(not_propagated_yet) : true }
+        disable_and_delete_old_key(iam, access_key, user_name, rollback)
+        expect(iam).to(have_received(:update_access_key).exactly(3).times)
+        expect(rollback).not_to(have_received(:call))
+      end
+
+      it 'retries the delete until the key is accepted', :aggregate_failures do
+        calls = 0
+        allow(iam).to(receive(:delete_access_key)) { (calls += 1) < 2 ? raise(not_propagated_yet) : true }
+        disable_and_delete_old_key(iam, access_key, user_name, rollback)
+        expect(iam).to(have_received(:delete_access_key).twice)
+        expect(rollback).not_to(have_received(:call))
+      end
+
+      it 'rolls back once the retries are exhausted', :aggregate_failures do
+        allow(iam).to(receive(:update_access_key).and_raise(not_propagated_yet))
+        expect { disable_and_delete_old_key(iam, access_key, user_name, rollback) }
+          .to(raise_error(Aws::IAM::Errors::InvalidClientTokenId))
+        expect(iam).to(have_received(:update_access_key).exactly(NEW_KEY_ACTIVATION_ATTEMPTS).times)
+        expect(rollback).to(have_received(:call).with('failed to disable old key'))
+      end
+    end
+
+    context 'when the delete fails after the old key was disabled' do
+      let(:after_disable) { instance_double(Proc, call: nil) }
+
+      before { allow(iam).to(receive(:delete_access_key).and_raise(Aws::IAM::Errors::ServiceError.new(nil, 'error'))) }
+
+      it 'uses the post-disable rollback', :aggregate_failures do
+        expect { disable_and_delete_old_key(iam, access_key, user_name, rollback, after_disable) }
+          .to(raise_error(Aws::IAM::Errors::ServiceError))
+        expect(after_disable).to(have_received(:call).with('failed to delete old key'))
+        expect(rollback).not_to(have_received(:call))
+      end
+    end
   end
 end
