@@ -11,7 +11,7 @@ DEFAULT_REGION = 'us-east-1'
 # A freshly created access key is not usable for signing immediately - IAM is
 # eventually consistent. Poll with the new key until it authenticates rather
 # than assuming it is live.
-NEW_KEY_ACTIVATION_ATTEMPTS = 10
+NEW_KEY_ACTIVATION_ATTEMPTS = 15
 NEW_KEY_ACTIVATION_DELAY_SECONDS = 2
 
 # Holds an exclusive lock on the credentials file for the whole read-modify-write
@@ -128,6 +128,16 @@ def rollback_key_change(iam, credentials, profile, user_name, new_access_key_id,
   end
 end
 
+def with_new_key_retry(attempts: NEW_KEY_ACTIVATION_ATTEMPTS, delay: NEW_KEY_ACTIVATION_DELAY_SECONDS)
+  attempts.times do |attempt|
+    return yield
+  rescue Aws::IAM::Errors::InvalidClientTokenId
+    raise if attempt == attempts - 1
+
+    sleep(delay)
+  end
+end
+
 def new_key_usable?(iam, new_access_key_id, attempts: NEW_KEY_ACTIVATION_ATTEMPTS, delay: NEW_KEY_ACTIVATION_DELAY_SECONDS)
   puts("\tWaiting for #{new_access_key_id} to become usable")
 
@@ -220,20 +230,22 @@ def process_credential_profile(credentials, profile, options)
     return :error
   end
 
-  disable_and_delete_old_key(rotated_iam, access_key, user_name, rollback_using.call(rotated_iam))
+  disable_and_delete_old_key(rotated_iam, access_key, user_name, rollback_using.call(iam), rollback_using.call(rotated_iam))
   :rotated
 end
 
-def disable_and_delete_old_key(iam, access_key, user_name, rollback)
+def disable_and_delete_old_key(iam, access_key, user_name, rollback, rollback_after_disable = rollback)
   puts("\tDisabling old access key")
   begin
-    iam.update_access_key(
-      {
-        access_key_id: access_key,
-        status: 'Inactive',
-        user_name: user_name
-      }
-    )
+    with_new_key_retry do
+      iam.update_access_key(
+        {
+          access_key_id: access_key,
+          status: 'Inactive',
+          user_name: user_name
+        }
+      )
+    end
   rescue StandardError => e
     warn("\tError disabling old access key")
     warn(e.full_message)
@@ -243,16 +255,18 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback)
 
   puts("\tDeleting old access key")
   begin
-    iam.delete_access_key(
-      {
-        access_key_id: access_key,
-        user_name: user_name
-      }
-    )
+    with_new_key_retry do
+      iam.delete_access_key(
+        {
+          access_key_id: access_key,
+          user_name: user_name
+        }
+      )
+    end
   rescue StandardError => e
     warn("\tError deleting access key")
     warn(e.full_message)
-    rollback.call('failed to delete old key')
+    rollback_after_disable.call('failed to delete old key')
     raise
   end
 end
