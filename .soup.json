@@ -2,11 +2,11 @@
   "Ruby:addressable": {
     "language": "Ruby",
     "package": "addressable",
-    "version": "2.9.0",
+    "version": "2.9.2",
     "license": "Apache-2.0",
     "description": "Addressable is an alternative implementation to the URI implementation that is",
     "website": "https://github.com/sporkmonger/addressable",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-03",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
