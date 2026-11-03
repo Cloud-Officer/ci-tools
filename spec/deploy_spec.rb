@@ -898,6 +898,37 @@ RSpec.describe(Deploy) do
       end
     end
 
+    context 'when new stack events are emitted' do
+      def stack_event(id, logical_id, status, reason = nil)
+        { stack_id: 'test', event_id: id, stack_name: 'test', logical_resource_id: logical_id, resource_type: 'AWS::AutoScaling::AutoScalingGroup', resource_status: status, resource_status_reason: reason, timestamp: Time.now }
+      end
+
+      before do
+        allow(self).to(receive(:log))
+        cfn.stub_responses(
+          :describe_stack_events,
+          [
+            { stack_events: [stack_event('e2', 'API', 'UPDATE_IN_PROGRESS', 'Rolling update'), stack_event('e1', 'OldResource', 'UPDATE_COMPLETE')] },
+            { stack_events: [stack_event('e3', 'API', 'UPDATE_COMPLETE'), stack_event('e2', 'API', 'UPDATE_IN_PROGRESS', 'Rolling update'), stack_event('e1', 'OldResource', 'UPDATE_COMPLETE')] }
+          ]
+        )
+        cfn.stub_responses(
+          :describe_stacks,
+          [
+            { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_IN_PROGRESS', creation_time: Time.now }] },
+            { stacks: [{ stack_name: 'test', stack_status: 'UPDATE_COMPLETE', creation_time: Time.now }] }
+          ]
+        )
+      end
+
+      it 'logs each event once, oldest first, skipping events before the update', :aggregate_failures do
+        wait_for_stack_update(cfn, 'test', 'e1')
+        expect(self).to(have_received(:log).with('Stack event: API (AWS::AutoScaling::AutoScalingGroup) UPDATE_IN_PROGRESS: Rolling update').once.ordered)
+        expect(self).to(have_received(:log).with('Stack event: API (AWS::AutoScaling::AutoScalingGroup) UPDATE_COMPLETE').once.ordered)
+        expect(self).not_to(have_received(:log).with(/OldResource/))
+      end
+    end
+
     context 'when update fails with a reason' do
       before do
         cfn.stub_responses(

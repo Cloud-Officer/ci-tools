@@ -409,9 +409,35 @@ def restore_ssm_parameters(ssm_snapshot)
   end
 end
 
-def wait_for_stack_update(cfn, stack_name)
+def latest_stack_event_id(cfn, stack_name)
+  cfn.describe_stack_events({ stack_name: stack_name }).stack_events.first&.event_id
+end
+
+def new_stack_events(cfn, stack_name, last_event_id)
+  events = []
+  cfn.describe_stack_events({ stack_name: stack_name }).each_page do |page|
+    page.stack_events.each do |event|
+      return events.reverse if event.event_id == last_event_id
+
+      events << event
+    end
+  end
+  events.reverse
+end
+
+def log_stack_event(event)
+  message = "Stack event: #{event.logical_resource_id} (#{event.resource_type}) #{event.resource_status}"
+  message += ": #{event.resource_status_reason}" unless event.resource_status_reason.to_s.empty?
+  log(message)
+end
+
+def wait_for_stack_update(cfn, stack_name, last_event_id = nil)
   failure_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
   poll_until(description: "waiting for stack #{stack_name} to update") do
+    events = new_stack_events(cfn, stack_name, last_event_id)
+    events.each { |event| log_stack_event(event) }
+    last_event_id = events.last.event_id unless events.empty?
+
     response = cfn.describe_stacks({ stack_name: stack_name }).stacks
     raise("Unable to describe stack #{stack_name}") if response.empty?
 
@@ -432,6 +458,7 @@ def update_cloudformation_stack(cfn, deploys)
   images = deploys.map { |deploy| "#{deploy.prefix}ImageId #{deploy.ami_id}" }
                   .join(', ')
   log("Updating cloudformation stack #{stack_name} with #{images}...")
+  last_event_id = latest_stack_event_id(cfn, stack_name)
   begin
     cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: deploys.first.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
   rescue Aws::CloudFormation::Errors::ValidationError => e
@@ -440,7 +467,7 @@ def update_cloudformation_stack(cfn, deploys)
     log_warn("Stopping here: #{e.message}")
     return :no_updates
   end
-  wait_for_stack_update(cfn, stack_name)
+  wait_for_stack_update(cfn, stack_name, last_event_id)
   log("Update completed successfully for cloudformation stack #{stack_name} with #{images}.")
   :updated
 end
