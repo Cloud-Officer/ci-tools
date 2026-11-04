@@ -112,7 +112,8 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `poll_until`: Shared polling helper that checks first, sleeps `POLL_INTERVAL` (15 s) between checks, and raises after `MAX_POLL_ATTEMPTS` (120) checks
 - `wait_for_healthy_instances`: Polls ELB target group health status until all instances are healthy
 - `wait_for_asg_instance_count`: Polls ASG until it reaches a target instance count. On scale-down, instances in a `TERMINATING_STATES` state count as gone
-- `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails
+- `wait_for_stack_update`: Polls CloudFormation stack status until update completes or fails, printing every stack event that appeared since the previous poll
+- `latest_stack_event_id` / `new_stack_events` / `log_stack_event`: Record the newest stack event before `update_stack`, then on each poll page through `describe_stack_events` back to the last event seen and log the new ones oldest first (logical resource, type, status, and status reason)
 - `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
 - `fetch_no_echo_parameter_keys`: Reads the stack's own template summary and returns every parameter declared `NoEcho`, so the secret set is discovered rather than hand-maintained. A failed `get_template_summary` call aborts the deploy before any SSM or stack change
 - `mark_cfn_secrets_for_previous_value!`: Flags those parameters, unioned with the `CFN_KNOWN_SECRET_PARAMETERS` backstop, plus any parameter whose value is the `****` mask, as `use_previous_value` so secrets are never re-sent to CloudFormation. `describe_stacks` reports a `NoEcho` value as `****`, and resending that string would overwrite the real secret with asterisks
@@ -126,6 +127,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Creates EC2 AMIs from standalone instances, in parallel when several instances are deployed
 - Deploys several instances in one run with one SSM update and one CloudFormation stack update, then rolls the auto scaling groups out in parallel (or one at a time with `--sequential_rollout`)
 - Updates CloudFormation stack parameters via SSM
+- Streams CloudFormation stack events to the log while waiting for the stack update, so a failing resource and its reason are visible without opening the console
 - Captures SSM parameter snapshots and restores them if the CloudFormation update fails
 - Preserves existing values for secret CloudFormation parameters instead of transmitting them
 - Restores the auto scaling group's original desired capacity when a rolling deploy fails after the scale-up, so a failed run does not leave the group running at the inflated size
@@ -150,8 +152,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Key rotation logic with age-based thresholds
 - `cleanup_secondary_keys`: Disables and deletes any non-primary keys before rotation
 - `create_and_save_new_key`: Creates a new access key and persists it under an exclusive file lock
-- `new_key_usable?`: Polls IAM with the new key until it authenticates, absorbing IAM's eventual consistency before the old key is retired
-- `with_credentials_lock`: Wraps the read, rotation, and save in a single exclusive lock. `flock` is tied to the open file description, so the save paths must not re-open the lock file or they would deadlock against the lock already held
+- `new_key_usable?`: Polls IAM with the new key until it authenticates (`NEW_KEY_ACTIVATION_ATTEMPTS` × `NEW_KEY_ACTIVATION_DELAY_SECONDS`), absorbing IAM's eventual consistency before the old key is retired
+- `with_new_key_retry`: Retries the old-key disable and delete when IAM still rejects the new key with `InvalidClientTokenId`, re-raising after the last attempt
+- `with_credentials_lock`: Wraps the read, rotation, and save in a single exclusive lock on the sibling `~/.aws/credentials.lock` file. `flock` is tied to the open file description, so the save paths must not re-open the lock file or they would deadlock against the lock already held
 - Error context follows the `CliMain` convention throughout: failures are reported with `warn(e.full_message)` on STDERR, which renders one frame per line and walks `e.cause`, rather than `pp(e)`, which printed a single line to STDOUT and dropped both
 - `disable_and_delete_old_key`: Disables and deletes the previous key with rollback on failure
 
@@ -159,7 +162,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 
 - Reads AWS credentials from `~/.aws/credentials`
 - Creates new access keys when current keys exceed 80 days (override with `--force`)
-- Holds one exclusive `flock` on the credentials file across the whole read-modify-write cycle (`with_credentials_lock`), not just the save: locking only the write let two concurrent runs parse the same pre-rotation snapshot and the second write back a file whose other profiles the first had already rotated
+- Holds one exclusive `flock` on `~/.aws/credentials.lock` across the whole read-modify-write cycle (`with_credentials_lock`), not just the save: locking only the write let two concurrent runs parse the same pre-rotation snapshot and the second write back a file whose other profiles the first had already rotated
 - Retires the old key through a client built from the **new** key, so neither the delete nor the rollback is signed with the credentials being invalidated
 - Rolls back (re-activates the original key, then deletes the new key and restores the original credentials) if disabling or deleting the old key fails
 - Disables and deletes old keys after successful rotation
@@ -206,7 +209,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `release_arch`: Maps `uname -m` onto the architecture suffix used by release assets (`arm64` / `x86_64`), failing on anything else, so binary downloads never assume x86_64
 - `find_shell_scripts`: Shell-script discovery for shellcheck and the custom SL rules — `*.sh` by name, plus extensionless executables whose shebang names a shell. The tools this repo ships install onto `PATH` without a suffix, so a name-only glob never saw them. Detection is by shebang, not the executable bit, because a non-shell script fails with `SC1071` rather than being skipped. The regex matches the one `github-build` uses to decide whether to enable ShellCheck for a repository (`config/linters.yaml` → `shellcheck.shebang_match`); the block itself stays gated on the `.shellcheckrc` that `github-build` emits
 - Zero-match guards: `find_lintable` results are collected into an array and the linter is skipped when it is empty — invoking `shellcheck` or `hadolint` with no file operands exits non-zero on a usage dump and would otherwise fail the build for a tree that simply has nothing to lint
-- `find_lintable`: Shared `find` filter that excludes 25 dependency and build-output directories, mirroring the `ghb:excluded-dirs` blocks `github-build` generates from `config/languages.yaml` into `trivy.yaml`, `.semgrepignore`, `.yamllint.yml`, and `.markdownlint-cli2.yaml` (as glob negations). This list is kept in step with those blocks by hand, and a directory present in the generated blocks but missing here means it gets linted; the generated blocks currently hold 26 entries, and `.claude/worktrees` is the one `find_lintable` does not exclude
+- `find_lintable`: Shared `find` filter that excludes 26 dependency and build-output directories (including `.claude/worktrees`), mirroring the 26 entries of the `ghb:excluded-dirs` blocks `github-build` generates from `config/languages.yaml` into `trivy.yaml`, `.semgrepignore`, `.yamllint.yml`, and `.markdownlint-cli2.yaml` (as glob negations). This list is kept in step with those blocks by hand, and a directory present in the generated blocks but missing here means it gets linted
 - `brew_or_apt_install`, `brew_or_go_install`, `npm_install`: Install helpers backing the per-tool blocks, so each tool declares only what differs (command name, apt package override, Go module path, Homebrew tap) rather than repeating the platform branch
 - `sudo_for_user_command`: Emits `sudo` or an empty string depending on whether the target tool's install prefix is user-writable
 - Multi-linter execution with failure tracking: every linter runs even after an earlier one fails, and `FAILED` is checked once at the end
@@ -514,15 +517,15 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 5. Create new access key
 6. Update credentials file with new key under an exclusive file lock
 7. Poll IAM with the new key (`new_key_usable?`) until it authenticates, absorbing IAM's eventual consistency, and roll back through the still-active old key if it never does
-8. Disable old key, signed with the new key's own credentials
-9. Delete old key
+8. Disable old key, signed with the new key's own credentials (retried on `InvalidClientTokenId` by `with_new_key_retry`)
+9. Delete old key, with the same retry
 10. On failure during steps 8 or 9, delete the newly created key and restore the original credentials
 
 **Security Considerations:**
 
 - Validates username matches expected value
 - Supports force rotation regardless of key age
-- Uses exclusive file locking (`flock`) when writing the credentials file to prevent races
+- Holds an exclusive `flock` on `~/.aws/credentials.lock` across the whole read-modify-write cycle to prevent concurrent runs from reverting each other's rotations
 - Rollback path restores the original credentials if old-key disable/delete fails
 - Secondary-key cleanup is gated behind the username and age checks, so a mismatched or too-young profile never loses keys
 
@@ -636,11 +639,12 @@ can change.
 
 ### Logging and Monitoring
 
-| Control                | Implementation                             | Location                             |
-|------------------------|--------------------------------------------|--------------------------------------|
-| Progress Output        | Step-by-step status messages               | All scripts                          |
-| AWS Operation Logging  | Logs SSM parameter updates, stack changes  | `deploy.rb`                          |
-| Linter Result Tracking | Tracks pass/fail status across all linters | `linters` in `FAILED` variable check |
+| Control                | Implementation                                                  | Location                               |
+|------------------------|-----------------------------------------------------------------|----------------------------------------|
+| Progress Output        | Step-by-step status messages                                    | All scripts                            |
+| AWS Operation Logging  | Logs SSM parameter updates, stack changes                       | `deploy.rb`                            |
+| Stack Event Streaming  | Logs new CloudFormation stack events while the update is polled | `deploy.rb` in `wait_for_stack_update` |
+| Linter Result Tracking | Tracks pass/fail status across all linters                      | `linters` in `FAILED` variable check   |
 
 ### Failure Modes
 
@@ -656,7 +660,7 @@ can change.
 ### Security Considerations
 
 - **No hardcoded credentials**: All authentication via AWS profiles or environment variables
-- **Secret parameters never retransmitted**: `DbPassword`, `MqPassword`, and `SendGridApiKey` are updated with `use_previous_value` rather than being read and resent
+- **Secret parameters never retransmitted**: every `NoEcho` parameter declared in the stack template, the `CFN_KNOWN_SECRET_PARAMETERS` backstop (`DbPassword`, `MqPassword`, `SendGridApiKey`), and any parameter whose value is the `****` mask are updated with `use_previous_value` rather than being read and resent
 - **Least privilege**: Scripts request only necessary AWS permissions
 - **Audit trail**: CloudFormation and SSM operations are logged by AWS
 - **Key lifecycle**: Automatic key rotation prevents credential staleness
