@@ -38,11 +38,11 @@
   "Ruby:aws-partitions": {
     "language": "Ruby",
     "package": "aws-partitions",
-    "version": "1.1300.0",
+    "version": "1.1304.0",
     "license": "Apache-2.0",
     "description": "Provides interfaces to enumerate AWS partitions, regions, and services.",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -50,11 +50,11 @@
   "Ruby:aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.173.0",
+    "version": "1.176.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -62,11 +62,11 @@
   "Ruby:aws-sdk-cloudformation": {
     "language": "Ruby",
     "package": "aws-sdk-cloudformation",
-    "version": "1.165.0",
+    "version": "1.168.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -74,11 +74,11 @@
   "Ruby:aws-sdk-cloudfront": {
     "language": "Ruby",
     "package": "aws-sdk-cloudfront",
-    "version": "1.162.0",
+    "version": "1.165.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -86,11 +86,11 @@
   "Ruby:aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.171.0",
+    "version": "1.175.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -98,11 +98,11 @@
   "Ruby:aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",
-    "version": "3.263.0",
+    "version": "3.266.0",
     "license": "Apache-2.0",
     "description": "Provides API clients for AWS",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -110,11 +110,11 @@
   "Ruby:aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.663.0",
+    "version": "1.666.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -122,11 +122,11 @@
   "Ruby:aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.164.0",
+    "version": "1.167.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -134,11 +134,11 @@
   "Ruby:aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.159.0",
+    "version": "1.162.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -146,11 +146,11 @@
   "Ruby:aws-sdk-kms": {
     "language": "Ruby",
     "package": "aws-sdk-kms",
-    "version": "1.138.0",
+    "version": "1.141.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Key Management Service (KMS)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -158,11 +158,11 @@
   "Ruby:aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.206.0",
+    "version": "1.209.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -170,11 +170,11 @@
   "Ruby:aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.228.0",
+    "version": "1.231.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-03",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -254,11 +254,11 @@
   "Ruby:hashdiff": {
     "language": "Ruby",
     "package": "hashdiff",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "license": "MIT",
     "description": " Hashdiff is a diff lib to compute the smallest difference between two hashes",
     "website": "https://github.com/liufengyun/hashdiff",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -410,11 +410,11 @@
   "Ruby:prism": {
     "language": "Ruby",
     "package": "prism",
-    "version": "1.9.0",
+    "version": "2.1.0",
     "license": "MIT",
     "description": "Prism Ruby parser",
     "website": "https://github.com/ruby/prism",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -494,11 +494,11 @@
   "Ruby:rspec-core": {
     "language": "Ruby",
     "package": "rspec-core",
-    "version": "3.13.6",
+    "version": "3.13.7",
     "license": "MIT",
     "description": "BDD for Ruby",
     "website": "https://rspec.info",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -506,11 +506,11 @@
   "Ruby:rspec-expectations": {
     "language": "Ruby",
     "package": "rspec-expectations",
-    "version": "3.13.5",
+    "version": "3.13.6",
     "license": "MIT",
     "description": "rspec-expectations provides a simple, readable API to express expected outcomes of a code example.",
     "website": "https://rspec.info",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -518,11 +518,11 @@
   "Ruby:rspec-mocks": {
     "language": "Ruby",
     "package": "rspec-mocks",
-    "version": "3.13.8",
+    "version": "3.13.9",
     "license": "MIT",
     "description": "RSpec's 'test double' framework, with support for stubbing and mocking",
     "website": "https://rspec.info",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -530,11 +530,11 @@
   "Ruby:rspec-support": {
     "language": "Ruby",
     "package": "rspec-support",
-    "version": "3.13.7",
+    "version": "3.13.8",
     "license": "MIT",
     "description": "Support utilities for RSpec gems",
     "website": "https://rspec.info",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -554,11 +554,11 @@
   "Ruby:rubocop-ast": {
     "language": "Ruby",
     "package": "rubocop-ast",
-    "version": "1.50.0",
+    "version": "1.51.0",
     "license": "MIT",
     "description": "    RuboCop's Node and NodePattern classes.",
     "website": "https://www.rubocop.org/",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -578,11 +578,11 @@
   "Ruby:rubocop-graphql": {
     "language": "Ruby",
     "package": "rubocop-graphql",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "license": "MIT",
     "description": "A collection of RuboCop cops to improve GraphQL-related code",
     "website": "https://github.com/DmitryTsepelev/rubocop-graphql",
-    "last_verified_at": "2026-05-22",
+    "last_verified_at": "2026-11-09",
     "risk_level": "Low",
     "requirements": "Ruby linter",
     "verification_reasoning": "Most popular gem"
