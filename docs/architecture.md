@@ -210,7 +210,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `find_shell_scripts`: Shell-script discovery for shellcheck and the custom SL rules — `*.sh` by name, plus extensionless executables whose shebang names a shell. The tools this repo ships install onto `PATH` without a suffix, so a name-only glob never saw them. Detection is by shebang, not the executable bit, because a non-shell script fails with `SC1071` rather than being skipped. The regex matches the one `github-build` uses to decide whether to enable ShellCheck for a repository (`config/linters.yaml` → `shellcheck.shebang_match`); the block itself stays gated on the `.shellcheckrc` that `github-build` emits
 - Zero-match guards: `find_lintable` results are collected into an array and the linter is skipped when it is empty — invoking `shellcheck` or `hadolint` with no file operands exits non-zero on a usage dump and would otherwise fail the build for a tree that simply has nothing to lint
 - `find_lintable`: Shared `find` filter that excludes 26 dependency and build-output directories (including `.claude/worktrees`), mirroring the 26 entries of the `ghb:excluded-dirs` blocks `github-build` generates from `config/languages.yaml` into `trivy.yaml`, `.semgrepignore`, `.yamllint.yml`, and `.markdownlint-cli2.yaml` (as glob negations). This list is kept in step with those blocks by hand, and a directory present in the generated blocks but missing here means it gets linted
-- `brew_or_apt_install`, `brew_or_go_install`, `npm_install`: Install helpers backing the per-tool blocks, so each tool declares only what differs (command name, apt package override, Go module path, Homebrew tap) rather than repeating the platform branch
+- `brew_or_apt_install`, `brew_or_go_install`, `npm_install`, `gem_install`: Install helpers backing the per-tool blocks, so each tool declares only what differs (command name, apt package override, Go module path, Homebrew tap) rather than repeating the platform branch
 - `sudo_for_user_command`: Emits `sudo` or an empty string depending on whether the target tool's install prefix is user-writable
 - Multi-linter execution with failure tracking: every linter runs even after an earlier one fails, and `FAILED` is checked once at the end
 - Built-in custom shell-script rules (`shell_lint_custom`) that run after shellcheck
@@ -231,6 +231,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - flake8: Python style, with the flake8-docstrings plugin CI installs (added to the flake8 environment when missing)
 - protolint: Protocol Buffers
 - rubocop: Ruby code
+- brakeman: Rails security scanning (runs when `config/brakeman.yml`, written by `github-build` for Rails apps, is present; installed with `gem install brakeman --no-document`)
 - semgrep: Security scanning
 - trivy: Vulnerability, secret, and misconfiguration scanning
 - swiftlint: Swift code

@@ -64,6 +64,7 @@ Required by individual scripts:
 * [`github-build`](https://github.com/Cloud-Officer/github-build) — `generate-codeowners` (used to resolve ignored folders; not installed in the Docker image, so run `generate-codeowners` with `GHB_IGNORED_EXCLUDES` set instead)
 * Bash >= 4 — `linters` (macOS ships Bash 3.2; the script re-execs under a newer Bash if one is installed, otherwise install it with `brew install bash`)
 * Go and `pipx` — `linters` (only when it self-installs Go-based linters such as actionlint, golangci-lint and protolint, or pipx-based ones such as cfn-lint and semgrep; on Linux `pipx` is bootstrapped through `apt` when missing)
+* RubyGems (`gem`) — `linters` (only when it self-installs rubocop, or brakeman for Rails apps that carry a `config/brakeman.yml`)
 
 Run `bundle install` to install Ruby dependencies, then run the commands.
 
@@ -186,6 +187,8 @@ encrypt-logs.rb --profile myprofile --retention_in_days 90
 ### linters
 
 Detect file types and run the appropriate linter. The linters are installed if not available on the system. The script runs every applicable linter, prints `Some checks failed.` and exits with status 1 if any of them reported an error.
+
+When a `config/brakeman.yml` is present (`github-build` writes one for Rails apps), the Rails app is scanned with `brakeman --no-pager --exit-on-warn --exit-on-error --quiet .`, the same command CI runs.
 
 When a `.shellcheckrc` is present, shell scripts are checked with `shellcheck` and then with built-in rules that shellcheck does not cover:
 
