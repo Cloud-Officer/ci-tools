@@ -30,7 +30,7 @@ skip_unless_bash4() {
 stub_all_linters() {
   for cmd in actionlint markdownlint-cli2 yamllint shellcheck hadolint cfn-lint \
              golangci-lint pmd eslint ktlint bandit flake8 protolint rubocop \
-             semgrep trivy swiftlint; do
+             brakeman semgrep trivy swiftlint; do
     eval "function ${cmd}() { :; }; export -f ${cmd}"
   done
 }
@@ -730,6 +730,81 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"rubocop invoked"* ]]
   [[ "$output" == *"Checking Ruby"* ]]
+}
+
+@test "runs brakeman when config/brakeman.yml is present" {
+  skip_unless_bash4
+  mkdir -p config
+  touch config/brakeman.yml
+
+  function brakeman() { echo "brakeman invoked: $*"; }
+  export -f brakeman
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Checking Rails with brakeman..."* ]]
+  [[ "$output" == *"brakeman invoked: --no-pager --exit-on-warn --exit-on-error --quiet ."* ]]
+  [[ "$output" == *"All checks passed"* ]]
+}
+
+@test "skips brakeman when config/brakeman.yml is absent" {
+  skip_unless_bash4
+  touch .rubocop.yml
+
+  stub_all_linters
+  function brakeman() { echo "brakeman invoked: $*"; }
+  export -f brakeman
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Checking Rails with brakeman"* ]]
+  [[ "$output" != *"brakeman invoked"* ]]
+}
+
+@test "reports failure when brakeman finds warnings" {
+  skip_unless_bash4
+  mkdir -p config
+  touch config/brakeman.yml
+
+  function brakeman() { return 3; }
+  export -f brakeman
+
+  run linters
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Checking Rails with brakeman..."* ]]
+  [[ "$output" == *"Some checks failed"* ]]
+}
+
+@test "installs brakeman via gem when missing" {
+  skip_unless_bash4
+  mkdir -p config
+  touch config/brakeman.yml
+
+  export HOME="${TEST_DIR}/home"
+  mkdir -p "${HOME}/bin"
+  ln -s "$(command -v bash)" "${HOME}/bin/bash"
+  export PATH="${BATS_TEST_DIRNAME}/../:${HOME}/bin:/usr/bin:/bin"
+
+  function uname() { echo "Linux"; }
+  export -f uname
+
+  # gem sits in a user-writable dir, so sudo_for_user_command emits no sudo.
+  cat > "${HOME}/bin/gem" <<'GEM'
+#!/usr/bin/env bash
+echo "gem invoked: $*"
+cat > "${HOME}/bin/brakeman" <<'BRAKEMAN'
+#!/usr/bin/env bash
+echo "brakeman invoked: $*"
+BRAKEMAN
+chmod 0755 "${HOME}/bin/brakeman"
+GEM
+  chmod 0755 "${HOME}/bin/gem"
+
+  run linters
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"gem invoked: install brakeman --no-document"* ]]
+  [[ "$output" == *"brakeman invoked: --no-pager --exit-on-warn --exit-on-error --quiet ."* ]]
+  [[ "$output" != *"sudo"* ]]
 }
 
 @test "reports failure when a linter exits non-zero" {

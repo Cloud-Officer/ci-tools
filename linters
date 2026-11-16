@@ -383,6 +383,15 @@ install_flake8() {
   fi
 }
 
+# Usage: gem_install brakeman --no-document
+gem_install() {
+  if is_darwin; then
+    gem install "${@}"
+  else
+    $(sudo_for_user_command gem) gem install "${@}"
+  fi
+}
+
 install_rubocop() {
   local gems=(rubocop rubocop-capybara rubocop-graphql rubocop-i18n rubocop-minitest rubocop-performance rubocop-rails rubocop-rake rubocop-rspec rubocop-rspec_rails rubocop-thread_safety)
 
@@ -390,11 +399,7 @@ install_rubocop() {
     return
   fi
 
-  if is_darwin; then
-    gem install "${gems[@]}"
-  else
-    $(sudo_for_user_command gem) gem install "${gems[@]}"
-  fi
+  gem_install "${gems[@]}"
 }
 
 install_swiftlint() {
@@ -525,6 +530,7 @@ run_linter .bandit "Checking Python with bandit..." bandit brew_or_apt_install b
 run_linter .flake8 "Checking Python with flake8..." "" install_flake8 -- flake8 .
 run_linter .protolint.yaml "Checking Protocol Buffer with protolint..." protolint brew_or_go_install protolint github.com/yoheimuta/protolint/cmd/protolint@latest yoheimuta/protolint -- protolint .
 run_linter .rubocop.yml "Checking Ruby..." "" install_rubocop -- with_trailing_blank_line rubocop
+run_linter config/brakeman.yml "Checking Rails with brakeman..." brakeman gem_install brakeman --no-document -- brakeman --no-pager --exit-on-warn --exit-on-error --quiet .
 run_linter .semgrepignore "Checking with semgrep..." semgrep brew_or_pipx_install semgrep -- semgrep scan --config=auto --severity=ERROR --error --quiet .
 run_linter .trivyignore "Checking with trivy..." trivy install_trivy -- lint_trivy
 run_linter .swiftlint.yml "Checking Swift..." swiftlint install_swiftlint -- swiftlint lint --strict
