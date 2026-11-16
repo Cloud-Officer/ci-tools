@@ -18,7 +18,6 @@ name: Build
 permissions:
   contents: read
 env:
-  RUBY-BUNDLER-CACHE: true
   RUBY_BUNDLER_CACHE: 'true'
 concurrency:
   group: build-${{github.ref}}
@@ -264,6 +263,7 @@ jobs:
         ruby-bundler-cache: "${{env.RUBY_BUNDLER_CACHE}}"
         ssh-key: "${{secrets.SSH_KEY}}"
         github-token: "${{github.token}}"
+        ruby-version: default
     - name: Bundler
       shell: bash
       if: "${{needs.variables.outputs.SKIP_LICENSES != '1' || needs.variables.outputs.SKIP_TESTS != '1'}}"
