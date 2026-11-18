@@ -78,22 +78,22 @@ RSpec.describe(DeployPreflight) do
     let(:iam) { Aws::IAM::Client.new(stub_responses: true) }
 
     it 'needs only lambda and CloudFront actions to publish a lambda' do
-      expect(described_class.required({ lambda_publish_version: 'fn' }, load_balanced: true).values.flatten).to(all(match(/\A(?:lambda|cloudfront):/)))
+      expect(described_class.required({ lambda_publish_version: 'fn' }, load_balanced: true, building: true).values.flatten).to(all(match(/\A(?:lambda|cloudfront):/)))
     end
 
     it 'covers the stack, rollout and load balancer for a full deploy', :aggregate_failures do
-      actions = described_class.required({}, load_balanced: true).values.flatten
+      actions = described_class.required({}, load_balanced: true, building: true).values.flatten
       expect(actions).to(include('ec2:CreateImage', 'ssm:SendCommand', 'codedeploy:ListDeployments', 'cloudformation:UpdateStack', 'autoscaling:UpdateAutoScalingGroup', 'elasticloadbalancing:DescribeTargetHealth'))
     end
 
     it 'leaves out what an AMI-only run never calls', :aggregate_failures do
-      actions = described_class.required({ create_ami_only: true }, load_balanced: true).values.flatten
+      actions = described_class.required({ create_ami_only: true }, load_balanced: true, building: true).values.flatten
       expect(actions).to(include('ec2:CreateImage'))
       expect(actions).not_to(include('cloudformation:UpdateStack', 'elasticloadbalancing:DescribeTargetHealth'))
     end
 
     it 'leaves out AMI and CodeDeploy actions when they are not used', :aggregate_failures do
-      actions = described_class.required({ ami: 'ami-1', 'skip-other-deploy-check': true }, load_balanced: false).values.flatten
+      actions = described_class.required({ ami: 'ami-1', 'skip-other-deploy-check': true }, load_balanced: false, building: false).values.flatten
       expect(actions).not_to(include('ec2:CreateImage', 'codedeploy:ListDeployments', 'elasticloadbalancing:DescribeTargetHealth'))
       expect(actions).to(include('cloudformation:UpdateStack'))
     end
@@ -541,7 +541,7 @@ RSpec.describe(DeployPreflight) do
   end
 
   describe '#run_deployment' do
-    before { allow(self).to(receive_messages(check_credentials: 'arn:aws:iam::1:user/me', check_permissions: nil)) }
+    before { allow(self).to(receive_messages(check_credentials: 'arn:aws:iam::1:user/me', check_permissions: nil, configure_aws_retries: nil)) }
 
     it 'checks credentials before permissions and passes the caller on' do
       run_with = options.merge(lambda_publish_version: 'fn', 'dry-run': true)

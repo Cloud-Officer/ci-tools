@@ -12,6 +12,8 @@ require_relative '../brew-resources'
 require_relative '../cycle-keys'
 require_relative '../deploy'
 require_relative '../encrypt-logs'
+require_relative '../lib/ami_job'
+require_relative '../lib/ami_status_table'
 require_relative '../lib/cli_main'
 require_relative '../lib/deploy_permissions'
 
