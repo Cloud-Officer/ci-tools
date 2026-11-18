@@ -140,6 +140,9 @@ options
         --lambda_publish_version function_name
         --profile profile
         --preserve_desired_capacity
+        --redeploy-latest            Rerun the latest successful user-triggered CodeDeploy deployment on each standalone instance before its AMI
+        --reset-instances            Recreate the standalone instances first; --instance is then optional
+        --resize instance_type       Resize the standalone instances for the redeploy and AMI, then put them back
         --sequential_rollout
         --skip-lock                  Run alongside another deploy of the same profile and environment
         --skip-other-deploy-check    Do not look for signs of another deploy
@@ -169,6 +172,15 @@ deploy.rb --profile dev --environment rc --instance api,grpc --ami ami-09d6e0e85
 
 # run every check and print the planned SSM changes without changing anything
 deploy.rb --profile dev --environment rc --instance api,grpc --dry-run
+
+# rerun the latest CodeDeploy deployment on a larger standalone instance, build the AMI, then restore the instance size
+deploy.rb --profile dev --environment rc --instance api --redeploy-latest --resize m5.xlarge
+
+# recreate the standalone instances without deploying
+deploy.rb --profile dev --environment rc --reset-instances
+
+# recreate the standalone instances, redeploy on them, then build and deploy their AMIs
+deploy.rb --profile dev --environment rc --instance api,grpc --reset-instances --redeploy-latest
 ```
 
 Before changing anything, a run checks the profile's credentials and simulates the IAM permissions it needs, takes a lock per profile and environment under `~/.deploy/locks`, and looks for another deploy in progress. For each running standalone instance it waits for the `UserDataCompleted` tag and checks the last lines of the CodeDeploy log over SSM. A stopped standalone instance skips those two checks. Without a terminal, a question that needs an answer stops the run, except the wait for the tag, which waits.
@@ -176,6 +188,12 @@ Before changing anything, a run checks the profile's credentials and simulates t
 `--dry-run` changes no AWS resource, AMI, SSM parameter, stack or auto scaling group. It still sends the read-only CodeDeploy log check to running standalone instances through SSM Run Command, so it needs `ssm:SendCommand` and leaves an entry in the SSM command history.
 
 The deploy role needs `iam:SimulatePrincipalPolicy`, `codedeploy:ListDeployments`, `codedeploy:ListDeploymentInstances`, `ec2:DescribeSnapshots`, `ec2:DescribeTags`, `ssm:SendCommand` and `ssm:GetCommandInvocation`. AWS calls that are safe to repeat are retried through network problems and throttling. While AMIs are built, a status table shows each one's state, snapshot progress, AMI id and elapsed time. If only some AMIs fail, a terminal run asks whether to deploy the others. On failure or Ctrl-C, the run prints the command that deploys the AMIs already built. If the outcome of a stack update stays unknown because of a network failure, the SSM parameters keep their new values and the commands to restore them are printed.
+
+`--redeploy-latest` reruns the newest successful user-triggered deployment of each instance's CodeDeploy group, waits for it and checks the CodeDeploy log before the AMI. The group must reach only that standalone instance. If it also reaches other instances, a terminal run asks whether to continue, remove the matching tags from them (this needs `ec2:DeleteTags`) or cancel, and a run without a terminal stops. A stopped standalone instance needs `--resize`, which starts it.
+
+`--resize` stops each standalone instance, changes its type and starts it for the redeploy and AMI. It then restores the original type and power state, also after a failure, Ctrl-C or SIGTERM. If the restore fails, the run prints the commands to do it by hand. `--type` is unrelated: it still sets the auto scaling group instance type.
+
+`--reset-instances` sets `InstanceEnabled` and `WorkerInstanceEnabled` to 0, updates the stack, sets them to 1 and updates it again, waiting for each update. A failed update restores the SSM values from before it, so a failure in the second update leaves the instances disabled, and rerunning the option recovers them. With `--instance`, it needs `--redeploy-latest` or an `--ami` for every instance, because the new instances are blank.
 
 The log marker defaults to `Validate service end.` and can be changed in `~/.deploy/config.yaml`; `false` only requires the log to exist:
 

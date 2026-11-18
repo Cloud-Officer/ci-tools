@@ -2,10 +2,13 @@
 
 # Thread-safe progress of one AMI build.
 class AmiJob
-  attr_reader :instance
+  attr_reader :instance, :resize, :redeployment, :log_marker
 
-  def initialize(instance, name)
+  def initialize(instance, name, resize: nil, redeployment: nil, log_marker: nil)
     @instance = instance
+    @resize = resize
+    @redeployment = redeployment
+    @log_marker = log_marker
     @mutex = Mutex.new
     @started = Time.now
     @fields = { state: 'starting', ami_id: nil, progress: nil, name: name, error: nil, finished: nil }

@@ -77,6 +77,17 @@ WORKER_AMI_MAX_POLL_ATTEMPTS = 3072
 AMI_RENDER_INTERVAL = 1
 IMAGE_FAILURE_STATES = %w[failed error invalid deregistered].freeze
 RESUME_FLAGS = %i[preserve_desired_capacity sequential_rollout skip_scale_down skip-lock skip-other-deploy-check skip-permission-check].freeze
+CODEDEPLOY_POLL_INTERVAL = 10
+CODEDEPLOY_TIMEOUT = 3600
+CODEDEPLOY_LOOKBACK = 50
+CODEDEPLOY_BATCH_SIZE = 25
+DEPLOYMENT_FAILURE_STATUSES = %w[Failed Stopped].freeze
+STACK_WAIT_TIMEOUT = 3600
+RESIZE_TIMEOUT = 900
+TAG_REMOVAL_CHECKS = 6
+TAG_REMOVAL_INTERVAL = 5
+RESET_PARAMETERS = %w[InstanceEnabled WorkerInstanceEnabled].freeze
+NO_STACK_UPDATES = 'No updates are to be performed'
 
 class PreflightError < StandardError; end
 
@@ -131,7 +142,10 @@ end
 def join_quietly(thread)
   thread.join
 rescue StandardError, SignalException
-  nil
+  return unless thread.alive?
+
+  log_warn('Still waiting for the interrupted AMI builds to clean up...')
+  retry
 end
 
 def collect_thread_outcomes(threads)
@@ -532,8 +546,12 @@ def capture_ssm_snapshot(deploy)
   response.parameters.to_h { |p| [p.name, p.value] }
 end
 
+def aws_profile_arguments
+  Aws.config[:profile] ? ['--profile', Aws.config[:profile]] : []
+end
+
 def print_ssm_restore_commands(ssm_snapshot)
-  profile = Aws.config[:profile] ? ['--profile', Aws.config[:profile]] : []
+  profile = aws_profile_arguments
   ssm_snapshot.each { |name, value| log_warn("  #{Shellwords.join(['aws', 'ssm', 'put-parameter', *profile, '--overwrite', '--type', 'String', '--name', name, '--value', value])}") }
 end
 
@@ -596,24 +614,34 @@ def wait_for_stack_update(cfn, stack_name, last_event_id = nil)
   end
 end
 
+def apply_stack_update(cfn, stack_name, parameters)
+  last_event_id = with_network_retries("reading the events of #{stack_name}") { latest_stack_event_id(cfn, stack_name) }
+  update = { stack_name: stack_name, use_previous_template: true, parameters: parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false, client_request_token: "deploy-rb-#{SecureRandom.uuid}" }
+  begin
+    with_network_retries("starting the update of #{stack_name}") { cfn.update_stack(update) }
+  rescue Aws::CloudFormation::Errors::ValidationError => e
+    raise unless e.message.include?(NO_STACK_UPDATES)
+
+    return :no_updates
+  end
+  wait_for_stack_update(cfn, stack_name, last_event_id)
+  :updated
+end
+
 def update_cloudformation_stack(cfn, deploys)
   stack_name = deploys.first.stack_name
   images = deploys.map { |deploy| "#{deploy.prefix}ImageId #{deploy.ami_id}" }
                   .join(', ')
   log("Updating cloudformation stack #{stack_name} with #{images}...")
-  last_event_id = with_network_retries("reading the events of #{stack_name}") { latest_stack_event_id(cfn, stack_name) }
-  update = { stack_name: stack_name, use_previous_template: true, parameters: deploys.first.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false, client_request_token: "deploy-rb-#{SecureRandom.uuid}" }
-  begin
-    with_network_retries("starting the update of #{stack_name}") { cfn.update_stack(update) }
-  rescue Aws::CloudFormation::Errors::ValidationError => e
-    raise unless e.message.include?('No updates are to be performed')
+  result = apply_stack_update(cfn, stack_name, deploys.first.parameters)
 
-    log_warn("Stopping here: #{e.message}")
-    return :no_updates
+  if result == :no_updates
+    log_warn("Stopping here: #{NO_STACK_UPDATES}.")
+  else
+    log("Update completed successfully for cloudformation stack #{stack_name} with #{images}.")
   end
-  wait_for_stack_update(cfn, stack_name, last_event_id)
-  log("Update completed successfully for cloudformation stack #{stack_name} with #{images}.")
-  :updated
+
+  result
 end
 
 def update_ssm_parameters_with_rollback(deploys, ssm_snapshot)
@@ -632,17 +660,21 @@ def report_unknown_stack_outcome(stack_name, ssm_snapshot)
   print_ssm_restore_commands(ssm_snapshot)
 end
 
-def update_stack_with_ssm_rollback(cfn, deploys, ssm_snapshot)
-  update_cloudformation_stack(cfn, deploys)
+def with_stack_ssm_rollback(stack_name, ssm_snapshot)
+  yield
 rescue StandardError, SignalException => e
   if transient_error?(e)
-    report_unknown_stack_outcome(deploys.first.stack_name, ssm_snapshot)
+    report_unknown_stack_outcome(stack_name, ssm_snapshot)
   else
     log_warn('CloudFormation update failed, rolling back SSM parameters...')
     restore_ssm_parameters(ssm_snapshot)
   end
 
   raise
+end
+
+def update_stack_with_ssm_rollback(cfn, deploys, ssm_snapshot)
+  with_stack_ssm_rollback(deploys.first.stack_name, ssm_snapshot) { update_cloudformation_stack(cfn, deploys) }
 end
 
 def fetch_asg_mixed_parameters(environment, subnet)
@@ -719,7 +751,7 @@ def discover_cfn_stack_context(cfn, options)
     secret_parameter_keys: fetch_no_echo_parameter_keys(cfn, stack_name),
     environment: environment,
     subnet: subnet,
-    prefix: parameter_prefix_for(options[:instance]),
+    prefix: parameter_prefix_for(options[:instance].to_s),
     ssm_prefix: "/#{environment}/#{subnet}"
   }
 end
@@ -921,7 +953,7 @@ end
 
 def active_deployments(names, environment)
   codedeploy = Aws::CodeDeploy::Client.new
-  group = environment.tr('0-9', '')
+  group = codedeploy_group_for(environment)
 
   names.flat_map do |name|
     ids = codedeploy.list_deployments({ application_name: name, deployment_group_name: group, include_only_statuses: ACTIVE_DEPLOYMENT_STATUSES }).flat_map(&:deployments)
@@ -969,9 +1001,12 @@ def check_for_other_deploys(names, standalones, targets, options)
   confirm_other_deploys(hints, options)
 end
 
+def describe_standalones(client, standalones)
+  client.describe_instances({ instance_ids: standalones.values.map(&:first) }).flat_map(&:reservations).flat_map(&:instances).to_h { |instance| [instance.instance_id, instance] }
+end
+
 def running_standalones(client, standalones)
-  instances = client.describe_instances({ instance_ids: standalones.values.map(&:first) }).flat_map(&:reservations).flat_map(&:instances)
-  states = instances.to_h { |instance| [instance.instance_id, instance.state.name] }
+  states = describe_standalones(client, standalones).transform_values { |instance| instance.state.name }
   running, stopped = standalones.partition { |_name, (instance_id, _instance_name)| states[instance_id] == 'running' }
                                 .map(&:to_h)
   stopped.each_value { |(_instance_id, instance_name)| log_warn("#{instance_name} is not running: skipping its readiness and CodeDeploy checks.") }
@@ -999,7 +1034,7 @@ def wait_for_standalones(client, standalones, options)
   names = unready.values.map(&:last)
   log_warn("No #{USER_DATA_TAG} tag on #{names.join(', ')}: user data may still be running.")
   return log_warn('DRY RUN: a real run would ask whether to wait, and wait without a terminal.') if dry_run?(options)
-  return log('Continuing without waiting.') unless wait_for_unready?(names)
+  return log('Continuing without waiting.') unless options[:'reset-instances'] || wait_for_unready?(names)
 
   poll_until(description: "waiting for #{USER_DATA_TAG} on #{names.join(', ')}", max_attempts: READY_MAX_POLL_ATTEMPTS, interval: READY_POLL_INTERVAL) do
     unready = unready_standalones(client, unready)
@@ -1060,7 +1095,466 @@ def check_standalones(standalones, options)
   return if running.empty?
 
   wait_for_standalones(client, running, options)
-  verify_codedeploy_logs(running, options)
+  verify_codedeploy_logs(running, options) unless options[:'redeploy-latest']
+end
+
+def codedeploy_group_for(environment)
+  environment.tr('0-9', '')
+end
+
+def name_tag(instance)
+  instance.tags.find { |tag| tag.key == 'Name' }
+          &.value.to_s
+end
+
+def ec2_filter_for(tag_filter)
+  case tag_filter.type
+  when 'KEY_ONLY' then { name: 'tag-key', values: [tag_filter.key] }
+  when 'VALUE_ONLY' then { name: 'tag-value', values: [tag_filter.value] }
+  else { name: "tag:#{tag_filter.key}", values: [tag_filter.value] }
+  end
+end
+
+def instances_matching(client, tag_filters)
+  state_filter = { name: 'instance-state-name', values: %w[pending running stopping stopped] }
+  ids =
+    tag_filters.flat_map do |tag_filter|
+      instances = client.describe_instances({ filters: [ec2_filter_for(tag_filter), state_filter] }).flat_map(&:reservations).flat_map(&:instances)
+      instances.map(&:instance_id)
+    end
+  ids.uniq
+end
+
+def target_tag_groups(info)
+  tag_set = Array(info.ec2_tag_set&.ec2_tag_set_list).reject(&:empty?)
+  tag_filters = info.ec2_tag_filters.to_a
+  tag_filters.empty? ? tag_set : [tag_filters]
+end
+
+def deployment_group_targets(client, tag_groups)
+  tag_groups.map { |tag_filters| instances_matching(client, tag_filters) }
+            .reduce(:&).sort
+end
+
+def tag_matches_filter?(tag, filter)
+  case filter.type
+  when 'KEY_ONLY' then tag.key == filter.key
+  when 'VALUE_ONLY' then File.fnmatch?(filter.value.to_s, tag.value.to_s)
+  else tag.key == filter.key && File.fnmatch?(filter.value.to_s, tag.value.to_s)
+  end
+end
+
+def extra_targets(client, instance_ids, tag_groups)
+  filters = tag_groups.flatten
+  instances = client.describe_instances({ instance_ids: instance_ids }).flat_map(&:reservations).flat_map(&:instances)
+
+  instances.to_h do |instance|
+    tags = instance.tags.select { |tag| filters.any? { |filter| tag_matches_filter?(tag, filter) } }
+    [instance.instance_id, { name: name_tag(instance), tags: tags.map { |tag| { key: tag.key, value: tag.value } } }]
+  end
+end
+
+def describe_extra_targets(extras)
+  extras.map { |instance_id, extra| "#{extra[:name].empty? ? 'unnamed' : extra[:name]} (#{instance_id})" }
+end
+
+def describe_tags(tags)
+  tags.map { |tag| "#{tag[:key]}=#{tag[:value]}" }
+      .join(', ')
+end
+
+def read_extra_targets_choice(problem)
+  print('Your choice? [1/2/3] (Enter cancels) ')
+
+  case read_answer
+  when '1' then :continue
+  when '2' then :remove
+  else raise(PreflightError, "#{problem}, aborted.")
+  end
+end
+
+def confirm_extra_targets(problem, extras, options)
+  log_warn("WARNING: #{problem}")
+
+  if dry_run?(options)
+    log_warn('DRY RUN: a real run would ask whether to continue, remove their CodeDeploy tags or cancel, and stop without a terminal.')
+    return :continue
+  end
+
+  raise(PreflightError, problem) unless $stdin.tty?
+
+  names = describe_extra_targets(extras).join(', ')
+  log("  1) Continue: the redeploy also reaches #{names}")
+  tags = extras.values.flat_map { |extra| extra[:tags] }
+  tags.uniq!
+  log("  2) Remove #{describe_tags(tags)} from #{names}, then continue")
+  log('  3) Cancel')
+  read_extra_targets_choice(problem)
+end
+
+def remove_codedeploy_tags(client, extras)
+  extras.each do |instance_id, extra|
+    raise(PreflightError, "No CodeDeploy tag to remove found on #{instance_id}.") if extra[:tags].empty?
+
+    log("Removing #{describe_tags(extra[:tags])} from #{instance_id}...")
+    with_network_retries("removing the CodeDeploy tags of #{instance_id}") { client.delete_tags({ resources: [instance_id], tags: extra[:tags] }) }
+  end
+end
+
+def wait_for_only_target(client, tag_groups, instance_id, label)
+  targets = []
+
+  TAG_REMOVAL_CHECKS.times do
+    targets = deployment_group_targets(client, tag_groups)
+    return log("#{label} now targets only #{instance_id}.") if targets == [instance_id]
+
+    sleep(TAG_REMOVAL_INTERVAL)
+  end
+
+  raise(PreflightError, "#{label} still targets #{targets.join(', ')} after removing the tags.")
+end
+
+def resolve_extra_targets(client, tag_groups, extra_ids, problem, options)
+  extras = extra_targets(client, extra_ids, tag_groups)
+  others = extras.values.map { |extra| extra[:name] }
+  others = others.grep(/-standalone\z/)
+  return stop_or_report(options, "#{problem}: #{others.join(', ')} is another environment's standalone instance") unless others.empty?
+
+  confirm_extra_targets(problem, extras, options) == :remove ? extras : nil
+end
+
+def check_deployment_group_targets(clients, application, group, standalone, options)
+  instance_id, name = standalone
+  label = "#{application}/#{group}"
+  info = clients[:codedeploy].get_deployment_group({ application_name: application, deployment_group_name: group }).deployment_group_info
+  return stop_or_report(options, "#{label} targets auto scaling groups, not supported by --redeploy-latest") unless info.auto_scaling_groups.to_a.empty?
+
+  tag_groups = target_tag_groups(info)
+  return stop_or_report(options, "#{label} has no EC2 tag filters") if tag_groups.empty?
+
+  targets = deployment_group_targets(clients[:ec2], tag_groups)
+  return if targets == [instance_id]
+
+  problem = "#{label} would deploy to #{targets.join(', ')}, expected only #{name} (#{instance_id})"
+  return stop_or_report(options, problem) unless targets.include?(instance_id)
+
+  to_clean = resolve_extra_targets(clients[:ec2], tag_groups, targets - [instance_id], problem, options)
+  return if to_clean.nil?
+
+  remove_codedeploy_tags(clients[:ec2], to_clean)
+  wait_for_only_target(clients[:ec2], tag_groups, instance_id, label)
+end
+
+def fetch_deployments(codedeploy, ids)
+  ids.each_slice(CODEDEPLOY_BATCH_SIZE).flat_map { |slice| codedeploy.batch_get_deployments({ deployment_ids: slice }).deployments_info }
+end
+
+def find_latest_successful_deployment(codedeploy, application, group, options)
+  ids = codedeploy.list_deployments({ application_name: application, deployment_group_name: group, include_only_statuses: ['Succeeded'] }).deployments.first(CODEDEPLOY_LOOKBACK)
+  latest = fetch_deployments(codedeploy, ids).select { |info| info.creator == 'user' }
+                                             .max_by(&:create_time)
+  return latest unless latest.nil?
+
+  stop_or_report(options, "No successful user-triggered #{application}/#{group} deployment in the last #{CODEDEPLOY_LOOKBACK}")
+end
+
+def find_redeployment(clients, name, standalone, options)
+  group = codedeploy_group_for(options[:environment])
+  check_deployment_group_targets(clients, name, group, standalone, options)
+  previous = find_latest_successful_deployment(clients[:codedeploy], name, group, options)
+  log("Will redeploy #{previous.deployment_id} on #{standalone.last}.") if previous
+  previous
+rescue Aws::CodeDeploy::Errors::ApplicationDoesNotExistException, Aws::CodeDeploy::Errors::DeploymentGroupDoesNotExistException => e
+  stop_or_report(options, "#{name}/#{group}: #{e.message}")
+end
+
+def find_redeployments(standalones, options)
+  clients = { codedeploy: Aws::CodeDeploy::Client.new, ec2: Aws::EC2::Client.new }
+  standalones.to_h { |name, standalone| [name, find_redeployment(clients, name, standalone, options)] }
+             .compact
+end
+
+def standalone_environment(instance, standalone_name)
+  standalone_name.delete_prefix("#{instance}-").delete_suffix('-standalone')
+end
+
+def environment_stacks(cfn, environment)
+  summaries = with_network_retries("listing the #{environment} stacks") { cfn.list_stacks({ stack_status_filter: ACTIVE_STACK_STATUSES }).flat_map(&:stack_summaries) }
+  pattern = /\A#{Regexp.escape(environment)}(-|\z)/
+  summaries.select { |summary| summary.stack_name.match?(pattern) }
+           .to_h { |summary| [summary.stack_name, summary.stack_status] }
+end
+
+def describe_stack_states(stacks)
+  stacks.map { |name, status| "#{name} is #{status}" }
+        .join(', ')
+end
+
+def failed_stacks(stacks)
+  stacks.select { |_name, status| status.end_with?('FAILED') }
+end
+
+def wait_for_environment_stacks(environment)
+  cfn = Aws::CloudFormation::Client.new
+  deadline = Time.now + STACK_WAIT_TIMEOUT
+
+  loop do
+    stacks = environment_stacks(cfn, environment)
+    failed = failed_stacks(stacks)
+    raise("#{describe_stack_states(failed)}: fix it before CodeDeploy runs") unless failed.empty?
+
+    busy = stacks.select { |_name, status| status.end_with?('IN_PROGRESS') }
+    return if busy.empty?
+    raise("Timed out waiting for #{describe_stack_states(busy)}") if Time.now > deadline
+
+    yield(busy)
+    sleep(POLL_INTERVAL)
+  end
+end
+
+def check_environment_stacks(standalones, options)
+  cfn = Aws::CloudFormation::Client.new
+  environments = standalones.map { |name, standalone| standalone_environment(name, standalone.last) }
+  environments.uniq!
+
+  environments.each do |environment|
+    failed = failed_stacks(environment_stacks(cfn, environment))
+    stop_or_report(options, "#{describe_stack_states(failed)}: fix it before CodeDeploy runs") unless failed.empty?
+  end
+end
+
+def find_started_deployment(codedeploy, deployment)
+  window = { start: Time.now - 3600, end: Time.now + 300 }
+  ids = codedeploy.list_deployments({ application_name: deployment[:application_name], deployment_group_name: deployment[:deployment_group_name], create_time_range: window }).deployments
+  fetch_deployments(codedeploy, ids).find { |info| info.description == deployment[:description] }
+                                    &.deployment_id
+end
+
+def start_deployment(codedeploy, deployment)
+  with_network_retries("starting CodeDeploy for #{deployment[:application_name]}") do
+    find_started_deployment(codedeploy, deployment) || codedeploy.create_deployment(deployment).deployment_id
+  rescue Aws::CodeDeploy::Errors::ServiceError => e
+    raise if transient_error?(e)
+
+    find_started_deployment(codedeploy, deployment) || raise
+  end
+end
+
+def wait_for_deployment(codedeploy, deployment_id)
+  deadline = Time.now + CODEDEPLOY_TIMEOUT
+
+  loop do
+    info = with_network_retries("waiting for CodeDeploy #{deployment_id}", deadline: deadline) { codedeploy.get_deployment({ deployment_id: deployment_id }).deployment_info }
+    return if info.status == 'Succeeded'
+    raise("CodeDeploy #{deployment_id} is #{info.status}: #{info.error_information&.message}") if DEPLOYMENT_FAILURE_STATUSES.include?(info.status)
+    raise("Timed out waiting for CodeDeploy #{deployment_id}") if Time.now > deadline
+
+    sleep(CODEDEPLOY_POLL_INTERVAL)
+  end
+end
+
+def redeploy_latest(standalone, job)
+  previous = job.redeployment
+  wait_for_environment_stacks(standalone_environment(job.instance, standalone.last)) { |busy| job.update(state: 'waiting', name: "for #{describe_stack_states(busy)}") }
+  codedeploy = Aws::CodeDeploy::Client.new
+  deployment = {
+    application_name: previous.application_name,
+    deployment_group_name: previous.deployment_group_name,
+    revision: previous.revision.to_h,
+    description: "deploy.rb --redeploy-latest: redeploy #{previous.deployment_id} (run #{SecureRandom.hex(6)})",
+    file_exists_behavior: previous.file_exists_behavior
+  }
+  deployment_id = start_deployment(codedeploy, deployment.compact)
+  job.update(state: 'deploying', name: deployment_id)
+  wait_for_deployment(codedeploy, deployment_id)
+end
+
+def redeploy_and_check(standalone, job)
+  redeploy_latest(standalone, job)
+  job.update(state: 'checking', name: standalone.last)
+  failures = codedeploy_log_failures(Aws::SSM::Client.new, job.log_marker, { job.instance => standalone })
+  raise("CodeDeploy check failed: #{failures.join('; ')}") unless failures.empty?
+end
+
+def wait_for_instance_state(client, instance_id, wanted, deadline)
+  loop do
+    state = with_network_retries("waiting for #{instance_id}", deadline: deadline) { client.describe_instances({ instance_ids: [instance_id] }).reservations.first.instances.first.state.name }
+    return if state == wanted
+    raise("Timed out waiting for #{instance_id} to be #{wanted} (it is #{state})") if Time.now > deadline
+
+    sleep(AMI_POLL_INTERVAL)
+  end
+end
+
+def wait_for_ssm_online(instance_id, since, deadline)
+  ssm = Aws::SSM::Client.new
+  filters = [{ key: 'InstanceIds', values: [instance_id] }]
+
+  loop do
+    info = with_network_retries("waiting for #{instance_id} in SSM", deadline: deadline) { ssm.describe_instance_information({ filters: filters }).instance_information_list.first }
+    return if info&.ping_status == 'Online' && info.last_ping_date_time && info.last_ping_date_time > since
+    raise("Timed out waiting for #{instance_id} to be back online in SSM") if Time.now > deadline
+
+    sleep(AMI_POLL_INTERVAL)
+  end
+end
+
+def stop_instance(client, instance_id, deadline)
+  with_network_retries("stopping #{instance_id}", deadline: deadline) { client.stop_instances({ instance_ids: [instance_id] }) }
+rescue Aws::EC2::Errors::IncorrectInstanceState
+  raise if Time.now > deadline
+
+  sleep(AMI_POLL_INTERVAL)
+  retry
+end
+
+def resize_instance(instance_id, type, start:)
+  client = Aws::EC2::Client.new
+  deadline = Time.now + RESIZE_TIMEOUT
+  stop_instance(client, instance_id, deadline)
+  wait_for_instance_state(client, instance_id, 'stopped', deadline)
+  with_network_retries("resizing #{instance_id}", deadline: deadline) { client.modify_instance_attribute({ instance_id: instance_id, instance_type: { value: type } }) }
+  return unless start
+
+  started = Time.now
+  deadline = started + RESIZE_TIMEOUT
+  with_network_retries("starting #{instance_id}", deadline: deadline) { client.start_instances({ instance_ids: [instance_id] }) }
+  wait_for_instance_state(client, instance_id, 'running', deadline)
+  wait_for_ssm_online(instance_id, started, deadline)
+end
+
+def resize_standalone(standalone, job)
+  instance_id, name = standalone
+  job.update(state: 'resizing', name: "#{name} to #{job.resize[:to]}", resized: true)
+  resize_instance(instance_id, job.resize[:to], start: true)
+  job.update(name: name)
+end
+
+def manual_resize_commands(instance_id, resize)
+  profile = aws_profile_arguments
+  commands = [%w[aws ec2 stop-instances] + profile + ['--instance-ids', instance_id], %w[aws ec2 modify-instance-attribute] + profile + ['--instance-id', instance_id, '--instance-type', resize[:from]]]
+  commands << (%w[aws ec2 start-instances] + profile + ['--instance-ids', instance_id]) if resize[:running]
+  commands.map { |command| Shellwords.join(command) }
+          .join('; ')
+end
+
+def restore_standalone_size(standalone, job)
+  return unless job.snapshot[:resized]
+
+  instance_id, name = standalone
+  final = job.snapshot.slice(:state, :name)
+  job.update(state: 'restoring', name: "#{name} to #{job.resize[:from]}")
+  resize_instance(instance_id, job.resize[:from], start: job.resize[:running])
+  job.update(resized: false, **final)
+rescue StandardError => e
+  problem = "Could not put #{name} back to #{job.resize[:from]} (#{e.message}). Restore it by hand: #{manual_resize_commands(instance_id, job.resize)}"
+  log_warn(problem)
+  job.update(**final, error: [job.snapshot[:error], problem].compact.join('; '))
+end
+
+def plan_resize(name, current, type, architectures, options)
+  return log("#{name} is already #{type}.") if current.instance_type == type
+  return stop_or_report(options, "#{name} is #{current.architecture}, #{type} is #{architectures.join('/')}") unless architectures.include?(current.architecture)
+
+  log("Will resize #{name} from #{current.instance_type} to #{type}, then back.")
+  { from: current.instance_type, to: type, running: current.state.name == 'running' }
+end
+
+def plan_resizes(standalones, options)
+  type = options[:resize]
+  return {} if type.nil?
+
+  client = Aws::EC2::Client.new
+  architectures = client.describe_instance_types({ instance_types: [type] }).instance_types.first&.processor_info&.supported_architectures
+
+  if architectures.nil?
+    stop_or_report(options, "--resize #{type}: no such instance type")
+    return {}
+  end
+
+  instances = describe_standalones(client, standalones)
+  standalones.to_h { |name, (instance_id, standalone_name)| [name, plan_resize(standalone_name, instances[instance_id], type, architectures, options)] }
+             .compact
+rescue Aws::EC2::Errors::InvalidInstanceType => e
+  stop_or_report(options, "--resize #{type}: #{e.message}")
+  {}
+end
+
+def refuse_stopped_redeploys(standalones, resizes, options)
+  candidates = standalones.except(*resizes.keys)
+  return if candidates.empty?
+
+  instances = describe_standalones(Aws::EC2::Client.new, candidates)
+  stopped = candidates.values.reject { |instance_id, _name| instances[instance_id].state.name == 'running' }
+  stop_or_report(options, "--redeploy-latest needs a running instance: start #{stopped.map(&:last).join(', ')}, or add --resize") unless stopped.empty?
+end
+
+def plan_redeployments(standalones, resizes, options)
+  refuse_stopped_redeploys(standalones, resizes, options)
+  check_environment_stacks(standalones, options)
+  find_redeployments(standalones, options)
+end
+
+def plan_standalone_chores(standalones, options)
+  return {} unless options[:resize] || options[:'redeploy-latest']
+  return log_warn('--resize and --redeploy-latest only apply to the AMIs this run builds: nothing to do.') || {} if standalones.empty?
+
+  resizes = plan_resizes(standalones, options)
+  redeployments = options[:'redeploy-latest'] ? plan_redeployments(standalones, resizes, options) : {}
+  config = deploy_config
+  standalones.keys.to_h { |name| [name, { resize: resizes[name], redeployment: redeployments[name], log_marker: log_marker_for(config, options[:profile], name) }] }
+end
+
+def reset_context(cfn, options)
+  ctx = discover_cfn_stack_context(cfn, options)
+  missing = RESET_PARAMETERS - ctx[:parameters].map(&:parameter_key)
+  stop_or_report(options, "#{ctx[:stack_name]} has no #{missing.join(', ')} parameter") unless missing.empty?
+  ctx
+end
+
+def write_reset_parameters(names, value)
+  ssm = Aws::SSM::Client.new
+  response = with_network_retries('reading the current SSM values') { ssm.get_parameters({ names: names, with_decryption: true }) }
+  snapshot = response.parameters.to_h { |parameter| [parameter.name, parameter.value] }
+  missing = names - snapshot.keys
+  raise(PreflightError, "Missing SSM parameters: #{missing.join(', ')}") unless missing.empty?
+
+  names.each do |name|
+    log("Updating SSM parameter '#{name}' with value = '#{value}'...")
+    with_network_retries("updating #{name}") { ssm.put_parameter({ name: name, value: value, type: 'String', overwrite: true }) }
+  end
+
+  snapshot
+rescue StandardError, SignalException
+  restore_ssm_parameters(snapshot) if snapshot
+  raise
+end
+
+def set_standalone_instances(options, value)
+  cfn = Aws::CloudFormation::Client.new
+  ctx = reset_context(cfn, options)
+  stack_name = ctx[:stack_name]
+  snapshot = write_reset_parameters(RESET_PARAMETERS.map { |key| "#{ctx[:ssm_prefix]}/#{key}" }, value)
+  mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
+  log("Updating cloudformation stack #{stack_name} with #{RESET_PARAMETERS.join(' and ')} at #{value}...")
+  result = with_stack_ssm_rollback(stack_name, snapshot) { apply_stack_update(cfn, stack_name, ctx[:parameters]) }
+  log(result == :no_updates ? "Stack #{stack_name} already has them at #{value}." : "Update completed successfully for cloudformation stack #{stack_name}.")
+end
+
+def reset_standalone_instances(options)
+  if dry_run?(options)
+    reset_context(Aws::CloudFormation::Client.new, options)
+    return log("DRY RUN: a real run would set #{RESET_PARAMETERS.join(' and ')} to 0, update the stack, then set them to 1 and update it again.")
+  end
+
+  set_standalone_instances(options, '0')
+
+  begin
+    set_standalone_instances(options, '1')
+  rescue StandardError, SignalException
+    log_warn("The standalone instances may still be disabled: rerun with --reset-instances, or set #{RESET_PARAMETERS.join(' and ')} to 1 and update the stack.")
+    raise
+  end
 end
 
 def build_deploys(targets, ami_ids, _options)
@@ -1077,10 +1571,16 @@ def planned_ssm_values(deploys)
   end
 end
 
-def print_dry_run_plan(names, standalones, targets, options)
+def dry_run_build_step(standalone, chore)
+  resize = chore[:resize]
+  redeployment = chore[:redeployment]
+  "  build an AMI of #{standalone.last}#{" resized to #{resize[:to]} (then back to #{resize[:from]})" if resize}#{" after redeploying #{redeployment.deployment_id}" if redeployment}"
+end
+
+def print_dry_run_plan(names, standalones, targets, options, chores = {})
   log('DRY RUN: nothing was changed. A real run would:')
   requested = requested_amis(options, names)
-  names.each { |name| log(standalones[name] ? "  build an AMI of #{standalones[name].last}" : "  use #{requested[name]} for #{name}") }
+  names.each { |name| log(standalones[name] ? dry_run_build_step(standalones[name], chores.fetch(name, {})) : "  use #{requested[name]} for #{name}") }
   return if targets.nil?
 
   deploys = build_deploys(targets, names.to_h { |name| [name, requested[name] || "<new #{name} AMI>"] }, options).values
@@ -1122,8 +1622,18 @@ def requested_amis(options, names)
   names.each_with_index.to_h { |name, index| [name, amis[index]] }
 end
 
+def reset_before_deploy(names, options)
+  return unless options[:'reset-instances']
+
+  check_for_other_deploys(names, {}, nil, options) unless dry_run?(options)
+  reset_standalone_instances(options)
+end
+
 def deploy_instances(options)
   names = instance_names(options)
+  reset_before_deploy(names, options)
+  return log('No instance to deploy.') if names.empty?
+
   to_build = names.select { |name| requested_amis(options, names)[name].nil? }
   ami_only = options[:create_ami_only] && !to_build.empty?
   ec2 = Aws::EC2::Resource.new unless to_build.empty?
@@ -1131,9 +1641,10 @@ def deploy_instances(options)
   targets = discover_deploy_targets(names, options) unless ami_only
   check_for_other_deploys(names, standalones, targets, options)
   check_standalones(standalones, options)
-  return print_dry_run_plan(names, standalones, targets, options) if dry_run?(options)
+  chores = plan_standalone_chores(standalones, options)
+  return print_dry_run_plan(names, standalones, targets, options, chores) if dry_run?(options)
 
-  jobs = ami_jobs(names, standalones, options)
+  jobs = ami_jobs(names, standalones, options, chores)
 
   with_resume_command(names, jobs, options) do
     ami_ids = resolve_ami_ids(ec2, names, standalones, options, jobs)
@@ -1181,10 +1692,10 @@ rescue StandardError, SignalException
   raise
 end
 
-def ami_jobs(names, standalones, options)
+def ami_jobs(names, standalones, options, chores = {})
   requested = requested_amis(options, names)
   names.select { |name| requested[name].nil? }
-       .to_h { |name| [name, AmiJob.new(name, standalones[name].last)] }
+       .to_h { |name| [name, AmiJob.new(name, standalones[name].last, **chores.fetch(name, {}))] }
 end
 
 def with_ami_status_table(jobs)
@@ -1202,14 +1713,24 @@ ensure
   table&.render
 end
 
-def build_ami(ec2, standalone, options, job)
+def prepare_and_create_ami(ec2, standalone, options, job)
+  resize_standalone(standalone, job) if job.resize
+  redeploy_and_check(standalone, job) if job.redeployment
   instance_id, instance_name = standalone
   ami_id = create_ami(ec2, instance_id, instance_name, options.merge(ami_job: job))
   job.finish(ami_id)
   ami_id
-rescue StandardError => e
-  job.mark_failed(e.message)
-  raise
+end
+
+def build_ami(ec2, standalone, options, job)
+  Thread.handle_interrupt(Interrupt => :never) do
+    Thread.handle_interrupt(Interrupt => :immediate) { prepare_and_create_ami(ec2, standalone, options, job) }
+  rescue StandardError => e
+    job.mark_failed(e.message)
+    raise
+  ensure
+    restore_standalone_size(standalone, job)
+  end
 end
 
 def confirm_partial_ami_failure(outcomes, supplied, options)
@@ -1292,16 +1813,28 @@ def roll_out_instance(asg_client, deploy, target, mixed_params, factors)
   log("Update completed successfully for Auto scaling group #{asg[:name]}.")
 end
 
+def reset_option_error(options, names)
+  return unless options[:'reset-instances']
+  return '--reset-instances cannot be used with --lambda_publish_version' if options[:lambda_publish_version]
+  return if names.empty? || options[:'redeploy-latest'] || requested_amis(options, names).values.all?
+
+  '--reset-instances leaves blank standalone instances: add --redeploy-latest, or --ami for every instance'
+end
+
+def instance_required?(options)
+  !options[:'reset-instances'] || options[:'redeploy-latest'] || options[:resize]
+end
+
+def instance_list_error(options, names)
+  return 'missing argument: instance' if names.empty? && instance_required?(options)
+  return "--ami has #{parse_ami_list(options[:ami]).length} value(s) but --instance has #{names.length}; use none to build an AMI for an instance" if options[:ami] && parse_ami_list(options[:ami]).length != names.length
+  return '--type cannot be used with more than one instance' if names.length > 1 && options[:type]
+
+  reset_option_error(options, names)
+end
+
 def validate_instance_list!(options)
-  names = instance_names(options)
-  error =
-    if names.empty?
-      'missing argument: instance'
-    elsif options[:ami] && parse_ami_list(options[:ami]).length != names.length
-      "--ami has #{parse_ami_list(options[:ami]).length} value(s) but --instance has #{names.length}; use none to build an AMI for an instance"
-    elsif names.length > 1 && options[:type]
-      '--type cannot be used with more than one instance'
-    end
+  error = instance_list_error(options, instance_names(options))
   return if error.nil?
 
   warn(error)
@@ -1309,8 +1842,9 @@ def validate_instance_list!(options)
 end
 
 def parse_deploy_options(argv = ARGV)
+  mandatory = argv.include?('--reset-instances') ? %i[environment profile] : %i[environment instance profile]
   options =
-    CliMain.parse_options!(mandatory: %i[environment instance profile], argv: argv) do |opts|
+    CliMain.parse_options!(mandatory: mandatory, argv: argv) do |opts|
       opts.on('--ami ami1,none,ami2', String, 'AMI per instance, in --instance order; none builds one')
       opts.on('--create_ami_only')
       opts.on('--dry-run', 'Run discovery and read-only checks, then print the planned changes')
@@ -1320,6 +1854,9 @@ def parse_deploy_options(argv = ARGV)
       opts.on('--lambda_publish_version function_name', String)
       opts.on('--profile profile', String)
       opts.on('--preserve_desired_capacity')
+      opts.on('--redeploy-latest', 'Rerun the latest successful user-triggered CodeDeploy deployment on each standalone instance before its AMI')
+      opts.on('--reset-instances', 'Recreate the standalone instances first; --instance is then optional')
+      opts.on('--resize instance_type', String, 'Resize the standalone instances for the redeploy and AMI, then put them back')
       opts.on('--sequential_rollout')
       opts.on('--skip-lock', 'Run alongside another deploy of the same profile and environment')
       opts.on('--skip-other-deploy-check', 'Do not look for signs of another deploy')

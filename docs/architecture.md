@@ -128,6 +128,11 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `check_for_other_deploys`: Stops when CodeDeploy is deploying to a standalone instance about to be imaged, and asks about other active deployments, pending AMIs and stacks in progress
 - `check_standalones`: For running standalone instances, waits for the `UserDataCompleted` tag and verifies the CodeDeploy log marker through SSM Run Command
 - `print_dry_run_plan`: Prints the AMIs and SSM changes a `--dry-run` would make
+- `plan_standalone_chores`: Before any change, plans each AMI build's `--resize` and `--redeploy-latest` work and stops on a problem
+- `check_deployment_group_targets` / `find_redeployments`: Ensure a CodeDeploy group reaches only its standalone instance, then pick the newest successful user-triggered deployment
+- `redeploy_and_check`: Waits for the environment's stacks, reruns the deployment without starting it twice, waits for it and checks the CodeDeploy log
+- `resize_standalone` / `restore_standalone_size`: Change a standalone instance's type for the build, then restore its type and power state. `build_ami` defers `Interrupt` during the restore, so Ctrl-C and SIGTERM cannot cut it short
+- `reset_standalone_instances`: Recreates the standalone instances through two waited stack updates, with SSM rollback
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
 
 **Functionality:**
