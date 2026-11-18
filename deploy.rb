@@ -1,5 +1,9 @@
 #!/usr/bin/env ruby
 #
+# Original author: Yves Desgagne (Cloud Officer)
+# Pre-flight checks, notifications and recovery: Tommy Lacroix (https://github.com/tlacroix)
+# MIT License, see LICENSE
+#
 # https://docs.aws.amazon.com/sdk-for-ruby
 
 # frozen_string_literal: true
@@ -7,12 +11,18 @@
 require 'aws-sdk-autoscaling'
 require 'aws-sdk-cloudformation'
 require 'aws-sdk-cloudfront'
+require 'aws-sdk-codedeploy'
 require 'aws-sdk-core'
 require 'aws-sdk-ec2'
 require 'aws-sdk-elasticloadbalancingv2'
+require 'aws-sdk-iam'
 require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
+require 'fileutils'
+require 'shellwords'
+require 'yaml'
 require_relative 'lib/cli_main'
+require_relative 'lib/deploy_permissions'
 
 # Timing constants for polling and warmup periods
 POLL_INTERVAL = 15      # Seconds between status checks
@@ -27,6 +37,33 @@ TERMINATING_STATES = %w[Terminating Terminating:Wait Terminating:Proceed Termina
 
 # CloudFormation stack statuses to query
 ACTIVE_STACK_STATUSES = %w[CREATE_IN_PROGRESS CREATE_FAILED CREATE_COMPLETE ROLLBACK_IN_PROGRESS ROLLBACK_FAILED ROLLBACK_COMPLETE UPDATE_IN_PROGRESS UPDATE_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_COMPLETE UPDATE_FAILED UPDATE_ROLLBACK_IN_PROGRESS UPDATE_ROLLBACK_FAILED UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS UPDATE_ROLLBACK_COMPLETE REVIEW_IN_PROGRESS IMPORT_IN_PROGRESS IMPORT_COMPLETE IMPORT_ROLLBACK_IN_PROGRESS IMPORT_ROLLBACK_FAILED IMPORT_ROLLBACK_COMPLETE].freeze
+
+READY_POLL_INTERVAL = 5
+READY_MAX_POLL_ATTEMPTS = 720
+SSM_POLL_INTERVAL = 2
+SSM_MAX_POLL_ATTEMPTS = 60
+SSM_PENDING_STATUSES = %w[Pending InProgress Delayed].freeze
+ACTIVE_DEPLOYMENT_STATUSES = %w[Created Queued InProgress Baking Ready].freeze
+YES_ANSWERS = %w[y yes].freeze
+USER_DATA_TAG = 'UserDataCompleted'
+CODEDEPLOY_LOG = '/opt/codedeploy-agent/deployment-root/deployment-logs/codedeploy-agent-deployments.log'
+DEFAULT_LOG_MARKER = 'Validate service end.'
+
+REFUSED_CREDENTIAL_CODES = %w[InvalidClientTokenId InvalidAccessKeyId SignatureDoesNotMatch AuthFailure UnrecognizedClientException IncompleteSignature InvalidSignatureException InvalidToken].freeze
+EXPIRED_CREDENTIAL_CODES = %w[ExpiredToken ExpiredTokenException RequestExpired TokenRefreshRequired].freeze
+PROFILE_ERRORS = [
+  Aws::Errors::NoSuchProfileError,
+  Aws::Errors::MissingCredentialsError,
+  Aws::Errors::MissingRegionError,
+  Aws::Errors::NoSourceProfileError,
+  Aws::Errors::NoSourceCredentialsError,
+  Aws::Errors::InvalidCredentialSourceError,
+  Aws::Errors::InvalidProcessCredentialsPayload,
+  Aws::Errors::InvalidSSOCredentials,
+  Aws::Errors::InvalidSSOToken
+].freeze
+
+class PreflightError < StandardError; end
 
 def log_timestamp
   Time.now.strftime('%Y-%m-%d %H:%M:%S')
@@ -554,6 +591,7 @@ def discover_cfn_stack_context(cfn, options)
   subnet = extract_subnet_number(stack_name)
   {
     stack_name: stack_name,
+    stack_status: stacks_response.first.stack_status,
     # Parameters is an optional member: the SDK returns nil for a stack that
     # declares none, and every consumer below iterates it.
     parameters: stacks_response.first.parameters || [],
@@ -629,22 +667,334 @@ def discover_load_balancer(stack_name, options)
   [elb, find_target_group(elb, stack_name, options)]
 end
 
+def dry_run?(options)
+  options[:'dry-run'] == true
+end
+
+def stop_or_report(options, message)
+  raise(PreflightError, message) unless dry_run?(options)
+
+  log_warn("DRY RUN: a real run would stop here: #{message}")
+end
+
+def read_answer
+  $stdin.gets.to_s.strip.downcase
+end
+
+def confirm_or_abort(prompt, abort_message)
+  print(prompt)
+  raise(PreflightError, abort_message) unless YES_ANSWERS.include?(read_answer)
+end
+
+def credentials_problem(error)
+  detail = error.message.lines.first.to_s.strip
+  return "it is missing or incomplete in the AWS configuration (#{detail})" if PROFILE_ERRORS.any? { |kind| error.is_a?(kind) }
+  return unless error.is_a?(Aws::Errors::ServiceError)
+  return "its session has expired (#{detail})" if EXPIRED_CREDENTIAL_CODES.include?(error.code)
+
+  "AWS refused its credentials (#{detail})" if REFUSED_CREDENTIAL_CODES.include?(error.code)
+end
+
+def check_credentials(options)
+  Aws::STS::Client.new.get_caller_identity.arn
+rescue *PROFILE_ERRORS, Aws::Errors::ServiceError => e
+  problem = credentials_problem(e)
+  raise if problem.nil?
+
+  raise(PreflightError, "Cannot use profile '#{options[:profile]}': #{problem}.", cause: nil)
+end
+
+def confirm_unchecked_permissions(options, reason)
+  log_warn("Could not check your permissions: #{reason}")
+  return log_warn('DRY RUN: a real run would ask whether to continue, and stop without a terminal.') if dry_run?(options)
+
+  raise(PreflightError, "Could not check your permissions (#{reason}): rerun with --skip-permission-check to go without.", cause: nil) unless $stdin.tty?
+
+  confirm_or_abort('Continue without the permission check? [y/N] ', 'Permissions could not be checked, aborted.')
+end
+
+def report_missing_permissions(options, arn, needs, denied)
+  missing =
+    needs.transform_values { |actions| actions & denied }
+         .reject { |_purpose, actions| actions.empty? }
+  return log("#{arn} has the permissions this run needs.") if missing.empty?
+
+  lines = missing.map { |purpose, actions| "  #{actions.join(', ')} (#{purpose})" }
+  stop_or_report(options, "#{arn} is missing permissions:\n#{lines.join("\n")}\nA permission limited to some resources reads as missing: rerun with --skip-permission-check if this list is wrong.")
+end
+
+def check_permissions(options, caller_arn)
+  return log('Not checking permissions (--skip-permission-check).') if options[:'skip-permission-check']
+
+  needs = DeployPermissions.required(options, load_balanced: instance_names(options).any? { |name| load_balanced_instance?(name) })
+  log('Checking permissions...')
+  iam = Aws::IAM::Client.new
+  arn = DeployPermissions.simulation_arn(iam, caller_arn)
+  return confirm_unchecked_permissions(options, "#{caller_arn} has no policies to simulate") if arn.nil?
+
+  report_missing_permissions(options, arn, needs, DeployPermissions.denied(iam, arn, needs.values.reduce([], :|)))
+rescue Aws::IAM::Errors::ServiceError => e
+  confirm_unchecked_permissions(options, e.message)
+end
+
+def deploy_directory
+  File.join(Dir.home, '.deploy')
+end
+
+def deploy_lock_path(options)
+  File.join(deploy_directory, 'locks', "#{options[:profile]}-#{options[:environment]}.lock".tr('/', '_'))
+end
+
+def hold_deploy_lock(options)
+  path = deploy_lock_path(options)
+  FileUtils.mkdir_p(File.dirname(path))
+
+  File.open(path, File::RDWR | File::CREAT, 0o600) do |file|
+    raise(PreflightError, "Another deploy is already running for #{options[:profile]}/#{options[:environment]} (#{file.read.strip}): --skip-lock runs alongside it.") unless file.flock(File::LOCK_EX | File::LOCK_NB)
+
+    file.truncate(0)
+    file.write("pid #{Process.pid}, started #{log_timestamp}")
+    file.flush
+    yield
+  end
+end
+
+def with_deploy_lock(options, &)
+  return yield if dry_run?(options)
+
+  if options[:'skip-lock']
+    log('Not taking the deploy lock (--skip-lock).')
+    return yield
+  end
+
+  hold_deploy_lock(options, &)
+end
+
+def deploy_config
+  path = File.join(deploy_directory, 'config.yaml')
+  return {} unless File.exist?(path)
+
+  config = YAML.safe_load_file(path) || {}
+  raise(PreflightError, "#{path} must be a mapping.") unless config.is_a?(Hash)
+
+  config
+rescue Psych::Exception => e
+  raise(PreflightError, "#{path} is invalid: #{e.message}")
+end
+
+def log_marker_for(config, profile, instance)
+  scope = [config.dig('profiles', profile, 'codedeploy', instance), config['codedeploy']].find { |candidate| candidate.is_a?(Hash) && candidate.key?('log_marker') }
+  return DEFAULT_LOG_MARKER if scope.nil?
+
+  scope['log_marker'] || nil
+rescue TypeError
+  raise(PreflightError, 'The profiles section of the deploy config is malformed.')
+end
+
+def deployment_instance_ids(codedeploy, deployment_id)
+  codedeploy.list_deployment_instances({ deployment_id: deployment_id }).flat_map(&:instances_list)
+rescue Aws::CodeDeploy::Errors::DeploymentNotStartedException
+  []
+end
+
+def active_deployments(names, environment)
+  codedeploy = Aws::CodeDeploy::Client.new
+  group = environment.tr('0-9', '')
+
+  names.flat_map do |name|
+    ids = codedeploy.list_deployments({ application_name: name, deployment_group_name: group, include_only_statuses: ACTIVE_DEPLOYMENT_STATUSES }).flat_map(&:deployments)
+    ids.map { |id| { instance: name, id: id, targets: deployment_instance_ids(codedeploy, id) } }
+  rescue Aws::CodeDeploy::Errors::ApplicationDoesNotExistException, Aws::CodeDeploy::Errors::DeploymentGroupDoesNotExistException
+    []
+  end
+end
+
+def pending_images(standalones)
+  return [] if standalones.empty?
+
+  filters = [{ name: 'source-instance-id', values: standalones.values.map(&:first) }, { name: 'state', values: ['pending'] }]
+  Aws::EC2::Client.new.describe_images({ owners: ['self'], filters: filters }).images.map { |image| "#{image.image_id} (#{image.name})" }
+end
+
+def confirm_other_deploys(hints, options)
+  return if hints.empty?
+
+  hints.each { |hint| log_warn("WARNING: #{hint}") }
+  return log_warn('DRY RUN: a real run would ask whether to continue, and stop without a terminal.') if dry_run?(options)
+
+  raise(PreflightError, "Someone else may be deploying: #{hints.join('; ')}. Rerun with --skip-other-deploy-check to deploy anyway.") unless $stdin.tty?
+
+  confirm_or_abort('Someone else may be deploying. Continue anyway? [y/N] ', 'Someone else may be deploying, aborted.')
+end
+
+def check_for_other_deploys(names, standalones, targets, options)
+  return log('Not checking for other deploys (--skip-other-deploy-check).') if options[:'skip-other-deploy-check']
+
+  deployments = active_deployments(names, options[:environment])
+  imaging, others = deployments.partition { |deployment| deployment[:targets].include?(standalones.dig(deployment[:instance], 0)) }
+  unless imaging.empty?
+    stop_or_report(
+      options,
+      "CodeDeploy is deploying to #{imaging.map { |deployment| "#{standalones[deployment[:instance]].last} (#{deployment[:id]})" }
+.join(', ')}: wait for it before building the AMI."
+    )
+  end
+
+  hints = others.map { |deployment| "CodeDeploy #{deployment[:id]} is running for #{deployment[:instance]}" }
+  hints += pending_images(standalones).map { |image| "AMI #{image} is still being created" }
+  stack = targets && targets[:ctx]
+  hints << "stack #{stack[:stack_name]} is #{stack[:stack_status]}" if stack && stack[:stack_status].to_s.end_with?('_IN_PROGRESS')
+  confirm_other_deploys(hints, options)
+end
+
+def running_standalones(client, standalones)
+  instances = client.describe_instances({ instance_ids: standalones.values.map(&:first) }).flat_map(&:reservations).flat_map(&:instances)
+  states = instances.to_h { |instance| [instance.instance_id, instance.state.name] }
+  running, stopped = standalones.partition { |_name, (instance_id, _instance_name)| states[instance_id] == 'running' }
+                                .map(&:to_h)
+  stopped.each_value { |(_instance_id, instance_name)| log_warn("#{instance_name} is not running: skipping its readiness and CodeDeploy checks.") }
+  running
+end
+
+def unready_standalones(client, standalones)
+  filters = [{ name: 'resource-id', values: standalones.values.map(&:first) }, { name: 'key', values: [USER_DATA_TAG] }]
+  tagged = client.describe_tags({ filters: filters }).flat_map { |page| page.tags.map(&:resource_id) }
+  standalones.reject { |_name, (instance_id, _instance_name)| tagged.include?(instance_id) }
+end
+
+def wait_for_unready?(names)
+  return true unless $stdin.tty?
+
+  print("Wait for #{names.join(', ')}? [Y/n] ")
+  answer = read_answer
+  answer.empty? || YES_ANSWERS.include?(answer)
+end
+
+def wait_for_standalones(client, standalones, options)
+  unready = unready_standalones(client, standalones)
+  return if unready.empty?
+
+  names = unready.values.map(&:last)
+  log_warn("No #{USER_DATA_TAG} tag on #{names.join(', ')}: user data may still be running.")
+  return log_warn('DRY RUN: a real run would ask whether to wait, and wait without a terminal.') if dry_run?(options)
+  return log('Continuing without waiting.') unless wait_for_unready?(names)
+
+  poll_until(description: "waiting for #{USER_DATA_TAG} on #{names.join(', ')}", max_attempts: READY_MAX_POLL_ATTEMPTS, interval: READY_POLL_INTERVAL) do
+    unready = unready_standalones(client, unready)
+    unready.empty?
+  end
+end
+
+def codedeploy_check_commands(marker)
+  commands = ["f=#{Shellwords.escape(CODEDEPLOY_LOG)}", 'test -f "$f" || { echo "$f does not exist"; exit 2; }', 'tail "$f"']
+  marker ? commands + ["tail \"$f\" | grep -qF -- #{Shellwords.escape(marker)} || exit 3"] : commands
+end
+
+def wait_for_command_invocation(ssm, command_id, instance_id)
+  invocation = nil
+
+  poll_until(description: "waiting for SSM command #{command_id} on #{instance_id}", max_attempts: SSM_MAX_POLL_ATTEMPTS, interval: SSM_POLL_INTERVAL) do
+    invocation = ssm.get_command_invocation({ command_id: command_id, instance_id: instance_id })
+    !SSM_PENDING_STATUSES.include?(invocation.status)
+  rescue Aws::SSM::Errors::InvocationDoesNotExist
+    false
+  end
+
+  invocation
+end
+
+def codedeploy_failure_reason(invocation, marker)
+  case invocation.response_code
+  when 2 then "#{CODEDEPLOY_LOG} does not exist"
+  when 3 then "no '#{marker}' in the last lines of the CodeDeploy log"
+  else "SSM command #{invocation.status} (#{invocation.response_code}): #{invocation.standard_error_content}"
+  end
+end
+
+def codedeploy_log_failures(ssm, marker, standalones)
+  command = ssm.send_command({ instance_ids: standalones.values.map(&:first), document_name: 'AWS-RunShellScript', comment: 'deploy.rb: check CodeDeploy log before AMI', parameters: { commands: codedeploy_check_commands(marker) } })
+
+  standalones.values.filter_map do |instance_id, instance_name|
+    invocation = wait_for_command_invocation(ssm, command.command.command_id, instance_id)
+    "#{instance_name}: #{codedeploy_failure_reason(invocation, marker)}" unless invocation.status == 'Success'
+  end
+rescue Aws::SSM::Errors::InvalidInstanceId => e
+  standalones.values.map { |_instance_id, instance_name| "#{instance_name}: SSM cannot reach it (#{e.message})" }
+end
+
+def verify_codedeploy_logs(standalones, options)
+  config = deploy_config
+  ssm = Aws::SSM::Client.new
+  by_marker = standalones.group_by { |name, _standalone| log_marker_for(config, options[:profile], name) }
+  failures = by_marker.flat_map { |marker, group| codedeploy_log_failures(ssm, marker, group.to_h) }
+  stop_or_report(options, "CodeDeploy check failed, no AMI created:\n#{failures.join("\n")}") unless failures.empty?
+end
+
+def check_standalones(standalones, options)
+  return if standalones.empty?
+
+  client = Aws::EC2::Client.new
+  running = running_standalones(client, standalones)
+  return if running.empty?
+
+  wait_for_standalones(client, running, options)
+  verify_codedeploy_logs(running, options)
+end
+
+def build_deploys(targets, ami_ids, _options)
+  ctx = targets[:ctx]
+  targets[:instances].to_h { |name, target| [name, DeployContext.new(options: target[:options], asg: target[:asg], ami_id: ami_ids[name], stack: ctx.merge(prefix: parameter_prefix_for(name)))] }
+end
+
+def planned_ssm_values(deploys)
+  deploys.each_with_object({}) do |deploy, planned|
+    deploy.parameters.each do |parameter|
+      value = resolve_parameter_value(parameter.parameter_key, deploy)
+      planned["#{deploy.ssm_prefix}/#{parameter.parameter_key}"] = value unless value.nil?
+    end
+  end
+end
+
+def print_dry_run_plan(names, standalones, targets, options)
+  log('DRY RUN: nothing was changed. A real run would:')
+  names.each { |name| log(standalones[name] ? "  build an AMI of #{standalones[name].last}" : "  use #{options[:ami]} for #{name}") }
+  return if targets.nil?
+
+  deploys = build_deploys(targets, names.to_h { |name| [name, options[:ami] || "<new #{name} AMI>"] }, options).values
+  current = deploys.map { |deploy| capture_ssm_snapshot(deploy) }
+                   .reduce({}, :merge)
+  planned_ssm_values(deploys).each { |name, value| log("  set #{name}: #{current.fetch(name, '(not set)')} -> #{value}") }
+  log("  update stack #{targets[:ctx][:stack_name]} and roll out #{names.join(', ')}")
+end
+
 def run_deployment(options)
   if options[:profile]
     log("Setting profile '#{options[:profile]}'...")
     Aws.config.update({ profile: options[:profile] })
   end
 
+  check_permissions(options, check_credentials(options))
+
   if options[:lambda_publish_version]
+    return log("DRY RUN: a real run would publish lambda #{options[:environment]}-#{options[:lambda_publish_version]}.") if dry_run?(options)
+
     publish_lambda_and_update_cloudfront(options)
     return
   end
 
+  with_deploy_lock(options) { deploy_instances(options) }
+end
+
+def deploy_instances(options)
   names = instance_names(options)
   ami_only = options[:create_ami_only] && options[:ami].nil?
   ec2 = Aws::EC2::Resource.new if options[:ami].nil?
   standalones = options[:ami] ? {} : map_instances(names) { |name| find_standalone_instance(ec2, instance_options(options, name)) }
   targets = discover_deploy_targets(names, options) unless ami_only
+  check_for_other_deploys(names, standalones, targets, options)
+  check_standalones(standalones, options)
+  return print_dry_run_plan(names, standalones, targets, options) if dry_run?(options)
+
   ami_ids = resolve_ami_ids(ec2, names, standalones, options)
 
   if ami_only
@@ -682,7 +1032,7 @@ end
 
 def deploy_to_targets(targets, ami_ids, options)
   ctx = targets[:ctx]
-  deploys = targets[:instances].to_h { |name, target| [name, DeployContext.new(options: target[:options], asg: target[:asg], ami_id: ami_ids[name], stack: ctx.merge(prefix: parameter_prefix_for(name)))] }
+  deploys = build_deploys(targets, ami_ids, options)
 
   ssm_snapshot = deploys.values.map { |deploy| capture_ssm_snapshot(deploy) }
                         .reduce({}, :merge)
@@ -735,6 +1085,7 @@ def parse_deploy_options(argv = ARGV)
     CliMain.parse_options!(mandatory: %i[environment instance profile], argv: argv) do |opts|
       opts.on('--ami ami', String)
       opts.on('--create_ami_only')
+      opts.on('--dry-run', 'Run discovery and read-only checks, then print the planned changes')
       opts.on('--environment environment', String)
       opts.on('--instance instance1,instance2', String)
       opts.on('--type instance_type', String)
@@ -742,6 +1093,9 @@ def parse_deploy_options(argv = ARGV)
       opts.on('--profile profile', String)
       opts.on('--preserve_desired_capacity')
       opts.on('--sequential_rollout')
+      opts.on('--skip-lock', 'Run alongside another deploy of the same profile and environment')
+      opts.on('--skip-other-deploy-check', 'Do not look for signs of another deploy')
+      opts.on('--skip-permission-check', 'Do not check the IAM permissions this run needs')
       opts.on('--skip_scale_down')
       opts.on('--spot_target_capacity spot_target_capacity', Integer)
     end
@@ -749,12 +1103,18 @@ def parse_deploy_options(argv = ARGV)
   options
 end
 
+def deploy_from_cli(options)
+  log('Starting deployment...')
+  run_deployment(options)
+rescue PreflightError => e
+  log_warn(e.message)
+  exit(1)
+end
+
 # :nocov:
 if __FILE__ == $PROGRAM_NAME
   CliMain.run! do
-    options = parse_deploy_options
-    log('Starting deployment...')
-    run_deployment(options)
+    deploy_from_cli(parse_deploy_options)
   end
 end
 # :nocov:

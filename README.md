@@ -133,6 +133,7 @@ Usage: deploy.rb options
 options
         --ami ami
         --create_ami_only
+        --dry-run                    Run discovery and read-only checks, then print the planned changes
         --environment environment
         --instance instance1,instance2
         --type instance_type
@@ -140,6 +141,9 @@ options
         --profile profile
         --preserve_desired_capacity
         --sequential_rollout
+        --skip-lock                  Run alongside another deploy of the same profile and environment
+        --skip-other-deploy-check    Do not look for signs of another deploy
+        --skip-permission-check      Do not check the IAM permissions this run needs
         --skip_scale_down
         --spot_target_capacity spot_target_capacity
     -h, --help                       Print this help message
@@ -159,6 +163,23 @@ deploy.rb --profile ugm --environment rc --instance api,grpc
 
 # same, but roll the auto scaling groups one after another to limit the extra capacity
 deploy.rb --profile ugm --environment rc --instance api,grpc,worker --sequential_rollout
+
+# run every check and print the planned SSM changes without changing anything
+deploy.rb --profile dev --environment rc --instance api,grpc --dry-run
+```
+
+Before changing anything, a run checks the profile's credentials and simulates the IAM permissions it needs, takes a lock per profile and environment under `~/.deploy/locks`, and looks for another deploy in progress. For each running standalone instance it waits for the `UserDataCompleted` tag and checks the last lines of the CodeDeploy log over SSM. A stopped standalone instance skips those two checks. Without a terminal, a question that needs an answer stops the run, except the wait for the tag, which waits.
+
+The deploy role needs `iam:SimulatePrincipalPolicy`, `codedeploy:ListDeployments`, `codedeploy:ListDeploymentInstances`, `ec2:DescribeTags`, `ssm:SendCommand` and `ssm:GetCommandInvocation`. The log marker defaults to `Validate service end.` and can be changed in `~/.deploy/config.yaml`; `false` only requires the log to exist:
+
+```yaml
+codedeploy:
+  log_marker: Validate service end.
+profiles:
+  my-profile:
+    codedeploy:
+      worker:
+        log_marker: Application start end.
 ```
 
 With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others: its auto scaling group capacity is restored and the run exits 1. `--ami` and `--type` only apply to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
