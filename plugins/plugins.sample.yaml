@@ -1,0 +1,30 @@
+---
+# Copy to ~/.deploy/plugins.yaml and run chmod 600 on it: it can hold secrets.
+# A plugin is off unless enabled: true. Every plugin also accepts events, a list
+# replacing its default events. See the deploy section of README.md.
+
+# macOS say.
+voice:
+  enabled: false
+  # voice: Samantha
+
+# macOS alerts and notifications.
+macos_notification:
+  enabled: false
+
+# Texts through Twilio, with --sms or on every run with always: true.
+sms:
+  enabled: false
+  always: false
+  account_sid: ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  auth_token: your-auth-token
+  from: "+15555550100"
+  to: "+15555550101"
+
+# Posts events as json, or as a slack message.
+webhook:
+  enabled: false
+  url: https://hooks.example.com/deploy
+  format: json
+  headers:
+    Authorization: Bearer your-token

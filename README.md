@@ -133,6 +133,8 @@ Usage: deploy.rb options
 options
         --ami ami1,none,ami2         AMI per instance, in --instance order; none builds one
         --create_ami_only
+        --disable-plugins [all,plugin]
+                                     Turn off every plugin, or the ones listed
         --dry-run                    Run discovery and read-only checks, then print the planned changes
         --environment environment
         --instance instance1,instance2
@@ -148,6 +150,7 @@ options
         --skip-other-deploy-check    Do not look for signs of another deploy
         --skip-permission-check      Do not check the IAM permissions this run needs
         --skip_scale_down
+        --sms                        Send texts through the sms plugin for this run
         --spot_target_capacity spot_target_capacity
     -h, --help                       Print this help message
 ```
@@ -221,6 +224,21 @@ profiles:
       rc:
         - https://rc.example.com/health
 ```
+
+##### Notifications and run log
+
+Each run writes a timestamped log to `~/.deploy/logs`, readable only by you. If that fails, the deploy continues without it. `--dry-run` writes no log and sends no notification. In `~/.deploy/config.yaml`, `log.directory` moves the logs and `log.enabled: false` turns them off.
+
+Copy `plugins/plugins.sample.yaml` (under `libexec` in a Homebrew install) to `~/.deploy/plugins.yaml` and run `chmod 600` on it, because it can hold Twilio credentials and webhook tokens. Plugins stay off if the file belongs to someone else or others can access it. Nothing in `~/.deploy` is required.
+
+| Plugin | Sends | Needs |
+| --- | --- | --- |
+| `voice` | Spoken progress | macOS |
+| `macos_notification` | Alerts and notifications | macOS |
+| `sms` | Outcomes and pending questions through Twilio | Twilio account, plus `--sms` or `always: true` |
+| `webhook` | Events as JSON or a Slack message | An HTTP(S) URL |
+
+A plugin that fails to load or send only prints a warning. Each plugin accepts an `events` list. Health-check URLs are sent without their credentials or query string.
 
 With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others but makes the run exit 1. `--type` only applies to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
 

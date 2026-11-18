@@ -130,6 +130,8 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `plan_instance_rollout` / `stale_instance_ids`: Compare each ASG instance's AMI with the new one, so only groups still on an old AMI are scaled
 - `scale_up_for_rollout` / `print_scale_down_commands`: Scale up from the recorded baseline, and on failure leave the group scaled up with manual commands
 - `run_healthchecks`: Retries the configured URLs with `curl` for a limited time and only warns on failure
+- `Plugin` / `PluginManager` (`lib/plugin.rb`, `lib/plugin_manager.rb`, `plugins/`): Load the plugins enabled in `~/.deploy/plugins.yaml` and deliver events on one thread per plugin, so a failing plugin only warns
+- `RunLog` / `TeeOutput`: Copy the run's output to an owner-only file under `~/.deploy/logs`
 - `print_dry_run_plan`: Prints the AMIs and SSM changes a `--dry-run` would make
 - `plan_standalone_chores`: Before any change, plans each AMI build's `--resize` and `--redeploy-latest` work and stops on a problem
 - `check_deployment_group_targets` / `find_redeployments`: Ensure a CodeDeploy group reaches only its standalone instance, then pick the newest successful user-triggered deployment

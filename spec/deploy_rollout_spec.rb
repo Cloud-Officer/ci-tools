@@ -64,17 +64,25 @@ RSpec.describe(DeployRollout) do
   describe '#asg_baseline' do
     it 'reads the capacity from before an unfinished rollout' do
       tag = Aws::AutoScaling::Types::TagDescription.new(baseline_tag)
-      expect(asg_baseline([tag])).to(eq({ desired_capacity: 2, max_size: 4 }))
+      expect(asg_baseline([tag], 1)).to(eq({ desired_capacity: 2, max_size: 4 }))
     end
 
     it 'is nil without the tag' do
-      expect(asg_baseline(nil)).to(be_nil)
+      expect(asg_baseline(nil, 1)).to(be_nil)
     end
 
     it 'stops on a tag it cannot read' do
       tag = Aws::AutoScaling::Types::TagDescription.new(baseline_tag('desired=2'))
-      expect { asg_baseline([tag]) }
+      expect { asg_baseline([tag], 1) }
         .to(raise_error(PreflightError, /is invalid/))
+    end
+
+    %w[desired=0,max=4 desired=3,max=2].each do |value|
+      it "refuses the impossible capacity #{value}" do
+        tag = Aws::AutoScaling::Types::TagDescription.new(baseline_tag(value))
+        expect { asg_baseline([tag], 1) }
+          .to(raise_error(PreflightError, /is invalid/))
+      end
     end
   end
 
@@ -416,6 +424,11 @@ RSpec.describe(DeployRollout) do
       expect(healthcheck_failure('https://x')).to(eq('curl failed: timed out'))
     end
 
+    it 'keeps URL secrets out of a curl error' do
+      curl('000', success: false, err: 'bad https://me:pw@x/health?token=abc')
+      expect(healthcheck_failure('https://me:pw@x/health?token=abc')).to(eq('curl failed: bad https://x/health'))
+    end
+
     it 'reports a missing curl' do
       allow(Open3).to(receive(:capture3).and_raise(Errno::ENOENT))
       expect(healthcheck_failure('https://x')).to(start_with('curl could not run'))
@@ -424,12 +437,22 @@ RSpec.describe(DeployRollout) do
     it 'passes the URL as a value and limits the protocols' do
       curl('200')
       healthcheck_failure('-x')
-      expect(Open3).to(have_received(:capture3).with('curl', '--silent', '--show-error', '--proto', '=http,https', '--output', File::NULL, '--write-out', CURL_STATUS_FORMAT, '--max-time', '15', '--url', '-x'))
+      expect(Open3).to(have_received(:capture3).with('curl', '--silent', '--show-error', '--globoff', '--proto', '=http,https', '--output', File::NULL, '--write-out', CURL_STATUS_FORMAT, '--max-time', '15', '--url', '-x'))
+    end
+  end
+
+  describe '#redacted_url' do
+    it 'removes the credentials and the query' do
+      expect(redacted_url('https://me:pw@x/health?token=abc')).to(eq('https://x/health'))
+    end
+
+    it 'hides a URL it cannot parse' do
+      expect(redacted_url('https://bad host/?token=abc')).to(eq('<unparsable URL>'))
     end
   end
 
   describe '#run_healthchecks' do
-    let(:settings) { { urls: %w[u1 u2], interval: 5, give_up_after: 60 } }
+    let(:settings) { { urls: %w[https://u1 https://u2], interval: 5, give_up_after: 60 } }
 
     it 'does nothing without URLs' do
       allow(self).to(receive(:healthcheck_failure))
@@ -438,16 +461,16 @@ RSpec.describe(DeployRollout) do
     end
 
     it 'retries only the failing URL until it recovers' do
-      answers = JSON.parse(JSON.generate({ u1: [nil], u2: ['HTTP 503', nil] }))
+      answers = JSON.parse(JSON.generate({ 'https://u1': [nil], 'https://u2': ['HTTP 503', nil] }))
       allow(self).to(receive(:healthcheck_failure)) { |url| answers[url].shift }
       quietly { run_healthchecks(settings) }
-      expect(self).to(have_received(:healthcheck_failure).with('u2').twice)
+      expect(self).to(have_received(:healthcheck_failure).with('https://u2').twice)
     end
 
     it 'gives up with a warning without failing the deploy' do
       allow(self).to(receive(:healthcheck_failure).and_return('HTTP 503'))
       allow(Time).to(receive(:now).and_return(Time.at(0), Time.at(0), Time.at(61)))
-      expect(quietly { run_healthchecks(settings) }).to(include('giving up on health check u1'))
+      expect(quietly { run_healthchecks(settings) }).to(include('giving up on health check https://u1'))
     end
   end
 
