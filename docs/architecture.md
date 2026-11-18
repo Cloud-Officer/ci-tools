@@ -120,10 +120,16 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `create_ami`: Creates an AMI from the standalone instance and waits on `Aws::EC2::Waiters::ImageAvailable`
 - `deploy_each`: Runs one step for every instance named in `--instance` (comma-separated), in parallel threads with a `[name]` log tag when there are several, and raises after all finish if any failed
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
+- `check_credentials` / `check_permissions`: Stop on unusable credentials, then simulate the IAM actions listed by `DeployPermissions.required` for the selected options
+- `with_deploy_lock`: Holds an advisory `flock` per profile and environment under `~/.deploy/locks` for the whole run
+- `check_for_other_deploys`: Stops when CodeDeploy is deploying to a standalone instance about to be imaged, and asks about other active deployments, pending AMIs and stacks in progress
+- `check_standalones`: For running standalone instances, waits for the `UserDataCompleted` tag and verifies the CodeDeploy log marker through SSM Run Command
+- `print_dry_run_plan`: Prints the AMIs and SSM changes a `--dry-run` would make
 - Main deployment logic: Creates AMIs, updates CloudFormation stacks, manages ASG scaling
 
 **Functionality:**
 
+- Runs pre-flight checks before any AMI, SSM or stack change, each with a matching `--skip-*` option, and exits with one line when one fails
 - Creates EC2 AMIs from standalone instances, in parallel when several instances are deployed
 - Deploys several instances in one run with one SSM update and one CloudFormation stack update, then rolls the auto scaling groups out in parallel (or one at a time with `--sequential_rollout`)
 - Updates CloudFormation stack parameters via SSM
@@ -136,9 +142,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Publishes Lambda versions and updates CloudFront distributions
 - Supports spot instance deployments with mixed instance policies
 
-**Internal Dependencies:** lib/cli_main.rb (CliMain)
+**Internal Dependencies:** lib/cli_main.rb (CliMain), lib/deploy_permissions.rb (DeployPermissions)
 
-**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-lambda, aws-sdk-ssm
+**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-codedeploy, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-iam, aws-sdk-lambda, aws-sdk-ssm
 
 ### cycle-keys.rb
 

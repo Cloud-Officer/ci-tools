@@ -10,6 +10,7 @@
 | Ruby | aws-sdk-cloudformation | 1.172.0 | Apache-2.0 | Official AWS Ruby gem for AWS CloudFormation | <https://github.com/aws/aws-sdk-ruby> | 2026-11-16 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudfront | 1.168.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudFront (CloudFront) | <https://github.com/aws/aws-sdk-ruby> | 2026-11-16 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-cloudwatchlogs | 1.178.0 | Apache-2.0 | Official AWS Ruby gem for Amazon CloudWatch Logs | <https://github.com/aws/aws-sdk-ruby> | 2026-11-16 | Low | Access AWS services | Official AWS Ruby SDK |
+| Ruby | aws-sdk-codedeploy | 1.117.0 | Apache-2.0 | Official AWS Ruby gem for AWS CodeDeploy (CodeDeploy) | <https://github.com/aws/aws-sdk-ruby> | 2026-11-17 | High | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-core | 3.269.0 | Apache-2.0 | Provides API clients for AWS | <https://github.com/aws/aws-sdk-ruby> | 2026-11-16 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-ec2 | 1.671.0 | Apache-2.0 | Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2) | <https://github.com/aws/aws-sdk-ruby> | 2026-11-16 | Low | Access AWS services | Official AWS Ruby SDK |
 | Ruby | aws-sdk-elasticloadbalancingv2 | 1.170.0 | Apache-2.0 | Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2) | <https://github.com/aws/aws-sdk-ruby> | 2026-11-16 | Low | Access AWS services | Official AWS Ruby SDK |

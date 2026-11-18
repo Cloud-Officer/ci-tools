@@ -95,6 +95,18 @@
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
   },
+  "Ruby:aws-sdk-codedeploy": {
+    "language": "Ruby",
+    "package": "aws-sdk-codedeploy",
+    "version": "1.117.0",
+    "license": "Apache-2.0",
+    "description": "Official AWS Ruby gem for AWS CodeDeploy (CodeDeploy)",
+    "website": "https://github.com/aws/aws-sdk-ruby",
+    "last_verified_at": "2026-11-17",
+    "risk_level": "High",
+    "requirements": "Access AWS services",
+    "verification_reasoning": "Official AWS Ruby SDK"
+  },
   "Ruby:aws-sdk-core": {
     "language": "Ruby",
     "package": "aws-sdk-core",

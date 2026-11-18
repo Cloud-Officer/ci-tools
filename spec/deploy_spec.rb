@@ -1361,6 +1361,11 @@ RSpec.describe(Deploy) do
     let(:lambda_client) { Aws::Lambda::Client.new(stub_responses: true)     }
     let(:cloudfront)    { Aws::CloudFront::Client.new(stub_responses: true) }
 
+    before do
+      allow(self).to(receive_messages(check_credentials: 'arn:aws:iam::123456789012:user/deployer', check_permissions: nil, check_for_other_deploys: nil, check_standalones: nil))
+      allow(self).to(receive(:with_deploy_lock)) { |_options, &block| block.call }
+    end
+
     context 'with --lambda_publish_version' do
       before do
         allow(Aws::Lambda::Client).to(receive(:new).and_return(lambda_client))

@@ -13,6 +13,7 @@ require_relative '../cycle-keys'
 require_relative '../deploy'
 require_relative '../encrypt-logs'
 require_relative '../lib/cli_main'
+require_relative '../lib/deploy_permissions'
 
 # Captures everything written to $stdout while the block runs and returns it as
 # a String, restoring $stdout even when the block raises (e.g. SystemExit).
