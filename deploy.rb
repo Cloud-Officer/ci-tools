@@ -1438,18 +1438,24 @@ def manual_resize_commands(instance_id, resize)
           .join('; ')
 end
 
-def restore_standalone_size(standalone, job)
-  return unless job.snapshot[:resized]
-
+def restore_problem(standalone, resize)
   instance_id, name = standalone
-  final = job.snapshot.slice(:state, :name)
-  job.update(state: 'restoring', name: "#{name} to #{job.resize[:from]}")
-  resize_instance(instance_id, job.resize[:from], start: job.resize[:running])
-  job.update(resized: false, **final)
+  resize_instance(instance_id, resize[:from], start: resize[:running])
+  nil
 rescue StandardError => e
-  problem = "Could not put #{name} back to #{job.resize[:from]} (#{e.message}). Restore it by hand: #{manual_resize_commands(instance_id, job.resize)}"
+  problem = "Could not put #{name} back to #{resize[:from]} (#{e.message}). Restore it by hand: #{manual_resize_commands(instance_id, resize)}"
   log_warn(problem)
-  job.update(**final, error: [job.snapshot[:error], problem].compact.join('; '))
+  problem
+end
+
+def restore_standalone_size(standalone, job)
+  fields = job.snapshot
+  return unless fields[:resized]
+
+  job.update(state: 'restoring', name: "#{standalone.last} to #{job.resize[:from]}")
+  problem = restore_problem(standalone, job.resize)
+  outcome = problem ? { error: [fields[:error], problem].compact.join('; ') } : { resized: false }
+  job.update(state: fields[:state], name: fields[:name], **outcome)
 end
 
 def plan_resize(name, current, type, architectures, options)
