@@ -207,7 +207,22 @@ profiles:
         log_marker: Application start end.
 ```
 
-With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others: its auto scaling group capacity is restored and the run exits 1. `--type` only applies to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
+After the stack update, only auto scaling groups with instances still on a previous AMI are scaled up and back down. If a scale-up fails or is interrupted, the group stays scaled up, which costs more until someone acts, and the run prints the commands to scale it down by hand. Scaling down automatically could end healthy old instances and keep unproven new ones. The group's earlier capacity is kept in its `deploy-rb:rollout-baseline` tag, so rerunning the deploy finishes the rollout from that capacity, and the on-demand setting comes from the SSM parameters. A failure after the scale-up restores the capacity. A warning lists any instance still on a previous AMI after the scale-down. The deploy role needs `autoscaling:CreateOrUpdateTags` and `autoscaling:DeleteTags`.
+
+After a deploy, the URLs in `~/.deploy/config.yaml` are checked with `curl`, which must be installed, so HTTP/2 endpoints work. A URL that does not answer 2xx is retried, and a URL that keeps failing gives a warning without failing the deploy. An exact environment key wins over its family (`rc2`, then `rc`):
+
+```yaml
+healthcheck_retries:
+  interval: 15
+  give_up_after: 300
+profiles:
+  my-profile:
+    healthchecks:
+      rc:
+        - https://rc.example.com/health
+```
+
+With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others but makes the run exit 1. `--type` only applies to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
 
 ### encrypt-logs
 

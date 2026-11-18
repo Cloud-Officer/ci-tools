@@ -127,6 +127,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `with_deploy_lock`: Holds an advisory `flock` per profile and environment under `~/.deploy/locks` for the whole run
 - `check_for_other_deploys`: Stops when CodeDeploy is deploying to a standalone instance about to be imaged, and asks about other active deployments, pending AMIs and stacks in progress
 - `check_standalones`: For running standalone instances, waits for the `UserDataCompleted` tag and verifies the CodeDeploy log marker through SSM Run Command
+- `plan_instance_rollout` / `stale_instance_ids`: Compare each ASG instance's AMI with the new one, so only groups still on an old AMI are scaled
+- `scale_up_for_rollout` / `print_scale_down_commands`: Scale up from the recorded baseline, and on failure leave the group scaled up with manual commands
+- `run_healthchecks`: Retries the configured URLs with `curl` for a limited time and only warns on failure
 - `print_dry_run_plan`: Prints the AMIs and SSM changes a `--dry-run` would make
 - `plan_standalone_chores`: Before any change, plans each AMI build's `--resize` and `--redeploy-latest` work and stops on a problem
 - `check_deployment_group_targets` / `find_redeployments`: Ensure a CodeDeploy group reaches only its standalone instance, then pick the newest successful user-triggered deployment
@@ -504,11 +507,12 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 
 **Implementation:**
 
-1. Scale up ASG to double capacity plus buffer (configurable for production)
-2. Wait for new instances to become healthy in target group
-3. Allow a fixed 60 s warm-up period (`WARMUP`) for caches
-4. Scale down to original capacity
-5. Wait until only the original count of instances is left outside the terminating states
+1. Skip the ASG if every instance already runs the new AMI and no earlier rollout is unfinished. Otherwise record its capacity in the `deploy-rb:rollout-baseline` tag
+2. Scale up ASG to double capacity plus buffer (configurable for production). If this or the next two steps fail or are interrupted, leave it scaled up and print the manual scale-down commands
+3. Wait for new instances to become healthy in target group
+4. Allow a fixed 60 s warm-up period (`WARMUP`) for caches
+5. Scale down to original capacity
+6. Wait until only the original count of instances is left outside the terminating states
 
 **Parameters:**
 
@@ -638,7 +642,7 @@ can change.
 | Validation Errors      | CloudFormation validation error handling                           | `deploy.rb` in CloudFormation update section               |
 | Stack State Monitoring | Checks for failed stack states                                     | `deploy.rb` in stack status check                          |
 | SSM Parameter Rollback | Restores SSM snapshot when CFN update fails                        | `deploy.rb` in `restore_ssm_parameters`                    |
-| ASG Capacity Rollback  | Restores the original desired capacity when a rolling deploy fails | `deploy.rb` in `run_rolling_deploy_with_capacity_rollback` |
+| ASG Capacity Rollback  | Restores the desired capacity when a deploy fails after scale-up   | `deploy.rb` in `run_rolling_deploy_with_capacity_rollback` |
 | Key Rotation Rollback  | Re-activates original key, deletes new key, restores credentials   | `cycle-keys.rb` in `rollback_key_change`                   |
 | Exit Codes             | Non-zero exit codes on failures                                    | All scripts                                                |
 

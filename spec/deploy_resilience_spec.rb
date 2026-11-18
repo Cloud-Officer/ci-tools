@@ -428,8 +428,8 @@ RSpec.describe(DeployResilience) do
   describe '#deploy_to_targets' do
     it 'deploys only the instances that have an AMI' do
       allow(self).to(receive(:build_deploys).and_return({}))
-      allow(self).to(receive_messages(update_stack_with_ssm_rollback: :no_updates, mark_cfn_secrets_for_previous_value!: nil, update_ssm_parameters_with_rollback: nil))
-      targets = { ctx: { parameters: [], secret_parameter_keys: [] }, cfn: nil, instances: string_keys(api: {}, grpc: {}) }
+      allow(self).to(receive_messages(update_stack_with_ssm_rollback: :no_updates, mark_cfn_secrets_for_previous_value!: nil, update_ssm_parameters_with_rollback: nil, fetch_asg_mixed_parameters: {}))
+      targets = { ctx: { parameters: [], secret_parameter_keys: [] }, cfn: nil, asg_resources: instance_double(Aws::AutoScaling::Resource, client: nil), instances: string_keys(api: {}, grpc: {}) }
       deploy_to_targets(targets, string_keys(api: 'ami-1'), options)
       expect(self).to(have_received(:build_deploys).with(hash_including(instances: string_keys(api: {})), anything, anything))
     end

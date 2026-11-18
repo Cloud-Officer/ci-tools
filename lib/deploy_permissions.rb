@@ -6,7 +6,7 @@ module DeployPermissions
   AMI = %w[ec2:DescribeInstances ec2:DescribeTags ec2:CreateImage ec2:DescribeImages ec2:DescribeSnapshots ssm:SendCommand ssm:GetCommandInvocation].freeze
   OTHER_DEPLOYS = %w[codedeploy:ListDeployments codedeploy:ListDeploymentInstances].freeze
   STACK = %w[cloudformation:ListStacks cloudformation:DescribeStacks cloudformation:GetTemplateSummary cloudformation:DescribeStackEvents cloudformation:UpdateStack ssm:GetParameters ssm:PutParameter].freeze
-  ROLLOUT = %w[autoscaling:DescribeAutoScalingGroups autoscaling:UpdateAutoScalingGroup].freeze
+  ROLLOUT = %w[autoscaling:CreateOrUpdateTags autoscaling:DeleteTags autoscaling:DescribeAutoScalingGroups autoscaling:UpdateAutoScalingGroup ec2:DescribeInstances].freeze
   LOAD_BALANCER = %w[elasticloadbalancing:DescribeTargetGroups elasticloadbalancing:DescribeTargetHealth].freeze
   REDEPLOY = %w[cloudformation:ListStacks codedeploy:BatchGetDeployments codedeploy:CreateDeployment codedeploy:GetApplicationRevision codedeploy:GetDeployment codedeploy:GetDeploymentConfig codedeploy:GetDeploymentGroup codedeploy:ListDeployments codedeploy:RegisterApplicationRevision].freeze
   RESIZE = %w[ec2:DescribeInstanceTypes ec2:ModifyInstanceAttribute ec2:StartInstances ec2:StopInstances ssm:DescribeInstanceInformation].freeze
