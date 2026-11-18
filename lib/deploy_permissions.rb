@@ -8,11 +8,13 @@ module DeployPermissions
   STACK = %w[cloudformation:ListStacks cloudformation:DescribeStacks cloudformation:GetTemplateSummary cloudformation:DescribeStackEvents cloudformation:UpdateStack ssm:GetParameters ssm:PutParameter].freeze
   ROLLOUT = %w[autoscaling:DescribeAutoScalingGroups autoscaling:UpdateAutoScalingGroup].freeze
   LOAD_BALANCER = %w[elasticloadbalancing:DescribeTargetGroups elasticloadbalancing:DescribeTargetHealth].freeze
+  REDEPLOY = %w[cloudformation:ListStacks codedeploy:BatchGetDeployments codedeploy:CreateDeployment codedeploy:GetApplicationRevision codedeploy:GetDeployment codedeploy:GetDeploymentConfig codedeploy:GetDeploymentGroup codedeploy:ListDeployments codedeploy:RegisterApplicationRevision].freeze
+  RESIZE = %w[ec2:DescribeInstanceTypes ec2:ModifyInstanceAttribute ec2:StartInstances ec2:StopInstances ssm:DescribeInstanceInformation].freeze
 
   USER_ARN = %r{\Aarn:[^:]+:iam::\d+:user/}
   ASSUMED_ROLE_ARN = %r{\Aarn:(?<partition>[^:]+):sts::(?<account>\d+):assumed-role/(?<role>[^/]+)/}
   SIMULATION_BATCH_SIZE = 50
-  private_constant :LAMBDA, :AMI, :OTHER_DEPLOYS, :STACK, :ROLLOUT, :LOAD_BALANCER, :USER_ARN, :ASSUMED_ROLE_ARN, :SIMULATION_BATCH_SIZE
+  private_constant :LAMBDA, :AMI, :OTHER_DEPLOYS, :STACK, :ROLLOUT, :LOAD_BALANCER, :REDEPLOY, :RESIZE, :USER_ARN, :ASSUMED_ROLE_ARN, :SIMULATION_BATCH_SIZE
 
   module_function
 
@@ -20,13 +22,23 @@ module DeployPermissions
     return { 'publishing the lambda': LAMBDA } if options[:lambda_publish_version]
 
     needs = {}
-    needs[:'building the AMIs'] = AMI if building
+    needs[:'recreating the standalone instances'] = STACK if options[:'reset-instances']
+    return needs if options[:'reset-instances'] && options[:instance].nil?
+
+    needs.merge!(build_needs(options)) if building
     needs[:'looking for other deploys'] = OTHER_DEPLOYS unless options[:'skip-other-deploy-check']
     return needs if options[:create_ami_only] && building
 
     needs[:'updating the stack'] = STACK
     needs[:'rolling out the auto scaling groups'] = ROLLOUT
     needs[:'checking the load balancers'] = LOAD_BALANCER if load_balanced
+    needs
+  end
+
+  def build_needs(options)
+    needs = { 'building the AMIs': AMI }
+    needs[:'redeploying the standalone instances'] = REDEPLOY if options[:'redeploy-latest']
+    needs[:'resizing the standalone instances'] = RESIZE if options[:resize]
     needs
   end
 
