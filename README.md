@@ -229,7 +229,7 @@ profiles:
 
 Each run writes a timestamped log to `~/.deploy/logs`, readable only by you. If that fails, the deploy continues without it. `--dry-run` writes no log and sends no notification. In `~/.deploy/config.yaml`, `log.directory` moves the logs and `log.enabled: false` turns them off.
 
-Copy `plugins/plugins.sample.yaml` (under `libexec` in a Homebrew install) to `~/.deploy/plugins.yaml` and run `chmod 600` on it, because it can hold Twilio credentials and webhook tokens. Nothing in `~/.deploy` is required.
+Copy `plugins/plugins.sample.yaml` (under `libexec` in a Homebrew install) to `~/.deploy/plugins.yaml` and run `chmod 600` on it, because it can hold Twilio credentials and webhook tokens. Plugins stay off if the file belongs to someone else or others can access it. Nothing in `~/.deploy` is required.
 
 | Plugin | Sends | Needs |
 | --- | --- | --- |

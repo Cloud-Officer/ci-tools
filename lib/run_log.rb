@@ -13,7 +13,7 @@ class RunLog
   def initialize(path)
     FileUtils.mkdir_p(File.dirname(path), mode: 0o700)
     @path = path
-    @file = File.open(path, File::WRONLY | File::APPEND | File::CREAT, 0o600)
+    @file = File.open(path, File::WRONLY | File::APPEND | File::CREAT | File::EXCL | File::NOFOLLOW, 0o600)
     @file.sync = true
     @mutex = Mutex.new
     @line_start = true

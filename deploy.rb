@@ -2140,7 +2140,7 @@ def run_log_settings
 end
 
 def run_log_path(options, settings)
-  name = "#{Time.now.strftime('%Y-%m-%d-%H%M%S')}-#{options[:profile]}-#{options[:environment]}.log".gsub(/[^\w.-]/, '_')
+  name = "#{Time.now.strftime('%Y-%m-%d-%H%M%S')}-#{Process.pid}-#{options[:profile]}-#{options[:environment]}.log".gsub(/[^\w.-]/, '_')
   File.join(File.expand_path(settings['directory'] || File.join(deploy_directory, 'logs')), name)
 end
 

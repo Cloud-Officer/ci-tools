@@ -115,6 +115,19 @@ RSpec.describe(DeployPlugins) do
       expect(quietly { PluginManager.read_settings(path) }).to(include('chmod 600'))
     end
 
+    it 'ignores the settings of a file others can read' do
+      path = write_plugins({ webhook: { enabled: true } }, mode: 0o644)
+      result = nil
+      quietly { result = PluginManager.read_settings(path) }
+      expect(result).to(eq({}))
+    end
+
+    it 'ignores a file owned by someone else' do
+      path = write_plugins({ webhook: { enabled: true } })
+      allow(File).to(receive(:stat).with(path).and_return(instance_double(File::Stat, owned?: false, mode: 0o100600)))
+      expect(quietly { PluginManager.read_settings(path) }).to(include('every plugin is off'))
+    end
+
     it 'turns every plugin off on invalid YAML' do
       path = File.join(home, PLUGINS_FILE)
       File.write(path, "a: [\n", perm: 0o600)
@@ -436,6 +449,20 @@ RSpec.describe(DeployPlugins) do
     it 'creates a private file' do
       run_log
       expect(File.stat(path).mode & 0o777).to(eq(0o600))
+    end
+
+    it 'refuses to follow a planted symlink' do
+      link = File.join(home, 'planted.log')
+      File.symlink(File.join(home, 'target'), link)
+      expect { described_class.new(link) }
+        .to(raise_error(SystemCallError))
+    end
+
+    it 'refuses to reuse an existing file' do
+      taken = File.join(home, 'taken.log')
+      File.write(taken, '')
+      expect { described_class.new(taken) }
+        .to(raise_error(Errno::EEXIST))
     end
 
     it 'stamps lines and removes terminal codes' do

@@ -24,7 +24,11 @@ class PluginManager
   def self.read_settings(path)
     return {} unless File.exist?(path)
 
-    warn("WARNING: #{path} can hold secrets and is readable by others: run chmod 600 on it.") if File.stat(path).mode.anybits?(0o077)
+    unless private_file?(path)
+      warn("WARNING: #{path} can hold secrets and must be yours with no access for others: every plugin is off until you fix it (chmod 600).")
+      return {}
+    end
+
     data = YAML.safe_load_file(path) || {}
     return data if data.is_a?(Hash)
 
@@ -33,6 +37,11 @@ class PluginManager
   rescue Psych::Exception, SystemCallError => e
     warn("WARNING: #{path} cannot be read, every plugin is off: #{e.class}")
     {}
+  end
+
+  def self.private_file?(path)
+    stat = File.stat(path)
+    stat.owned? && !stat.mode.anybits?(0o077)
   end
 
   def self.settings_errors(klass, settings)
