@@ -19,6 +19,8 @@ require 'aws-sdk-iam'
 require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
 require 'fileutils'
+require 'json'
+require 'open3'
 require 'securerandom'
 require 'shellwords'
 require 'yaml'
@@ -88,6 +90,13 @@ TAG_REMOVAL_CHECKS = 6
 TAG_REMOVAL_INTERVAL = 5
 RESET_PARAMETERS = %w[InstanceEnabled WorkerInstanceEnabled].freeze
 NO_STACK_UPDATES = 'No updates are to be performed'
+ASG_BASELINE_TAG = 'deploy-rb:rollout-baseline'
+ASG_BASELINE_FORMAT = /\Adesired=(?<desired>\d+),max=(?<max>\d+)\z/
+EC2_FILTER_VALUE_LIMIT = 200
+HEALTHCHECK_TIMEOUT = 15
+HEALTHCHECK_INTERVAL = 15
+HEALTHCHECK_GIVE_UP_AFTER = 300
+CURL_STATUS_FORMAT = ['%', '{http_code}'].join
 
 class PreflightError < StandardError; end
 
@@ -424,7 +433,22 @@ def find_auto_scaling_group(asg_resources, stack_name, options)
   name, group = single_match!(matches, 'auto scaling group')
 
   log("Auto scaling group #{name} found with desired capacity at #{group.desired_capacity}.")
-  { name: name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
+  asg = { name: name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
+  baseline = asg_baseline(group.data.tags)
+  return asg if baseline.nil?
+
+  log_warn("#{name} is still scaled up from an unfinished rollout: using its capacity from before it (desired #{baseline[:desired_capacity]}, max #{baseline[:max_size]}).")
+  asg.merge(baseline)
+end
+
+def asg_baseline(tags)
+  tag = Array(tags).find { |candidate| candidate.key == ASG_BASELINE_TAG }
+  return if tag.nil?
+
+  match = tag.value.to_s.match(ASG_BASELINE_FORMAT)
+  raise(PreflightError, "Tag #{ASG_BASELINE_TAG} of #{tag.resource_id} is invalid: #{tag.value}") if match.nil?
+
+  { desired_capacity: Integer(match[:desired], 10), max_size: Integer(match[:max], 10) }
 end
 
 def find_target_group(elb, stack_name, options)
@@ -636,7 +660,7 @@ def update_cloudformation_stack(cfn, deploys)
   result = apply_stack_update(cfn, stack_name, deploys.first.parameters)
 
   if result == :no_updates
-    log_warn("Stopping here: #{NO_STACK_UPDATES}.")
+    log_warn("Nothing to update in stack #{stack_name}: #{NO_STACK_UPDATES}.")
   else
     log("Update completed successfully for cloudformation stack #{stack_name} with #{images}.")
   end
@@ -785,13 +809,49 @@ def scale_down_after_deploy(rollout, new_capacity)
   wait_for_asg_instance_count(rollout.asg_client, asg[:name], asg[:desired_capacity], direction: :down)
 end
 
-def run_rolling_deploy(rollout, new_capacity)
-  if new_capacity > rollout.asg[:desired_capacity]
-    log('Waiting for auto scaling group to start the instances...')
-    wait_for_asg_instance_count(rollout.asg_client, rollout.asg[:name], new_capacity, direction: :up)
-    warm_up_after_scale_up(rollout)
-  end
+def asg_baseline_tag(name)
+  { resource_id: name, resource_type: 'auto-scaling-group', key: ASG_BASELINE_TAG }
+end
 
+def record_asg_baseline(asg_client, asg)
+  tag = asg_baseline_tag(asg[:name]).merge(value: "desired=#{asg[:desired_capacity]},max=#{asg[:max_size]}", propagate_at_launch: false)
+  with_network_retries("recording the capacity of #{asg[:name]}") { asg_client.create_or_update_tags({ tags: [tag] }) }
+end
+
+def clear_asg_baseline(asg_client, name)
+  with_network_retries("clearing the rollout tag of #{name}") { asg_client.delete_tags({ tags: [asg_baseline_tag(name)] }) }
+end
+
+def print_scale_down_commands(rollout)
+  asg = rollout.asg
+  name = asg[:name]
+  params = rollout.mixed_params
+  policy = { InstancesDistribution: { OnDemandBaseCapacity: Integer(params[:base_capacity].to_s, 10), OnDemandPercentageAboveBaseCapacity: Integer(params[:percent_above].to_s, 10) } }
+  log_warn("WARNING: #{name} stays scaled up and costs more until someone acts: its new instances were not seen healthy, so scaling down could end the healthy old ones and keep them.")
+  log_warn('Rerun the deploy, or once the new instances are healthy (or to give up), scale it down by hand:')
+  log_warn("  #{Shellwords.join(['aws', 'autoscaling', 'update-auto-scaling-group', *aws_profile_arguments, '--auto-scaling-group-name', name, '--desired-capacity', asg[:desired_capacity].to_s, '--max-size', asg[:max_size].to_s, '--mixed-instances-policy', JSON.generate(policy)])}")
+  log_warn("  #{Shellwords.join(['aws', 'autoscaling', 'delete-tags', *aws_profile_arguments, '--tags', "ResourceId=#{name},ResourceType=auto-scaling-group,Key=#{ASG_BASELINE_TAG}"])}")
+end
+
+def scale_up_for_rollout(rollout, plan)
+  asg = rollout.asg
+  new_capacity = plan[:new_capacity]
+  scaling_up = new_capacity > asg[:desired_capacity]
+  record_asg_baseline(rollout.asg_client, asg) if scaling_up
+
+  log("Increasing desired capacity from #{asg[:desired_capacity]} to #{new_capacity}...")
+  update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: 100, desired_capacity: new_capacity, max_size: plan[:new_max])
+  return unless scaling_up
+
+  log('Waiting for auto scaling group to start the instances...')
+  wait_for_asg_instance_count(rollout.asg_client, asg[:name], new_capacity, direction: :up)
+  warm_up_after_scale_up(rollout)
+rescue StandardError, SignalException
+  print_scale_down_commands(rollout)
+  raise
+end
+
+def run_rolling_deploy(rollout, new_capacity)
   scale_down_after_deploy(rollout, new_capacity)
 ensure
   log('Restoring ASG mixed-instances policy...')
@@ -804,7 +864,8 @@ rescue StandardError, SignalException
   asg = rollout.asg
   log_warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
   begin
-    update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: rollout.mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: plan[:new_max].nil? ? nil : asg[:max_size])
+    update_asg_capacity(rollout.asg_client, asg[:name], base_capacity: rollout.mixed_params[:base_capacity], percent_above: rollout.mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
+    clear_asg_baseline(rollout.asg_client, asg[:name])
   rescue StandardError => e
     log_warn("WARNING: failed to restore auto scaling group capacity - #{asg[:name]} may still be scaled up")
     log_warn(e.full_message)
@@ -1593,7 +1654,11 @@ def print_dry_run_plan(names, standalones, targets, options, chores = {})
   current = deploys.map { |deploy| capture_ssm_snapshot(deploy) }
                    .reduce({}, :merge)
   planned_ssm_values(deploys).each { |name, value| log("  set #{name}: #{current.fetch(name, '(not set)')} -> #{value}") }
-  log("  update stack #{targets[:ctx][:stack_name]} and roll out #{names.join(', ')}")
+  log("  update stack #{targets[:ctx][:stack_name]}, then scale up and back down the #{names.join(', ')} groups that still have instances on a previous AMI")
+end
+
+def print_healthcheck_plan(healthchecks)
+  log("  then check #{healthchecks[:urls].join(', ')}") unless healthchecks.nil? || healthchecks[:urls].empty?
 end
 
 def configure_aws_retries
@@ -1648,7 +1713,12 @@ def deploy_instances(options)
   check_for_other_deploys(names, standalones, targets, options)
   check_standalones(standalones, options)
   chores = plan_standalone_chores(standalones, options)
-  return print_dry_run_plan(names, standalones, targets, options, chores) if dry_run?(options)
+  healthchecks = healthcheck_plan(options) unless ami_only
+
+  if dry_run?(options)
+    print_dry_run_plan(names, standalones, targets, options, chores)
+    return print_healthcheck_plan(healthchecks)
+  end
 
   jobs = ami_jobs(names, standalones, options, chores)
 
@@ -1657,6 +1727,7 @@ def deploy_instances(options)
     next log('Exiting now as --create_ami_only was supplied.') if ami_only
 
     deploy_to_targets(targets, ami_ids, options)
+    run_healthchecks(healthchecks)
   end
 end
 
@@ -1793,7 +1864,7 @@ def deploy_to_targets(targets, ami_ids, options)
                         .reduce({}, :merge)
   update_ssm_parameters_with_rollback(deploys.values, ssm_snapshot)
   mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
-  return if update_stack_with_ssm_rollback(targets[:cfn], deploys.values, ssm_snapshot) == :no_updates
+  update_stack_with_ssm_rollback(targets[:cfn], deploys.values, ssm_snapshot)
 
   mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
   factors = resolve_capacity_factors(options)
@@ -1806,17 +1877,124 @@ def deploy_to_targets(targets, ami_ids, options)
   log('Deployment completed successfully.')
 end
 
+def describe_asg(asg_client, name)
+  groups = with_network_retries("describing ASG #{name}") { asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [name] }).auto_scaling_groups }
+  raise("Unable to describe ASG #{name}") if groups.empty?
+
+  groups.first
+end
+
+def stale_instance_ids(group, ami_id)
+  client = Aws::EC2::Client.new
+  active = group.instances.reject { |instance| TERMINATING_STATES.include?(instance.lifecycle_state) }
+  instances =
+    active.map(&:instance_id).each_slice(EC2_FILTER_VALUE_LIMIT).flat_map do |ids|
+      with_network_retries("reading the AMIs of #{group.auto_scaling_group_name}") { client.describe_instances({ filters: [{ name: 'instance-id', values: ids }] }).flat_map(&:reservations).flat_map(&:instances) }
+    end
+  stale = instances.reject { |instance| instance.image_id == ami_id }
+  stale.map(&:instance_id)
+end
+
+def rollout_capacity_plan(asg, group, stale, factors)
+  plan = compute_asg_capacity_plan(asg, **factors)
+  return plan if factors[:asg_multiplier] == 1
+
+  capacity = [plan[:new_capacity], stale.size + asg[:desired_capacity] + factors[:asg_increase], group.desired_capacity].max
+  { new_capacity: capacity, new_max: asg[:max_size] < capacity ? [plan[:new_max], capacity].compact.max : nil }
+end
+
+def plan_instance_rollout(asg_client, deploy, factors)
+  asg = deploy.asg
+  name = asg[:name]
+  group = describe_asg(asg_client, name)
+  stale = stale_instance_ids(group, deploy.ami_id)
+  unfinished = !asg_baseline(group.tags).nil?
+
+  if stale.empty?
+    log("Every instance of #{name} runs #{deploy.ami_id}.")
+    return unfinished ? { new_capacity: asg[:desired_capacity], new_max: nil } : nil
+  end
+
+  log("#{name} still has #{stale.size} instance(s) on a previous AMI: #{stale.join(', ')}.")
+  rollout_capacity_plan(asg, group, stale, factors)
+end
+
+def warn_about_stale_instances(asg_client, deploy)
+  name = deploy.asg[:name]
+  stale = stale_instance_ids(describe_asg(asg_client, name), deploy.ami_id)
+  log_warn("WARNING: #{name} still has #{stale.size} instance(s) on a previous AMI after the scale-down: #{stale.join(', ')}.") unless stale.empty?
+end
+
 def roll_out_instance(asg_client, deploy, target, mixed_params, factors)
   asg = deploy.asg
-  plan = compute_asg_capacity_plan(asg, **factors)
-
-  log("Increasing desired capacity from #{asg[:desired_capacity]} to #{plan[:new_capacity]}...")
-  update_asg_capacity(asg_client, asg[:name], base_capacity: mixed_params[:base_capacity], percent_above: 100, desired_capacity: plan[:new_capacity], max_size: plan[:new_max])
+  plan = plan_instance_rollout(asg_client, deploy, factors)
+  return if plan.nil?
 
   rollout = RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: target[:elb], target_group_arn: target[:target_group_arn], options: deploy.options)
+  scale_up_for_rollout(rollout, plan)
   run_rolling_deploy_with_capacity_rollback(rollout, plan)
+  clear_asg_baseline(asg_client, asg[:name])
+  warn_about_stale_instances(asg_client, deploy) unless deploy.options[:skip_scale_down]
 
   log("Update completed successfully for Auto scaling group #{asg[:name]}.")
+end
+
+def healthcheck_urls(config, options)
+  by_environment = config.dig('profiles', options[:profile], 'healthchecks') || {}
+  environment = options[:environment]
+  urls = by_environment[environment] || by_environment[environment.tr('0-9', '')] || []
+  raise(PreflightError, "The health checks of #{options[:profile]}/#{environment} must be a list of URLs.") unless urls.is_a?(Array) && urls.all?(String)
+
+  urls
+rescue TypeError
+  raise(PreflightError, 'The profiles section of the deploy config is malformed.')
+end
+
+def healthcheck_setting(retries, key, default, minimum)
+  value = retries.fetch(key, default)
+  raise(PreflightError, "healthcheck_retries.#{key} must be a whole number of seconds, at least #{minimum}.") unless value.is_a?(Integer) && value >= minimum
+
+  value
+end
+
+def healthcheck_plan(options)
+  config = deploy_config
+  retries = config['healthcheck_retries'] || {}
+  raise(PreflightError, 'healthcheck_retries must be a mapping.') unless retries.is_a?(Hash)
+
+  { urls: healthcheck_urls(config, options), interval: healthcheck_setting(retries, 'interval', HEALTHCHECK_INTERVAL, 1), give_up_after: healthcheck_setting(retries, 'give_up_after', HEALTHCHECK_GIVE_UP_AFTER, 0) }
+end
+
+def healthcheck_failure(url)
+  out, err, status = Open3.capture3('curl', '--silent', '--show-error', '--proto', '=http,https', '--output', File::NULL, '--write-out', CURL_STATUS_FORMAT, '--max-time', HEALTHCHECK_TIMEOUT.to_s, '--url', url)
+  return "curl failed: #{err.strip}" unless status.success?
+
+  out.start_with?('2') ? nil : "HTTP #{out}"
+rescue SystemCallError => e
+  "curl could not run: #{e.message}"
+end
+
+def check_urls(urls)
+  failures = urls.to_h { |url| [url, healthcheck_failure(url)] }
+  failures.compact!
+  (urls - failures.keys).each { |url| log("Health check OK: #{url}") }
+  failures
+end
+
+def run_healthchecks(healthchecks)
+  return if healthchecks.nil? || healthchecks[:urls].empty?
+
+  log('Running health checks...')
+  deadline = Time.now + healthchecks[:give_up_after]
+  failures = check_urls(healthchecks[:urls])
+
+  until failures.empty? || Time.now >= deadline
+    failures.each { |url, reason| log_warn("Health check failed for #{url}: #{reason}, retrying in #{healthchecks[:interval]} s...") }
+    sleep(healthchecks[:interval])
+    failures = check_urls(failures.keys)
+  end
+
+  failures.each { |url, reason| log_warn("WARNING: giving up on health check #{url}: #{reason}") }
 end
 
 def reset_option_error(options, names)

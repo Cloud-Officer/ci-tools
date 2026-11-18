@@ -986,7 +986,7 @@ RSpec.describe(Deploy) do
 
       it 'returns :no_updates and reports the stop reason on stderr', :aggregate_failures do
         expect { expect(update_cloudformation_stack(cfn, [build_deploy_context])).to(eq(:no_updates)) }
-          .to(output(/Stopping here: No updates are to be performed/).to_stderr)
+          .to(output(/Nothing to update in stack .*No updates are to be performed/).to_stderr)
       end
     end
 
@@ -1289,12 +1289,12 @@ RSpec.describe(Deploy) do
       expect(captured_params.last.dig(:mixed_instances_policy, :instances_distribution, :on_demand_percentage_above_base_capacity)).to(eq('50'))
     end
 
-    it 'still restores policy when scale-up wait raises', :aggregate_failures do
+    it 'still restores policy when the scale-down wait raises', :aggregate_failures do
       stub_const('MAX_POLL_ATTEMPTS', 1)
-      asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg', instances: [build_asg_instance('i-1')]))
+      asg_client.stub_responses(:describe_auto_scaling_groups, build_asg_data('beta1-api-asg', instances: %w[i-1 i-2 i-3].map { |id| build_asg_instance(id) }))
       expect { run_rolling_deploy(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), 6) }
         .to(raise_error(RuntimeError, /Timed out/))
-      expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(mixed_instances_policy: hash_including(instances_distribution: hash_including(on_demand_percentage_above_base_capacity: '50')))))
+      expect(asg_client).to(have_received(:update_auto_scaling_group).with(hash_including(mixed_instances_policy: hash_including(instances_distribution: hash_including(on_demand_percentage_above_base_capacity: '50')))).at_least(:once))
     end
   end
 
@@ -1409,8 +1409,14 @@ RSpec.describe(Deploy) do
             discover_load_balancer: [nil, nil],
             discover_cfn_stack_context: ctx,
             fetch_asg_mixed_parameters: { base_capacity: 0, percent_above: 100 },
-            compute_asg_capacity_plan: { new_capacity: 4, new_max: 8 },
-            update_stack_with_ssm_rollback: :updated
+            plan_instance_rollout: { new_capacity: 4, new_max: 8 },
+            update_stack_with_ssm_rollback: :updated,
+            deploy_config: {},
+            record_asg_baseline: nil,
+            clear_asg_baseline: nil,
+            warn_about_stale_instances: nil,
+            wait_for_asg_instance_count: nil,
+            warm_up_after_scale_up: nil
           )
         )
         allow(self).to(receive(:mark_cfn_secrets_for_previous_value!))
@@ -1477,10 +1483,10 @@ RSpec.describe(Deploy) do
           .to(raise_error(RuntimeError, 'deploy blew up').and(output.to_stderr))
       end
 
-      it 'stops before the rollouts when the stack has no updates' do
+      it 'still checks the rollouts when the stack has no updates' do
         allow(self).to(receive(:update_stack_with_ssm_rollback).and_return(:no_updates))
         deploy_quietly(instance: 'api,grpc')
-        expect(self).not_to(have_received(:run_rolling_deploy))
+        expect(self).to(have_received(:plan_instance_rollout).twice)
       end
     end
 
