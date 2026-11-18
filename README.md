@@ -170,6 +170,8 @@ deploy.rb --profile dev --environment rc --instance api,grpc --dry-run
 
 Before changing anything, a run checks the profile's credentials and simulates the IAM permissions it needs, takes a lock per profile and environment under `~/.deploy/locks`, and looks for another deploy in progress. For each running standalone instance it waits for the `UserDataCompleted` tag and checks the last lines of the CodeDeploy log over SSM. A stopped standalone instance skips those two checks. Without a terminal, a question that needs an answer stops the run, except the wait for the tag, which waits.
 
+`--dry-run` changes no AWS resource, AMI, SSM parameter, stack or auto scaling group. It still sends the read-only CodeDeploy log check to running standalone instances through SSM Run Command, so it needs `ssm:SendCommand` and leaves an entry in the SSM command history.
+
 The deploy role needs `iam:SimulatePrincipalPolicy`, `codedeploy:ListDeployments`, `codedeploy:ListDeploymentInstances`, `ec2:DescribeTags`, `ssm:SendCommand` and `ssm:GetCommandInvocation`. The log marker defaults to `Validate service end.` and can be changed in `~/.deploy/config.yaml`; `false` only requires the log to exist:
 
 ```yaml
