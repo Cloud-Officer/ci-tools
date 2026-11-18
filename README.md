@@ -131,7 +131,7 @@ Automate the ASG, spot fleet and Lambda deployments on AWS.
 Usage: deploy.rb options
 
 options
-        --ami ami
+        --ami ami1,none,ami2         AMI per instance, in --instance order; none builds one
         --create_ami_only
         --dry-run                    Run discovery and read-only checks, then print the planned changes
         --environment environment
@@ -164,6 +164,9 @@ deploy.rb --profile ugm --environment rc --instance api,grpc
 # same, but roll the auto scaling groups one after another to limit the extra capacity
 deploy.rb --profile ugm --environment rc --instance api,grpc,worker --sequential_rollout
 
+# use an existing api AMI, build the grpc one, then deploy both
+deploy.rb --profile dev --environment rc --instance api,grpc --ami ami-09d6e0e85d7fba11d,none
+
 # run every check and print the planned SSM changes without changing anything
 deploy.rb --profile dev --environment rc --instance api,grpc --dry-run
 ```
@@ -172,7 +175,9 @@ Before changing anything, a run checks the profile's credentials and simulates t
 
 `--dry-run` changes no AWS resource, AMI, SSM parameter, stack or auto scaling group. It still sends the read-only CodeDeploy log check to running standalone instances through SSM Run Command, so it needs `ssm:SendCommand` and leaves an entry in the SSM command history.
 
-The deploy role needs `iam:SimulatePrincipalPolicy`, `codedeploy:ListDeployments`, `codedeploy:ListDeploymentInstances`, `ec2:DescribeTags`, `ssm:SendCommand` and `ssm:GetCommandInvocation`. The log marker defaults to `Validate service end.` and can be changed in `~/.deploy/config.yaml`; `false` only requires the log to exist:
+The deploy role needs `iam:SimulatePrincipalPolicy`, `codedeploy:ListDeployments`, `codedeploy:ListDeploymentInstances`, `ec2:DescribeSnapshots`, `ec2:DescribeTags`, `ssm:SendCommand` and `ssm:GetCommandInvocation`. AWS calls that are safe to repeat are retried through network problems and throttling. While AMIs are built, a status table shows each one's state, snapshot progress, AMI id and elapsed time. If only some AMIs fail, a terminal run asks whether to deploy the others. On failure or Ctrl-C, the run prints the command that deploys the AMIs already built. If the outcome of a stack update stays unknown because of a network failure, the SSM parameters keep their new values and the commands to restore them are printed.
+
+The log marker defaults to `Validate service end.` and can be changed in `~/.deploy/config.yaml`; `false` only requires the log to exist:
 
 ```yaml
 codedeploy:
@@ -184,7 +189,7 @@ profiles:
         log_marker: Application start end.
 ```
 
-With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others: its auto scaling group capacity is restored and the run exits 1. `--ami` and `--type` only apply to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
+With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others: its auto scaling group capacity is restored and the run exits 1. `--type` only applies to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
 
 ### encrypt-logs
 

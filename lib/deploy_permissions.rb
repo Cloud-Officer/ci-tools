@@ -3,7 +3,7 @@
 # The IAM actions a deploy run needs, checked with the policy simulator.
 module DeployPermissions
   LAMBDA = %w[lambda:PublishVersion cloudfront:ListDistributions cloudfront:GetDistributionConfig cloudfront:UpdateDistribution].freeze
-  AMI = %w[ec2:DescribeInstances ec2:DescribeTags ec2:CreateImage ec2:DescribeImages ssm:SendCommand ssm:GetCommandInvocation].freeze
+  AMI = %w[ec2:DescribeInstances ec2:DescribeTags ec2:CreateImage ec2:DescribeImages ec2:DescribeSnapshots ssm:SendCommand ssm:GetCommandInvocation].freeze
   OTHER_DEPLOYS = %w[codedeploy:ListDeployments codedeploy:ListDeploymentInstances].freeze
   STACK = %w[cloudformation:ListStacks cloudformation:DescribeStacks cloudformation:GetTemplateSummary cloudformation:DescribeStackEvents cloudformation:UpdateStack ssm:GetParameters ssm:PutParameter].freeze
   ROLLOUT = %w[autoscaling:DescribeAutoScalingGroups autoscaling:UpdateAutoScalingGroup].freeze
@@ -16,13 +16,13 @@ module DeployPermissions
 
   module_function
 
-  def required(options, load_balanced:)
+  def required(options, load_balanced:, building:)
     return { 'publishing the lambda': LAMBDA } if options[:lambda_publish_version]
 
     needs = {}
-    needs[:'building the AMIs'] = AMI if options[:ami].nil?
+    needs[:'building the AMIs'] = AMI if building
     needs[:'looking for other deploys'] = OTHER_DEPLOYS unless options[:'skip-other-deploy-check']
-    return needs if options[:create_ami_only] && options[:ami].nil?
+    return needs if options[:create_ami_only] && building
 
     needs[:'updating the stack'] = STACK
     needs[:'rolling out the auto scaling groups'] = ROLLOUT

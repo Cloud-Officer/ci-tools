@@ -349,40 +349,26 @@ RSpec.describe(Deploy) do
       expect(result).to(eq('ami-new123'))
     end
 
-    context 'with worker instance' do
-      before { allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_call_original) }
-
-      it 'uses max_attempts 1024' do
-        create_ami(ec2, 'i-abc123', 'worker-beta1-standalone', { instance: 'worker' })
-        expect(Aws::EC2::Waiters::ImageAvailable).to(have_received(:new).with(hash_including(max_attempts: 1024)))
-      end
+    it 'waits longer for a worker image' do
+      allow(self).to(receive(:poll_until).and_call_original)
+      create_ami(ec2, 'i-abc123', 'worker-beta1-standalone', { instance: 'worker' })
+      expect(self).to(have_received(:poll_until).with(hash_including(max_attempts: WORKER_AMI_MAX_POLL_ATTEMPTS)))
     end
 
-    context 'with non-worker instance' do
-      before { allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_call_original) }
-
-      it 'uses max_attempts 256' do
-        create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options)
-        expect(Aws::EC2::Waiters::ImageAvailable).to(have_received(:new).with(hash_including(max_attempts: 256)))
-      end
+    it 'uses the standard wait for other images' do
+      allow(self).to(receive(:poll_until).and_call_original)
+      create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options)
+      expect(self).to(have_received(:poll_until).with(hash_including(max_attempts: AMI_MAX_POLL_ATTEMPTS)))
     end
 
-    context 'when waiting for the image' do
-      let(:waiter) { instance_double(Aws::EC2::Waiters::ImageAvailable, wait: nil) }
-
-      before { allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_return(waiter)) }
-
-      it 'filters only on the image id so the failed state stays visible' do
-        create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options)
-        expect(waiter).to(have_received(:wait).with({ filters: [{ name: 'image-id', values: ['ami-new123'] }] }))
-      end
+    it 'reads only the created image' do
+      allow(ec2.client).to(receive(:describe_images).and_call_original)
+      create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options)
+      expect(ec2.client).to(have_received(:describe_images).with({ image_ids: ['ami-new123'] }))
     end
 
     context 'when the image creation fails' do
-      before do
-        ec2.client.stub_responses(:describe_images, { images: [{ state: 'failed', image_id: 'ami-new123', state_reason: { code: 'Client.InternalError', message: 'snapshot failed' } }] })
-        allow(Aws::EC2::Waiters::ImageAvailable).to(receive(:new).and_wrap_original { |original, waiter_options| original.call(waiter_options.merge(delay: 0)) })
-      end
+      before { ec2.client.stub_responses(:describe_images, { images: [{ state: 'failed', image_id: 'ami-new123', state_reason: { code: 'Client.InternalError', message: 'snapshot failed' } }] }) }
 
       it 'raises with the image state reason' do
         expect { create_ami(ec2, 'i-abc123', 'api-beta1-standalone', options) }
@@ -1053,7 +1039,10 @@ RSpec.describe(Deploy) do
     let(:ec2)         { Aws::EC2::Resource.new(stub_responses: true)                                   }
     let(:standalones) { %w[api grpc].to_h { |name| [name, ["i-#{name}", "#{name}-beta1-standalone"]] } }
 
-    before { allow(self).to(receive(:create_ami)) { |_ec2, instance_id, _name, _options| "ami-#{instance_id}" } }
+    before do
+      allow($stdin).to(receive(:tty?).and_return(false))
+      allow(self).to(receive(:create_ami)) { |_ec2, instance_id, _name, _options| "ami-#{instance_id}" }
+    end
 
     it 'returns the supplied --ami without creating an image', :aggregate_failures do
       expect(resolve_ami_ids(nil, %w[api], {}, { ami: 'ami-supplied' })).to(eq(instance_map(api: 'ami-supplied')))
@@ -1194,14 +1183,24 @@ RSpec.describe(Deploy) do
       expect(options[:sequential_rollout]).to(be(true))
     end
 
-    [%w[--ami ami-abc], %w[--type t3.large]].each do |flag, value|
-      it "rejects #{flag} with more than one instance", :aggregate_failures do
-        argv = ['--environment', 'beta1', '--instance', 'api,grpc', '--profile', 'dev', flag, value]
-        expect do
-          expect { parse_deploy_options(argv) }
-            .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
-        end.to(output(/#{flag} cannot be used with more than one instance/).to_stderr)
-      end
+    it 'rejects --type with more than one instance', :aggregate_failures do
+      argv = %w[--environment beta1 --instance api,grpc --profile dev --type t3.large]
+      expect do
+        expect { parse_deploy_options(argv) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/--type cannot be used with more than one instance/).to_stderr)
+    end
+
+    it 'rejects an --ami list that does not match the instances', :aggregate_failures do
+      argv = %w[--environment beta1 --instance api,grpc --profile dev --ami ami-abc]
+      expect do
+        expect { parse_deploy_options(argv) }
+          .to(raise_error(SystemExit) { |e| expect(e.status).to(eq(1)) })
+      end.to(output(/--ami has 1 value\(s\) but --instance has 2/).to_stderr)
+    end
+
+    it 'accepts one --ami value per instance' do
+      expect(parse_deploy_options(%w[--environment beta1 --instance api,grpc --profile dev --ami ami-abc,none])[:ami]).to(eq('ami-abc,none'))
     end
 
     it 'rejects an instance list with no names', :aggregate_failures do
@@ -1362,7 +1361,8 @@ RSpec.describe(Deploy) do
     let(:cloudfront)    { Aws::CloudFront::Client.new(stub_responses: true) }
 
     before do
-      allow(self).to(receive_messages(check_credentials: 'arn:aws:iam::123456789012:user/deployer', check_permissions: nil, check_for_other_deploys: nil, check_standalones: nil))
+      allow($stdin).to(receive(:tty?).and_return(false))
+      allow(self).to(receive_messages(check_credentials: 'arn:aws:iam::123456789012:user/deployer', check_permissions: nil, check_for_other_deploys: nil, check_standalones: nil, configure_aws_retries: nil))
       allow(self).to(receive(:with_deploy_lock)) { |_options, &block| block.call }
     end
 

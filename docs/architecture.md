@@ -117,7 +117,10 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `capture_ssm_snapshot` / `restore_ssm_parameters`: Snapshot and rollback SSM parameters around CloudFormation updates
 - `fetch_no_echo_parameter_keys`: Reads the stack's own template summary and returns every parameter declared `NoEcho`, so the secret set is discovered rather than hand-maintained. A failed `get_template_summary` call aborts the deploy before any SSM or stack change
 - `mark_cfn_secrets_for_previous_value!`: Flags those parameters, unioned with the `CFN_KNOWN_SECRET_PARAMETERS` backstop, plus any parameter whose value is the `****` mask, as `use_previous_value` so secrets are never re-sent to CloudFormation. `describe_stacks` reports a `NoEcho` value as `****`, and resending that string would overwrite the real secret with asterisks
-- `create_ami`: Creates an AMI from the standalone instance and waits on `Aws::EC2::Waiters::ImageAvailable`
+- `create_ami` / `wait_for_image`: Create an AMI from the standalone instance, recover it by name if the response was lost, and poll its state and size-weighted snapshot progress
+- `with_network_retries`: Retries repeatable AWS calls through network errors, throttling and 5xx responses until a deadline
+- `AmiJob` / `AmiStatusTable`: Track each AMI build and show it as a live table, or as one line per change without a terminal
+- `confirm_partial_ami_failure` / `with_resume_command`: Offer to deploy the AMIs that succeeded, and print the command that deploys built AMIs after a failure
 - `deploy_each`: Runs one step for every instance named in `--instance` (comma-separated), in parallel threads with a `[name]` log tag when there are several, and raises after all finish if any failed
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
 - `check_credentials` / `check_permissions`: Stop on unusable credentials, then simulate the IAM actions listed by `DeployPermissions.required` for the selected options
@@ -134,7 +137,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Deploys several instances in one run with one SSM update and one CloudFormation stack update, then rolls the auto scaling groups out in parallel (or one at a time with `--sequential_rollout`)
 - Updates CloudFormation stack parameters via SSM
 - Streams CloudFormation stack events to the log while waiting for the stack update, so a failing resource and its reason are visible without opening the console
-- Captures SSM parameter snapshots and restores them if the CloudFormation update fails
+- Captures SSM parameter snapshots and restores them if the CloudFormation update fails. When a network failure leaves the outcome unknown, it keeps the new values and prints the restore commands
 - Preserves existing values for secret CloudFormation parameters instead of transmitting them
 - Restores the auto scaling group's original desired capacity when a rolling deploy fails after the scale-up, so a failed run does not leave the group running at the inflated size
 - Manages ASG desired capacity with blue/green deployment pattern
@@ -142,7 +145,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Publishes Lambda versions and updates CloudFront distributions
 - Supports spot instance deployments with mixed instance policies
 
-**Internal Dependencies:** lib/cli_main.rb (CliMain), lib/deploy_permissions.rb (DeployPermissions)
+**Internal Dependencies:** lib/ami_job.rb (AmiJob), lib/ami_status_table.rb (AmiStatusTable), lib/cli_main.rb (CliMain), lib/deploy_permissions.rb (DeployPermissions)
 
 **External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-codedeploy, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-iam, aws-sdk-lambda, aws-sdk-ssm
 

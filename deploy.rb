@@ -19,8 +19,11 @@ require 'aws-sdk-iam'
 require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
 require 'fileutils'
+require 'securerandom'
 require 'shellwords'
 require 'yaml'
+require_relative 'lib/ami_job'
+require_relative 'lib/ami_status_table'
 require_relative 'lib/cli_main'
 require_relative 'lib/deploy_permissions'
 
@@ -63,6 +66,18 @@ PROFILE_ERRORS = [
   Aws::Errors::InvalidSSOToken
 ].freeze
 
+AWS_MAX_ATTEMPTS = 8
+AWS_THROTTLING_CODES = %w[Throttling ThrottlingException RequestLimitExceeded TooManyRequestsException RequestThrottled].freeze
+NETWORK_RETRY_TIMEOUT = 1800
+NETWORK_RETRY_MAX_DELAY = 60
+SSM_RESTORE_TIMEOUT = 300
+AMI_POLL_INTERVAL = 10
+AMI_MAX_POLL_ATTEMPTS = 768
+WORKER_AMI_MAX_POLL_ATTEMPTS = 3072
+AMI_RENDER_INTERVAL = 1
+IMAGE_FAILURE_STATES = %w[failed error invalid deregistered].freeze
+RESUME_FLAGS = %i[preserve_desired_capacity sequential_rollout skip_scale_down skip-lock skip-other-deploy-check skip-permission-check].freeze
+
 class PreflightError < StandardError; end
 
 def log_timestamp
@@ -104,8 +119,8 @@ def map_instances(names)
   names.to_h { |name| [name, with_log_tag(names.one? ? nil : name) { yield(name) }] }
 end
 
-def capture_instance_outcome(name)
-  with_log_tag(name) do
+def capture_instance_outcome(name, tagged: true)
+  with_log_tag(tagged ? name : nil) do
     { value: yield(name) }
   rescue StandardError => e
     log_warn("Failed: #{e.full_message}")
@@ -127,16 +142,15 @@ rescue SignalException
   raise
 end
 
+def start_thread
+  Thread.new do # rubocop:disable ThreadSafety/NewThread
+    Thread.current.report_on_exception = false
+    yield
+  end
+end
+
 def run_instances_in_parallel(names, &)
-  threads =
-    names.to_h do |name|
-      thread =
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
-          Thread.current.report_on_exception = false
-          capture_instance_outcome(name, &)
-        end
-      [name, thread]
-    end
+  threads = names.to_h { |name| [name, start_thread { capture_instance_outcome(name, tagged: !names.one?, &) }] }
 
   collect_thread_outcomes(threads)
 end
@@ -144,10 +158,10 @@ end
 def run_for_instances(names, parallel:, &)
   return run_instances_in_parallel(names, &) if parallel
 
-  names.to_h { |name| [name, capture_instance_outcome(name, &)] }
+  names.to_h { |name| [name, capture_instance_outcome(name, tagged: !names.one?, &)] }
 end
 
-def report_instance_outcomes(outcomes, label)
+def log_instance_outcomes(outcomes, label)
   outcomes.each do |name, outcome|
     if outcome.key?(:error)
       log_warn("#{label} for #{name}: FAILED - #{outcome[:error].message}")
@@ -155,9 +169,16 @@ def report_instance_outcomes(outcomes, label)
       log("#{label} for #{name}: OK")
     end
   end
+end
 
-  failed = outcomes.select { |_name, outcome| outcome.key?(:error) }
-                   .keys
+def failed_instances(outcomes)
+  outcomes.select { |_name, outcome| outcome.key?(:error) }
+          .keys
+end
+
+def report_instance_outcomes(outcomes, label)
+  log_instance_outcomes(outcomes, label)
+  failed = failed_instances(outcomes)
   raise("#{label} failed for: #{failed.join(', ')}") unless failed.empty?
 end
 
@@ -183,10 +204,38 @@ def poll_until(description:, max_attempts: MAX_POLL_ATTEMPTS, interval: POLL_INT
   end
 end
 
+def server_error_status?(status)
+  !status.nil? && status >= 500
+end
+
+def transient_error?(error)
+  case error
+  when Seahorse::Client::NetworkingError, SocketError, Timeout::Error, IOError, SystemCallError, OpenSSL::SSL::SSLError then true
+  when Aws::Errors::ServiceError then AWS_THROTTLING_CODES.include?(error.code) || server_error_status?(error.context&.http_response&.status_code)
+  else false
+  end
+end
+
+def with_network_retries(description, deadline: Time.now + NETWORK_RETRY_TIMEOUT)
+  attempt = 0
+
+  begin
+    yield
+  rescue StandardError => e
+    raise unless transient_error?(e) && Time.now < deadline
+
+    delay = [5 * (2**attempt), NETWORK_RETRY_MAX_DELAY].min
+    attempt += 1
+    log_warn("Network problem #{description} (#{e.class}: #{e.message}), retrying in #{delay} s...")
+    sleep(delay)
+    retry
+  end
+end
+
 def wait_for_healthy_instances(elb, target_group_arn)
   log('Waiting for all instances to be healthy...')
   poll_until(description: 'waiting for healthy instances') do
-    descriptions = elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions
+    descriptions = with_network_retries('reading target health') { elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions }
 
     if descriptions.empty?
       log('No targets registered yet...')
@@ -203,7 +252,7 @@ def wait_for_asg_instance_count(asg_client, asg_name, target_count, direction:)
   raise(ArgumentError, "Invalid direction #{direction.inspect}, expected :up or :down") unless %i[up down].include?(direction)
 
   poll_until(description: "waiting for ASG #{asg_name} to reach #{target_count} instances") do
-    response = asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [asg_name] }).auto_scaling_groups
+    response = with_network_retries("describing ASG #{asg_name}") { asg_client.describe_auto_scaling_groups({ auto_scaling_group_names: [asg_name] }).auto_scaling_groups }
     raise("Unable to describe ASG #{asg_name}") if response.empty?
 
     instances = response.first.instances
@@ -291,19 +340,67 @@ def find_standalone_instance(ec2, options)
   [instance_id, name]
 end
 
-def create_ami(ec2, instance_id, instance_name, options)
-  ami = ec2.client.create_image({ instance_id: instance_id, name: instance_name.sub('standalone', Time.now.strftime('%Y-%m-%d-%H%M%S')) })
-  log("Creating image #{ami.image_id}...")
-  max_attempts = options[:instance] == 'worker' ? 1024 : 256
-  begin
-    Aws::EC2::Waiters::ImageAvailable.new({ client: ec2.client, max_attempts: max_attempts, delay: 30 }).wait({ filters: [{ name: 'image-id', values: [ami.image_id] }] })
-  rescue Aws::Waiters::Errors::FailureStateError => e
-    reason = e.response.images.first.state_reason&.message
-    raise("Image #{ami.image_id} creation failed#{": #{reason}" unless reason.to_s.empty?}")
+def create_image(client, instance_id, image_name)
+  with_network_retries("creating image #{image_name}") do
+    client.create_image({ instance_id: instance_id, name: image_name }).image_id
+  rescue Aws::EC2::Errors::InvalidAMINameDuplicate
+    images = client.describe_images({ owners: ['self'], filters: [{ name: 'name', values: [image_name] }] }).images
+    images.first&.image_id || raise
   end
+end
 
-  log("Image creation completed for #{ami.image_id}.")
-  ami.image_id
+def weighted_progress(pairs)
+  pairs = pairs.map { |percent, _size| [percent, 1] } if pairs.sum(&:last).zero?
+  pairs.sum { |percent, size| percent * size } / pairs.sum(&:last)
+end
+
+def snapshot_progress(client, image)
+  volumes = image.block_device_mappings.filter_map(&:ebs)
+  snapshot_ids = volumes.filter_map(&:snapshot_id).grep(/\Asnap-/)
+  return if snapshot_ids.empty?
+
+  snapshots = client.describe_snapshots({ snapshot_ids: snapshot_ids }).flat_map(&:snapshots).to_h { |snapshot| [snapshot.snapshot_id, snapshot] }
+  pairs =
+    volumes.map do |volume|
+      snapshot = snapshots[volume.snapshot_id]
+      [Integer(snapshot&.progress.to_s.delete('%'), 10, exception: false) || 0, snapshot&.volume_size || volume.volume_size || 0]
+    end
+  "#{weighted_progress(pairs)}%"
+rescue Aws::Errors::ServiceError => e
+  raise if transient_error?(e)
+end
+
+def check_image_state(image)
+  return unless IMAGE_FAILURE_STATES.include?(image.state)
+
+  reason = image.state_reason&.message
+  raise("Image #{image.image_id} creation failed#{": #{reason}" unless reason.to_s.empty?}")
+end
+
+def wait_for_image(client, ami_id, options)
+  job = options[:ami_job]
+  max_attempts = options[:instance] == 'worker' ? WORKER_AMI_MAX_POLL_ATTEMPTS : AMI_MAX_POLL_ATTEMPTS
+
+  poll_until(description: "waiting for image #{ami_id}", max_attempts: max_attempts, interval: AMI_POLL_INTERVAL) do
+    image = with_network_retries("waiting for image #{ami_id}") { client.describe_images({ image_ids: [ami_id] }).images.first }
+    next false if image.nil?
+
+    check_image_state(image)
+    job&.update(state: image.state, progress: with_network_retries("reading the snapshots of #{ami_id}") { snapshot_progress(client, image) })
+    image.state == 'available'
+  rescue Aws::EC2::Errors::InvalidAMIIDNotFound
+    false
+  end
+end
+
+def create_ami(ec2, instance_id, instance_name, options)
+  job = options[:ami_job]
+  image_name = instance_name.sub('standalone', Time.now.strftime('%Y-%m-%d-%H%M%S'))
+  ami_id = create_image(ec2.client, instance_id, image_name)
+  job ? job.update(state: 'pending', ami_id: ami_id, name: image_name) : log("Creating image #{ami_id}...")
+  wait_for_image(ec2.client, ami_id, options)
+  log("Image creation completed for #{ami_id}.") unless job
+  ami_id
 end
 
 def find_auto_scaling_group(asg_resources, stack_name, options)
@@ -394,7 +491,7 @@ def update_ssm_parameters(deploy)
     next if replace_with.nil?
 
     log("Updating SSM parameter '#{deploy.ssm_prefix}/#{parameter.parameter_key}' with value = '#{replace_with}'...")
-    ssm.put_parameter({ name: "#{deploy.ssm_prefix}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true })
+    with_network_retries("updating #{parameter.parameter_key}") { ssm.put_parameter({ name: "#{deploy.ssm_prefix}/#{parameter.parameter_key}", value: replace_with, type: 'String', overwrite: true }) }
   end
 end
 
@@ -431,19 +528,28 @@ def capture_ssm_snapshot(deploy)
   return {} if names.empty?
 
   ssm = Aws::SSM::Client.new
-  response = ssm.get_parameters({ names: names, with_decryption: true })
+  response = with_network_retries('reading the current SSM values') { ssm.get_parameters({ names: names, with_decryption: true }) }
   response.parameters.to_h { |p| [p.name, p.value] }
+end
+
+def print_ssm_restore_commands(ssm_snapshot)
+  profile = Aws.config[:profile] ? ['--profile', Aws.config[:profile]] : []
+  ssm_snapshot.each { |name, value| log_warn("  #{Shellwords.join(['aws', 'ssm', 'put-parameter', *profile, '--overwrite', '--type', 'String', '--name', name, '--value', value])}") }
 end
 
 def restore_ssm_parameters(ssm_snapshot)
   return if ssm_snapshot.empty?
 
   ssm = Aws::SSM::Client.new
+  deadline = Time.now + SSM_RESTORE_TIMEOUT
 
   ssm_snapshot.each do |name, value|
     log("Restoring SSM parameter '#{name}' to '#{value}'...")
-    ssm.put_parameter({ name: name, value: value, type: 'String', overwrite: true })
+    with_network_retries("restoring #{name}", deadline: deadline) { ssm.put_parameter({ name: name, value: value, type: 'String', overwrite: true }) }
   end
+rescue StandardError => e
+  log_warn("Could not restore the SSM parameters (#{e.message}). Restore them by hand:")
+  print_ssm_restore_commands(ssm_snapshot)
 end
 
 def latest_stack_event_id(cfn, stack_name)
@@ -471,11 +577,11 @@ end
 def wait_for_stack_update(cfn, stack_name, last_event_id = nil)
   failure_states = %w[UPDATE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED]
   poll_until(description: "waiting for stack #{stack_name} to update") do
-    events = new_stack_events(cfn, stack_name, last_event_id)
+    events = with_network_retries("reading the events of #{stack_name}") { new_stack_events(cfn, stack_name, last_event_id) }
     events.each { |event| log_stack_event(event) }
     last_event_id = events.last.event_id unless events.empty?
 
-    response = cfn.describe_stacks({ stack_name: stack_name }).stacks
+    response = with_network_retries("describing #{stack_name}") { cfn.describe_stacks({ stack_name: stack_name }).stacks }
     raise("Unable to describe stack #{stack_name}") if response.empty?
 
     stack = response.first
@@ -495,9 +601,10 @@ def update_cloudformation_stack(cfn, deploys)
   images = deploys.map { |deploy| "#{deploy.prefix}ImageId #{deploy.ami_id}" }
                   .join(', ')
   log("Updating cloudformation stack #{stack_name} with #{images}...")
-  last_event_id = latest_stack_event_id(cfn, stack_name)
+  last_event_id = with_network_retries("reading the events of #{stack_name}") { latest_stack_event_id(cfn, stack_name) }
+  update = { stack_name: stack_name, use_previous_template: true, parameters: deploys.first.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false, client_request_token: "deploy-rb-#{SecureRandom.uuid}" }
   begin
-    cfn.update_stack({ stack_name: stack_name, use_previous_template: true, parameters: deploys.first.parameters, capabilities: %w[CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND], disable_rollback: false })
+    with_network_retries("starting the update of #{stack_name}") { cfn.update_stack(update) }
   rescue Aws::CloudFormation::Errors::ValidationError => e
     raise unless e.message.include?('No updates are to be performed')
 
@@ -517,17 +624,31 @@ rescue StandardError, SignalException
   raise
 end
 
+def report_unknown_stack_outcome(stack_name, ssm_snapshot)
+  log_warn("The update of #{stack_name} may still be running in AWS, so the SSM parameters keep their new values.")
+  return if ssm_snapshot.empty?
+
+  log_warn('If it fails or rolls back, restore them:')
+  print_ssm_restore_commands(ssm_snapshot)
+end
+
 def update_stack_with_ssm_rollback(cfn, deploys, ssm_snapshot)
   update_cloudformation_stack(cfn, deploys)
-rescue StandardError, SignalException
-  log_warn('CloudFormation update failed, rolling back SSM parameters...')
-  restore_ssm_parameters(ssm_snapshot)
+rescue StandardError, SignalException => e
+  if transient_error?(e)
+    report_unknown_stack_outcome(deploys.first.stack_name, ssm_snapshot)
+  else
+    log_warn('CloudFormation update failed, rolling back SSM parameters...')
+    restore_ssm_parameters(ssm_snapshot)
+  end
+
   raise
 end
 
 def fetch_asg_mixed_parameters(environment, subnet)
   ssm = Aws::SSM::Client.new
-  response = ssm.get_parameters({ names: ["/#{environment}/#{subnet}/OnDemandPercentAbove", "/#{environment}/#{subnet}/OnDemandBaseCapacity"], with_decryption: true })
+  names = ["/#{environment}/#{subnet}/OnDemandPercentAbove", "/#{environment}/#{subnet}/OnDemandBaseCapacity"]
+  response = with_network_retries('reading the ASG mixed parameters') { ssm.get_parameters({ names: names, with_decryption: true }) }
   result = {}
   response.parameters.each do |param|
     case param[:name]
@@ -561,7 +682,7 @@ def update_asg_capacity(asg_client, asg_name, base_capacity:, percent_above:, de
   }
   params[:desired_capacity] = desired_capacity unless desired_capacity.nil?
   params[:max_size] = max_size unless max_size.nil?
-  asg_client.update_auto_scaling_group(params)
+  with_network_retries("updating ASG #{asg_name}") { asg_client.update_auto_scaling_group(params) }
 end
 
 def resolve_capacity_factors(options)
@@ -726,7 +847,8 @@ end
 def check_permissions(options, caller_arn)
   return log('Not checking permissions (--skip-permission-check).') if options[:'skip-permission-check']
 
-  needs = DeployPermissions.required(options, load_balanced: instance_names(options).any? { |name| load_balanced_instance?(name) })
+  names = instance_names(options)
+  needs = DeployPermissions.required(options, load_balanced: names.any? { |name| load_balanced_instance?(name) }, building: requested_amis(options, names).value?(nil))
   log('Checking permissions...')
   iam = Aws::IAM::Client.new
   arn = DeployPermissions.simulation_arn(iam, caller_arn)
@@ -957,14 +1079,19 @@ end
 
 def print_dry_run_plan(names, standalones, targets, options)
   log('DRY RUN: nothing was changed. A real run would:')
-  names.each { |name| log(standalones[name] ? "  build an AMI of #{standalones[name].last}" : "  use #{options[:ami]} for #{name}") }
+  requested = requested_amis(options, names)
+  names.each { |name| log(standalones[name] ? "  build an AMI of #{standalones[name].last}" : "  use #{requested[name]} for #{name}") }
   return if targets.nil?
 
-  deploys = build_deploys(targets, names.to_h { |name| [name, options[:ami] || "<new #{name} AMI>"] }, options).values
+  deploys = build_deploys(targets, names.to_h { |name| [name, requested[name] || "<new #{name} AMI>"] }, options).values
   current = deploys.map { |deploy| capture_ssm_snapshot(deploy) }
                    .reduce({}, :merge)
   planned_ssm_values(deploys).each { |name, value| log("  set #{name}: #{current.fetch(name, '(not set)')} -> #{value}") }
   log("  update stack #{targets[:ctx][:stack_name]} and roll out #{names.join(', ')}")
+end
+
+def configure_aws_retries
+  Aws.config.update({ retry_mode: 'standard', max_attempts: AWS_MAX_ATTEMPTS })
 end
 
 def run_deployment(options)
@@ -973,6 +1100,7 @@ def run_deployment(options)
     Aws.config.update({ profile: options[:profile] })
   end
 
+  configure_aws_retries
   check_permissions(options, check_credentials(options))
 
   if options[:lambda_publish_version]
@@ -985,33 +1113,132 @@ def run_deployment(options)
   with_deploy_lock(options) { deploy_instances(options) }
 end
 
+def parse_ami_list(value)
+  value.split(',', -1).map { |ami| ami.strip.empty? || ami.strip.casecmp?('none') ? nil : ami.strip }
+end
+
+def requested_amis(options, names)
+  amis = options[:ami] ? parse_ami_list(options[:ami]) : []
+  names.each_with_index.to_h { |name, index| [name, amis[index]] }
+end
+
 def deploy_instances(options)
   names = instance_names(options)
-  ami_only = options[:create_ami_only] && options[:ami].nil?
-  ec2 = Aws::EC2::Resource.new if options[:ami].nil?
-  standalones = options[:ami] ? {} : map_instances(names) { |name| find_standalone_instance(ec2, instance_options(options, name)) }
+  to_build = names.select { |name| requested_amis(options, names)[name].nil? }
+  ami_only = options[:create_ami_only] && !to_build.empty?
+  ec2 = Aws::EC2::Resource.new unless to_build.empty?
+  standalones = map_instances(to_build) { |name| find_standalone_instance(ec2, instance_options(options, name)) }
   targets = discover_deploy_targets(names, options) unless ami_only
   check_for_other_deploys(names, standalones, targets, options)
   check_standalones(standalones, options)
   return print_dry_run_plan(names, standalones, targets, options) if dry_run?(options)
 
-  ami_ids = resolve_ami_ids(ec2, names, standalones, options)
+  jobs = ami_jobs(names, standalones, options)
 
-  if ami_only
-    log('Exiting now as --create_ami_only was supplied.')
-    return
+  with_resume_command(names, jobs, options) do
+    ami_ids = resolve_ami_ids(ec2, names, standalones, options, jobs)
+    next log('Exiting now as --create_ami_only was supplied.') if ami_only
+
+    deploy_to_targets(targets, ami_ids, options)
   end
-
-  deploy_to_targets(targets, ami_ids, options)
 end
 
-def resolve_ami_ids(ec2, names, standalones, options)
-  return names.to_h { |name| [name, options[:ami]] } if options[:ami]
+def resume_command(names, ami_ids, options)
+  selected = names.select { |name| ami_ids.key?(name) }
+  args = [
+    $PROGRAM_NAME,
+    '--environment',
+    options[:environment],
+    '--profile',
+    options[:profile],
+    '--instance',
+    selected.join(','),
+    '--ami',
+    selected.map { |name| ami_ids[name] }
+            .join(',')
+  ]
+  args += ['--type', options[:type]] if options[:type]
+  args += ['--spot_target_capacity', options[:spot_target_capacity].to_s] if options[:spot_target_capacity]
+  args += RESUME_FLAGS.filter_map { |flag| "--#{flag}" if options[flag] }
+  Shellwords.join(args.compact)
+end
 
-  deploy_each(names, parallel: true, label: 'AMI creation') do |name|
-    instance_id, instance_name = standalones[name]
-    create_ami(ec2, instance_id, instance_name, instance_options(options, name))
-  end
+def print_resume_command(names, jobs, options)
+  built =
+    jobs.select { |_name, job| job.available? }
+        .transform_values { |job| job.snapshot[:ami_id] }
+  return if built.empty?
+
+  log_warn("To deploy the AMIs already built:\n  #{resume_command(names, requested_amis(options, names).compact.merge(built), options)}")
+  pending = jobs.values.filter_map { |job| "#{job.instance} (#{job.snapshot[:ami_id]})" if job.pending? }
+  log_warn("Still being created: #{pending.join(', ')}") unless pending.empty?
+end
+
+def with_resume_command(names, jobs, options)
+  yield
+rescue StandardError, SignalException
+  print_resume_command(names, jobs, options)
+  raise
+end
+
+def ami_jobs(names, standalones, options)
+  requested = requested_amis(options, names)
+  names.select { |name| requested[name].nil? }
+       .to_h { |name| [name, AmiJob.new(name, standalones[name].last)] }
+end
+
+def with_ami_status_table(jobs)
+  table = AmiStatusTable.new(jobs, $stdout)
+  renderer =
+    start_thread do
+      loop do
+        table.render
+        Kernel.sleep(AMI_RENDER_INTERVAL)
+      end
+    end
+  yield
+ensure
+  renderer&.kill&.join
+  table&.render
+end
+
+def build_ami(ec2, standalone, options, job)
+  instance_id, instance_name = standalone
+  ami_id = create_ami(ec2, instance_id, instance_name, options.merge(ami_job: job))
+  job.finish(ami_id)
+  ami_id
+rescue StandardError => e
+  job.mark_failed(e.message)
+  raise
+end
+
+def confirm_partial_ami_failure(outcomes, supplied, options)
+  log_instance_outcomes(outcomes, 'AMI creation')
+  failed = failed_instances(outcomes)
+  built = outcomes.except(*failed).transform_values { |outcome| outcome[:value] }
+  return built if failed.empty?
+
+  message = "AMI creation failed for: #{failed.join(', ')}"
+  usable = supplied.keys + built.keys
+  raise(message) if usable.empty? || options[:create_ami_only] || !$stdin.tty?
+
+  print("Continue deploying #{usable.join(', ')} only? [y/N] ")
+  raise(message) unless YES_ANSWERS.include?(read_answer)
+
+  built
+end
+
+def resolve_ami_ids(ec2, names, standalones, options, jobs = ami_jobs(names, standalones, options))
+  supplied = requested_amis(options, names).compact
+  return supplied if jobs.empty?
+
+  outcomes =
+    with_ami_status_table(jobs.values) do
+      run_for_instances(jobs.keys, parallel: true) { |name| build_ami(ec2, standalones[name], instance_options(options, name), jobs[name]) }
+    end
+  ami_ids = supplied.merge(confirm_partial_ami_failure(outcomes, supplied, options))
+  names.select { |name| ami_ids.key?(name) }
+       .to_h { |name| [name, ami_ids[name]] }
 end
 
 def discover_deploy_targets(names, options)
@@ -1032,6 +1259,7 @@ end
 
 def deploy_to_targets(targets, ami_ids, options)
   ctx = targets[:ctx]
+  targets = targets.merge(instances: targets[:instances].slice(*ami_ids.keys))
   deploys = build_deploys(targets, ami_ids, options)
 
   ssm_snapshot = deploys.values.map { |deploy| capture_ssm_snapshot(deploy) }
@@ -1069,8 +1297,8 @@ def validate_instance_list!(options)
   error =
     if names.empty?
       'missing argument: instance'
-    elsif names.length > 1 && options[:ami]
-      '--ami cannot be used with more than one instance'
+    elsif options[:ami] && parse_ami_list(options[:ami]).length != names.length
+      "--ami has #{parse_ami_list(options[:ami]).length} value(s) but --instance has #{names.length}; use none to build an AMI for an instance"
     elsif names.length > 1 && options[:type]
       '--type cannot be used with more than one instance'
     end
@@ -1083,7 +1311,7 @@ end
 def parse_deploy_options(argv = ARGV)
   options =
     CliMain.parse_options!(mandatory: %i[environment instance profile], argv: argv) do |opts|
-      opts.on('--ami ami', String)
+      opts.on('--ami ami1,none,ami2', String, 'AMI per instance, in --instance order; none builds one')
       opts.on('--create_ami_only')
       opts.on('--dry-run', 'Run discovery and read-only checks, then print the planned changes')
       opts.on('--environment environment', String)
