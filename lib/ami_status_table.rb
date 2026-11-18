@@ -6,15 +6,17 @@ class AmiStatusTable
   HEADER = format(ROW_FORMAT, instance: 'INSTANCE', state: 'STATE', progress: 'SNAP', ami: 'AMI', elapsed: 'TIME', detail: 'NAME')
   private_constant :ROW_FORMAT, :HEADER
 
-  def initialize(jobs, out)
+  def initialize(jobs, out, log = nil)
     @jobs = jobs
     @out = out
+    @log = log
     @drawn = false
     @last = {}
   end
 
   def render
-    @out.tty? ? redraw : print_changes
+    @out.tty? ? redraw : print_changes(@out)
+    print_changes(@log) if @log
   end
 
   private
@@ -31,13 +33,13 @@ class AmiStatusTable
     @drawn = true
   end
 
-  def print_changes
+  def print_changes(output)
     @jobs.each do |job|
       key = job.snapshot.slice(:state, :progress, :ami_id, :error)
       next if @last[job.instance] == key
 
       @last[job.instance] = key
-      @out.puts(row(job))
+      output.write("#{row(job)}\n")
     end
   end
 end

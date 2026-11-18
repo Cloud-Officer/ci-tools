@@ -23,11 +23,16 @@ require 'json'
 require 'open3'
 require 'securerandom'
 require 'shellwords'
+require 'uri'
 require 'yaml'
 require_relative 'lib/ami_job'
 require_relative 'lib/ami_status_table'
 require_relative 'lib/cli_main'
 require_relative 'lib/deploy_permissions'
+require_relative 'lib/plugin_manager'
+require_relative 'lib/plugins'
+require_relative 'lib/run_log'
+require_relative 'lib/tee_output'
 
 # Timing constants for polling and warmup periods
 POLL_INTERVAL = 15      # Seconds between status checks
@@ -78,7 +83,7 @@ AMI_MAX_POLL_ATTEMPTS = 768
 WORKER_AMI_MAX_POLL_ATTEMPTS = 3072
 AMI_RENDER_INTERVAL = 1
 IMAGE_FAILURE_STATES = %w[failed error invalid deregistered].freeze
-RESUME_FLAGS = %i[preserve_desired_capacity sequential_rollout skip_scale_down skip-lock skip-other-deploy-check skip-permission-check].freeze
+RESUME_FLAGS = %i[preserve_desired_capacity sequential_rollout skip_scale_down sms skip-lock skip-other-deploy-check skip-permission-check].freeze
 CODEDEPLOY_POLL_INTERVAL = 10
 CODEDEPLOY_TIMEOUT = 3600
 CODEDEPLOY_LOOKBACK = 50
@@ -96,6 +101,7 @@ EC2_FILTER_VALUE_LIMIT = 200
 HEALTHCHECK_TIMEOUT = 15
 HEALTHCHECK_INTERVAL = 15
 HEALTHCHECK_GIVE_UP_AFTER = 300
+PLUGINS_FILE = 'plugins.yaml'
 CURL_STATUS_FORMAT = ['%', '{http_code}'].join
 
 class PreflightError < StandardError; end
@@ -434,21 +440,23 @@ def find_auto_scaling_group(asg_resources, stack_name, options)
 
   log("Auto scaling group #{name} found with desired capacity at #{group.desired_capacity}.")
   asg = { name: name, desired_capacity: group.desired_capacity, min_size: group.min_size, max_size: group.max_size }
-  baseline = asg_baseline(group.data.tags)
+  baseline = asg_baseline(group.data.tags, group.min_size)
   return asg if baseline.nil?
 
   log_warn("#{name} is still scaled up from an unfinished rollout: using its capacity from before it (desired #{baseline[:desired_capacity]}, max #{baseline[:max_size]}).")
   asg.merge(baseline)
 end
 
-def asg_baseline(tags)
+def asg_baseline(tags, min_size)
   tag = Array(tags).find { |candidate| candidate.key == ASG_BASELINE_TAG }
   return if tag.nil?
 
   match = tag.value.to_s.match(ASG_BASELINE_FORMAT)
-  raise(PreflightError, "Tag #{ASG_BASELINE_TAG} of #{tag.resource_id} is invalid: #{tag.value}") if match.nil?
+  desired = match && Integer(match[:desired], 10)
+  max = match && Integer(match[:max], 10)
+  raise(PreflightError, "Tag #{ASG_BASELINE_TAG} of #{tag.resource_id} is invalid: #{tag.value}") unless match && desired >= min_size && max >= desired
 
-  { desired_capacity: Integer(match[:desired], 10), max_size: Integer(match[:max], 10) }
+  { desired_capacity: desired, max_size: max }
 end
 
 def find_target_group(elb, stack_name, options)
@@ -892,7 +900,13 @@ def stop_or_report(options, message)
 end
 
 def read_answer
-  $stdin.gets.to_s.strip.downcase
+  answer = $stdin.gets.to_s
+  @run_log&.write(answer.end_with?("\n") ? answer : "#{answer}\n")
+  answer.strip.downcase
+end
+
+def notify(event, **payload)
+  @plugins&.emit(event, payload)
 end
 
 def confirm_or_abort(prompt, abort_message)
@@ -924,6 +938,7 @@ def confirm_unchecked_permissions(options, reason)
 
   raise(PreflightError, "Could not check your permissions (#{reason}): rerun with --skip-permission-check to go without.", cause: nil) unless $stdin.tty?
 
+  notify(:question, kind: 'permissions_unchecked')
   confirm_or_abort('Continue without the permission check? [y/N] ', 'Permissions could not be checked, aborted.')
 end
 
@@ -1039,6 +1054,7 @@ def confirm_other_deploys(hints, options)
 
   raise(PreflightError, "Someone else may be deploying: #{hints.join('; ')}. Rerun with --skip-other-deploy-check to deploy anyway.") unless $stdin.tty?
 
+  notify(:question, kind: 'other_deploy')
   confirm_or_abort('Someone else may be deploying. Continue anyway? [y/N] ', 'Someone else may be deploying, aborted.')
 end
 
@@ -1083,6 +1099,7 @@ end
 def wait_for_unready?(names)
   return true unless $stdin.tty?
 
+  notify(:question, kind: 'standalones_not_ready', names: names)
   print("Wait for #{names.join(', ')}? [Y/n] ")
   answer = read_answer
   answer.empty? || YES_ANSWERS.include?(answer)
@@ -1244,6 +1261,7 @@ def confirm_extra_targets(problem, extras, options)
 
   raise(PreflightError, problem) unless $stdin.tty?
 
+  notify(:question, kind: 'extra_codedeploy_targets', group: problem[/\A\S+/])
   names = describe_extra_targets(extras).join(', ')
   log("  1) Continue: the redeploy also reaches #{names}")
   tags = extras.values.flat_map { |extra| extra[:tags] }
@@ -1614,14 +1632,19 @@ def reset_standalone_instances(options)
     return log("DRY RUN: a real run would set #{RESET_PARAMETERS.join(' and ')} to 0, update the stack, then set them to 1 and update it again.")
   end
 
+  notify(:reset_disabling)
   set_standalone_instances(options, '0')
+  notify(:reset_disabled)
 
   begin
+    notify(:reset_enabling)
     set_standalone_instances(options, '1')
   rescue StandardError, SignalException
     log_warn("The standalone instances may still be disabled: rerun with --reset-instances, or set #{RESET_PARAMETERS.join(' and ')} to 1 and update the stack.")
     raise
   end
+
+  notify(:reset_done)
 end
 
 def build_deploys(targets, ami_ids, _options)
@@ -1658,7 +1681,12 @@ def print_dry_run_plan(names, standalones, targets, options, chores = {})
 end
 
 def print_healthcheck_plan(healthchecks)
-  log("  then check #{healthchecks[:urls].join(', ')}") unless healthchecks.nil? || healthchecks[:urls].empty?
+  return if healthchecks.nil? || healthchecks[:urls].empty?
+
+  log(
+    "  then check #{healthchecks[:urls].map { |url| redacted_url(url) }
+.join(', ')}"
+  )
 end
 
 def configure_aws_retries
@@ -1678,6 +1706,7 @@ def run_deployment(options)
     return log("DRY RUN: a real run would publish lambda #{options[:environment]}-#{options[:lambda_publish_version]}.") if dry_run?(options)
 
     publish_lambda_and_update_cloudfront(options)
+    notify(:lambda_published, function: options[:lambda_publish_version])
     return
   end
 
@@ -1724,10 +1753,14 @@ def deploy_instances(options)
 
   with_resume_command(names, jobs, options) do
     ami_ids = resolve_ami_ids(ec2, names, standalones, options, jobs)
-    next log('Exiting now as --create_ami_only was supplied.') if ami_only
+    if ami_only
+      notify(:amis_ready, jobs: job_summaries(jobs))
+      next log('Exiting now as --create_ami_only was supplied.')
+    end
 
     deploy_to_targets(targets, ami_ids, options)
     run_healthchecks(healthchecks)
+    notify(:deploy_succeeded)
   end
 end
 
@@ -1748,6 +1781,7 @@ def resume_command(names, ami_ids, options)
   args += ['--type', options[:type]] if options[:type]
   args += ['--spot_target_capacity', options[:spot_target_capacity].to_s] if options[:spot_target_capacity]
   args += RESUME_FLAGS.filter_map { |flag| "--#{flag}" if options[flag] }
+  args += ['--disable-plugins', options[:'disable-plugins'].join(',')] if options[:'disable-plugins']
   Shellwords.join(args.compact)
 end
 
@@ -1776,7 +1810,8 @@ def ami_jobs(names, standalones, options, chores = {})
 end
 
 def with_ami_status_table(jobs)
-  table = AmiStatusTable.new(jobs, $stdout)
+  out = $stdout
+  table = out.is_a?(TeeOutput) && out.tty? ? AmiStatusTable.new(jobs, out.console, @run_log) : AmiStatusTable.new(jobs, out)
   renderer =
     start_thread do
       loop do
@@ -1820,10 +1855,18 @@ def confirm_partial_ami_failure(outcomes, supplied, options)
   usable = supplied.keys + built.keys
   raise(message) if usable.empty? || options[:create_ami_only] || !$stdin.tty?
 
+  notify(:question, kind: 'partial_ami_failure', failed: failed)
   print("Continue deploying #{usable.join(', ')} only? [y/N] ")
   raise(message) unless YES_ANSWERS.include?(read_answer)
 
   built
+end
+
+def job_summaries(jobs)
+  jobs.map do |name, job|
+    fields = job.snapshot
+    { instance: name, ami_id: fields[:ami_id], state: fields[:state] }
+  end
 end
 
 def resolve_ami_ids(ec2, names, standalones, options, jobs = ami_jobs(names, standalones, options))
@@ -1834,6 +1877,7 @@ def resolve_ami_ids(ec2, names, standalones, options, jobs = ami_jobs(names, sta
     with_ami_status_table(jobs.values) do
       run_for_instances(jobs.keys, parallel: true) { |name| build_ami(ec2, standalones[name], instance_options(options, name), jobs[name]) }
     end
+  notify(:amis_done, jobs: job_summaries(jobs))
   ami_ids = supplied.merge(confirm_partial_ami_failure(outcomes, supplied, options))
   names.select { |name| ami_ids.key?(name) }
        .to_h { |name| [name, ami_ids[name]] }
@@ -1864,7 +1908,7 @@ def deploy_to_targets(targets, ami_ids, options)
                         .reduce({}, :merge)
   update_ssm_parameters_with_rollback(deploys.values, ssm_snapshot)
   mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
-  update_stack_with_ssm_rollback(targets[:cfn], deploys.values, ssm_snapshot)
+  notify(:stack_updated) if update_stack_with_ssm_rollback(targets[:cfn], deploys.values, ssm_snapshot) == :updated
 
   mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
   factors = resolve_capacity_factors(options)
@@ -1908,7 +1952,7 @@ def plan_instance_rollout(asg_client, deploy, factors)
   name = asg[:name]
   group = describe_asg(asg_client, name)
   stale = stale_instance_ids(group, deploy.ami_id)
-  unfinished = !asg_baseline(group.tags).nil?
+  unfinished = !asg_baseline(group.tags, group.min_size).nil?
 
   if stale.empty?
     log("Every instance of #{name} runs #{deploy.ami_id}.")
@@ -1931,10 +1975,13 @@ def roll_out_instance(asg_client, deploy, target, mixed_params, factors)
   return if plan.nil?
 
   rollout = RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: target[:elb], target_group_arn: target[:target_group_arn], options: deploy.options)
+  groups = [{ name: asg[:name], from: asg[:desired_capacity], to: plan[:new_capacity] }]
+  notify(:rollout_started, groups: groups)
   scale_up_for_rollout(rollout, plan)
   run_rolling_deploy_with_capacity_rollback(rollout, plan)
   clear_asg_baseline(asg_client, asg[:name])
   warn_about_stale_instances(asg_client, deploy) unless deploy.options[:skip_scale_down]
+  notify(:rollout_done, groups: groups)
 
   log("Update completed successfully for Auto scaling group #{asg[:name]}.")
 end
@@ -1965,9 +2012,18 @@ def healthcheck_plan(options)
   { urls: healthcheck_urls(config, options), interval: healthcheck_setting(retries, 'interval', HEALTHCHECK_INTERVAL, 1), give_up_after: healthcheck_setting(retries, 'give_up_after', HEALTHCHECK_GIVE_UP_AFTER, 0) }
 end
 
+def redacted_url(url)
+  uri = URI.parse(url)
+  raise(URI::InvalidURIError, 'not http') unless uri.is_a?(URI::HTTP)
+
+  uri.class.build(host: uri.host, port: uri.port, path: uri.path).to_s
+rescue URI::Error
+  '<unparsable URL>'
+end
+
 def healthcheck_failure(url)
-  out, err, status = Open3.capture3('curl', '--silent', '--show-error', '--proto', '=http,https', '--output', File::NULL, '--write-out', CURL_STATUS_FORMAT, '--max-time', HEALTHCHECK_TIMEOUT.to_s, '--url', url)
-  return "curl failed: #{err.strip}" unless status.success?
+  out, err, status = Open3.capture3('curl', '--silent', '--show-error', '--globoff', '--proto', '=http,https', '--output', File::NULL, '--write-out', CURL_STATUS_FORMAT, '--max-time', HEALTHCHECK_TIMEOUT.to_s, '--url', url)
+  return "curl failed: #{err.strip.gsub(url, redacted_url(url))}" unless status.success?
 
   out.start_with?('2') ? nil : "HTTP #{out}"
 rescue SystemCallError => e
@@ -1977,7 +2033,21 @@ end
 def check_urls(urls)
   failures = urls.to_h { |url| [url, healthcheck_failure(url)] }
   failures.compact!
-  (urls - failures.keys).each { |url| log("Health check OK: #{url}") }
+  (urls - failures.keys).each { |url| log("Health check OK: #{redacted_url(url)}") }
+  failures
+end
+
+def retry_healthchecks(healthchecks, failures, started)
+  deadline = started + healthchecks[:give_up_after]
+
+  until failures.empty? || Time.now >= deadline
+    failures.each { |url, reason| log_warn("Health check failed for #{redacted_url(url)}: #{reason}, retrying in #{healthchecks[:interval]} s...") }
+    sleep(healthchecks[:interval])
+    remaining = check_urls(failures.keys)
+    (failures.keys - remaining.keys).each { |url| notify(:healthcheck_recovered, url: redacted_url(url), after: (Time.now - started).round) }
+    failures = remaining
+  end
+
   failures
 end
 
@@ -1985,16 +2055,18 @@ def run_healthchecks(healthchecks)
   return if healthchecks.nil? || healthchecks[:urls].empty?
 
   log('Running health checks...')
-  deadline = Time.now + healthchecks[:give_up_after]
-  failures = check_urls(healthchecks[:urls])
+  started = Time.now
+  urls = healthchecks[:urls]
+  failures = check_urls(urls)
+  failures.each { |url, reason| notify(:healthcheck_failing, url: redacted_url(url), reason: reason) }
+  failures = retry_healthchecks(healthchecks, failures, started)
 
-  until failures.empty? || Time.now >= deadline
-    failures.each { |url, reason| log_warn("Health check failed for #{url}: #{reason}, retrying in #{healthchecks[:interval]} s...") }
-    sleep(healthchecks[:interval])
-    failures = check_urls(failures.keys)
+  failures.each do |url, reason|
+    log_warn("WARNING: giving up on health check #{redacted_url(url)}: #{reason}")
+    notify(:healthcheck_gave_up, url: redacted_url(url), reason: reason)
   end
 
-  failures.each { |url, reason| log_warn("WARNING: giving up on health check #{url}: #{reason}") }
+  notify(:healthchecks_done, passed: (urls - failures.keys).map { |url| redacted_url(url) }, failed: failures.map { |url, reason| { url: redacted_url(url), reason: reason } })
 end
 
 def reset_option_error(options, names)
@@ -2009,12 +2081,17 @@ def instance_required?(options)
   !options[:'reset-instances'] || options[:'redeploy-latest'] || options[:resize]
 end
 
+def plugin_option_error(options)
+  unknown = Array(options[:'disable-plugins']) - Plugins.available - ['all']
+  "--disable-plugins: unknown #{unknown.join(', ')} (available: all, #{Plugins.available.join(', ')})" unless unknown.empty?
+end
+
 def instance_list_error(options, names)
   return 'missing argument: instance' if names.empty? && instance_required?(options)
   return "--ami has #{parse_ami_list(options[:ami]).length} value(s) but --instance has #{names.length}; use none to build an AMI for an instance" if options[:ami] && parse_ami_list(options[:ami]).length != names.length
   return '--type cannot be used with more than one instance' if names.length > 1 && options[:type]
 
-  reset_option_error(options, names)
+  reset_option_error(options, names) || plugin_option_error(options)
 end
 
 def validate_instance_list!(options)
@@ -2031,6 +2108,7 @@ def parse_deploy_options(argv = ARGV)
     CliMain.parse_options!(mandatory: mandatory, argv: argv) do |opts|
       opts.on('--ami ami1,none,ami2', String, 'AMI per instance, in --instance order; none builds one')
       opts.on('--create_ami_only')
+      opts.on('--disable-plugins [all,plugin]', Array, 'Turn off every plugin, or the ones listed')
       opts.on('--dry-run', 'Run discovery and read-only checks, then print the planned changes')
       opts.on('--environment environment', String)
       opts.on('--instance instance1,instance2', String)
@@ -2046,18 +2124,80 @@ def parse_deploy_options(argv = ARGV)
       opts.on('--skip-other-deploy-check', 'Do not look for signs of another deploy')
       opts.on('--skip-permission-check', 'Do not check the IAM permissions this run needs')
       opts.on('--skip_scale_down')
+      opts.on('--sms', 'Send texts through the sms plugin for this run')
       opts.on('--spot_target_capacity spot_target_capacity', Integer)
     end
+  options[:'disable-plugins'] ||= ['all'] if options.key?(:'disable-plugins')
   validate_instance_list!(options)
   options
 end
 
+def run_log_settings
+  settings = deploy_config['log'] || {}
+  raise(PreflightError, 'The log section of the deploy config must be a mapping.') unless settings.is_a?(Hash)
+
+  settings
+end
+
+def run_log_path(options, settings)
+  name = "#{Time.now.strftime('%Y-%m-%d-%H%M%S')}-#{options[:profile]}-#{options[:environment]}.log".gsub(/[^\w.-]/, '_')
+  File.join(File.expand_path(settings['directory'] || File.join(deploy_directory, 'logs')), name)
+end
+
+def start_run_log(options)
+  settings = run_log_settings
+  return if dry_run?(options) || settings['enabled'] == false
+
+  @run_log = RunLog.new(run_log_path(options, settings))
+  $stdout = TeeOutput.new($stdout, @run_log)
+  $stderr = TeeOutput.new($stderr, @run_log)
+  log("Log: #{@run_log.path}")
+rescue SystemCallError => e
+  log_warn("WARNING: no run log: #{e.message}")
+end
+
+def stop_run_log
+  return if @run_log.nil?
+
+  log("Log: #{@run_log.path}")
+  $stdout = $stdout.console if $stdout.is_a?(TeeOutput)
+  $stderr = $stderr.console if $stderr.is_a?(TeeOutput)
+  @run_log.close
+  @run_log = nil
+end
+
+def start_plugins(options)
+  return if dry_run?(options)
+
+  context = { profile: options[:profile], environment: options[:environment], instances: instance_names(options) }
+  @plugins = PluginManager.load(File.join(deploy_directory, PLUGINS_FILE), options, context, method(:start_thread))
+  log("Plugins: #{@plugins.names.join(', ')}") unless @plugins.names.empty?
+end
+
+def stop_plugins
+  @plugins&.shutdown
+  @plugins = nil
+end
+
 def deploy_from_cli(options)
+  start_run_log(options)
+  start_plugins(options)
   log('Starting deployment...')
+  notify(:deploy_started)
   run_deployment(options)
 rescue PreflightError => e
   log_warn(e.message)
+  notify(:deploy_aborted, reason: e.message)
   exit(1)
+rescue StandardError => e
+  notify(:deploy_failed, error: e.message)
+  raise
+rescue SignalException
+  notify(:deploy_interrupted)
+  raise
+ensure
+  stop_plugins
+  stop_run_log
 end
 
 # :nocov:

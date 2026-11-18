@@ -16,6 +16,11 @@ require_relative '../lib/ami_job'
 require_relative '../lib/ami_status_table'
 require_relative '../lib/cli_main'
 require_relative '../lib/deploy_permissions'
+require_relative '../lib/plugin'
+require_relative '../lib/plugin_manager'
+require_relative '../lib/plugins'
+require_relative '../lib/run_log'
+require_relative '../lib/tee_output'
 
 # Captures everything written to $stdout while the block runs and returns it as
 # a String, restoring $stdout even when the block raises (e.g. SystemExit).
