@@ -50,11 +50,11 @@
   "Ruby:aws-sdk-autoscaling": {
     "language": "Ruby",
     "package": "aws-sdk-autoscaling",
-    "version": "1.180.0",
+    "version": "1.181.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Auto Scaling",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -62,11 +62,11 @@
   "Ruby:aws-sdk-cloudformation": {
     "language": "Ruby",
     "package": "aws-sdk-cloudformation",
-    "version": "1.172.0",
+    "version": "1.173.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CloudFormation",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -74,11 +74,11 @@
   "Ruby:aws-sdk-cloudfront": {
     "language": "Ruby",
     "package": "aws-sdk-cloudfront",
-    "version": "1.168.0",
+    "version": "1.169.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudFront (CloudFront)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -86,11 +86,11 @@
   "Ruby:aws-sdk-cloudwatchlogs": {
     "language": "Ruby",
     "package": "aws-sdk-cloudwatchlogs",
-    "version": "1.178.0",
+    "version": "1.179.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon CloudWatch Logs",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -98,11 +98,11 @@
   "Ruby:aws-sdk-codedeploy": {
     "language": "Ruby",
     "package": "aws-sdk-codedeploy",
-    "version": "1.117.0",
+    "version": "1.118.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS CodeDeploy (CodeDeploy)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-17",
+    "last_verified_at": "2026-11-19",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -122,11 +122,11 @@
   "Ruby:aws-sdk-ec2": {
     "language": "Ruby",
     "package": "aws-sdk-ec2",
-    "version": "1.672.0",
+    "version": "1.673.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Elastic Compute Cloud (Amazon EC2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-18",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -134,11 +134,11 @@
   "Ruby:aws-sdk-elasticloadbalancingv2": {
     "language": "Ruby",
     "package": "aws-sdk-elasticloadbalancingv2",
-    "version": "1.170.0",
+    "version": "1.171.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Elastic Load Balancing (Elastic Load Balancing v2)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -146,11 +146,11 @@
   "Ruby:aws-sdk-iam": {
     "language": "Ruby",
     "package": "aws-sdk-iam",
-    "version": "1.166.0",
+    "version": "1.167.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Identity and Access Management (IAM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "High",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -170,11 +170,11 @@
   "Ruby:aws-sdk-lambda": {
     "language": "Ruby",
     "package": "aws-sdk-lambda",
-    "version": "1.214.0",
+    "version": "1.215.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for AWS Lambda",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-18",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -182,11 +182,11 @@
   "Ruby:aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",
-    "version": "1.235.0",
+    "version": "1.236.0",
     "license": "Apache-2.0",
     "description": "Official AWS Ruby gem for Amazon Simple Systems Manager (SSM) (Amazon SSM)",
     "website": "https://github.com/aws/aws-sdk-ruby",
-    "last_verified_at": "2026-11-16",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
@@ -410,11 +410,11 @@
   "Ruby:parser": {
     "language": "Ruby",
     "package": "parser",
-    "version": "3.3.13.0",
+    "version": "3.3.14.0",
     "license": "MIT",
     "description": "A Ruby parser written in pure Ruby.",
     "website": "https://github.com/whitequark/parser",
-    "last_verified_at": "2026-10-24",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
@@ -566,11 +566,11 @@
   "Ruby:rubocop-ast": {
     "language": "Ruby",
     "package": "rubocop-ast",
-    "version": "1.52.0",
+    "version": "1.53.0",
     "license": "MIT",
     "description": "    RuboCop's Node and NodePattern classes.",
     "website": "https://www.rubocop.org/",
-    "last_verified_at": "2026-11-18",
+    "last_verified_at": "2026-11-19",
     "risk_level": "Low",
     "requirements": "Dependency",
     "verification_reasoning": "Dependency"
