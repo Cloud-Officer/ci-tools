@@ -333,6 +333,8 @@ RSpec.describe(DeployPlugins) do
   describe 'the sms plugin' do
     let(:sms) { plugin('sms', sms_settings) }
 
+    before { sms }
+
     it 'stays off without --sms' do
       expect(sms.active?).to(be(false))
     end
