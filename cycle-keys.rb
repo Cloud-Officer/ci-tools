@@ -5,6 +5,7 @@
 require 'aws-sdk-iam'
 require 'date'
 require 'iniparse'
+require_relative 'lib/aws_sso'
 require_relative 'lib/cli_main'
 
 DEFAULT_REGION = 'us-east-1'
@@ -271,6 +272,12 @@ def disable_and_delete_old_key(iam, access_key, user_name, rollback, rollback_af
   end
 end
 
+def report_missing_profile(profile, message)
+  raise(message) unless AwsSso.profile?(profile)
+
+  puts("Profile '#{profile}' signs in with AWS SSO: it has no access key to rotate.")
+end
+
 def parse_cycle_keys_options(argv = ARGV)
   CliMain.parse_options!(mandatory: %i[profile username], argv: argv) do |opts|
     opts.on('--profile profile', String)
@@ -281,7 +288,7 @@ end
 
 def run_cycle_keys(options)
   credentials_file_name = "#{Dir.home}/.aws/credentials"
-  raise("AWS credentials file not found: #{credentials_file_name}") unless File.exist?(credentials_file_name)
+  return report_missing_profile(options[:profile], "AWS credentials file not found: #{credentials_file_name}") unless File.exist?(credentials_file_name)
 
   result, profile_found =
     with_credentials_lock(credentials_file_name) do
@@ -289,7 +296,7 @@ def run_cycle_keys(options)
       rotate_profile(IniParse.open(credentials_file_name), options)
     end
 
-  raise("Profile '#{options[:profile]}' not found in #{credentials_file_name}") unless profile_found
+  return report_missing_profile(options[:profile], "Profile '#{options[:profile]}' not found in #{credentials_file_name}") unless profile_found
 
   # Exiting inside the lock block would skip File#close and leave the decision
   # tangled up with the locking, so the outcome is carried out and acted on here.

@@ -123,7 +123,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `confirm_partial_ami_failure` / `with_resume_command`: Offer to deploy the AMIs that succeeded, and print the command that deploys built AMIs after a failure
 - `deploy_each`: Runs one step for every instance named in `--instance` (comma-separated), in parallel threads with a `[name]` log tag when there are several, and raises after all finish if any failed
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
-- `check_credentials` / `check_permissions`: Stop on unusable credentials, then simulate the IAM actions listed by `DeployPermissions.required` for the selected options
+- `check_credentials` / `check_permissions`: Stop on unusable credentials (an expired AWS SSO session is renewed through `AwsSso.with_sign_in` first), then simulate the IAM actions listed by `DeployPermissions.required` for the selected options
 - `with_deploy_lock`: Holds an advisory `flock` per profile and environment under `~/.deploy/locks` for the whole run
 - `check_for_other_deploys`: Stops when CodeDeploy is deploying to a standalone instance about to be imaged, and asks about other active deployments, pending AMIs and stacks in progress
 - `check_standalones`: For running standalone instances, waits for the `UserDataCompleted` tag and verifies the CodeDeploy log marker through SSM Run Command
@@ -155,7 +155,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Publishes Lambda versions and updates CloudFront distributions
 - Supports spot instance deployments with mixed instance policies
 
-**Internal Dependencies:** lib/ami_job.rb (AmiJob), lib/ami_status_table.rb (AmiStatusTable), lib/cli_main.rb (CliMain), lib/deploy_permissions.rb (DeployPermissions)
+**Internal Dependencies:** lib/ami_job.rb (AmiJob), lib/ami_status_table.rb (AmiStatusTable), lib/aws_sso.rb (AwsSso), lib/cli_main.rb (CliMain), lib/deploy_permissions.rb (DeployPermissions)
 
 **External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-codedeploy, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-iam, aws-sdk-lambda, aws-sdk-ssm
 
@@ -180,6 +180,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 **Functionality:**
 
 - Reads AWS credentials from `~/.aws/credentials`
+- Reports an AWS SSO profile (absent from `~/.aws/credentials`, with `sso_session` or `sso_start_url` in `~/.aws/config`) as having no key to rotate and exits 0, through `report_missing_profile`
 - Creates new access keys when current keys exceed 80 days (override with `--force`)
 - Holds one exclusive `flock` on `~/.aws/credentials.lock` across the whole read-modify-write cycle (`with_credentials_lock`), not just the save: locking only the write let two concurrent runs parse the same pre-rotation snapshot and the second write back a file whose other profiles the first had already rotated
 - Retires the old key through a client built from the **new** key, so neither the delete nor the rollback is signed with the credentials being invalidated
@@ -187,7 +188,7 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Disables and deletes old keys after successful rotation
 - Updates credentials file with new key material
 
-**Internal Dependencies:** lib/cli_main.rb (CliMain)
+**Internal Dependencies:** lib/aws_sso.rb (AwsSso), lib/cli_main.rb (CliMain)
 
 **External Dependencies:** aws-sdk-iam, date, iniparse
 
@@ -208,8 +209,9 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Iterates through CloudWatch log groups
 - Associates KMS keys based on environment naming conventions
 - Sets log retention policies
+- Checks the profile with `sts:GetCallerIdentity` before any change, renewing an expired AWS SSO session through `AwsSso.with_sign_in`
 
-**Internal Dependencies:** lib/cli_main.rb (CliMain)
+**Internal Dependencies:** lib/aws_sso.rb (AwsSso), lib/cli_main.rb (CliMain)
 
 **External Dependencies:** aws-sdk-cloudwatchlogs, aws-sdk-core, aws-sdk-kms
 
@@ -283,6 +285,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **Functionality:**
 
+- Runs `aws sso login` before the lookup when the profile is an AWS SSO profile whose session has expired; access-key profiles are untouched
 - Resolves EC2 instances by private IP, instance ID, or Name tag
 - Supports TCP tunneling via port forwarding (`--forward host:remote_port:local_port`)
 - Can be used as SSH ProxyCommand for seamless SSH integration (switches to `AWS-StartSSHSession`)
@@ -412,6 +415,22 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 
 **External Dependencies:** optparse
 
+### lib/aws_sso.rb
+
+**Purpose:** Lets the Ruby scripts use AWS SSO profiles as well as access-key profiles.
+
+**Location:** `lib/aws_sso.rb`
+
+**Key Components:**
+
+- `AwsSso.profile?`: True when the profile has `sso_session` or `sso_start_url` in the AWS config file (`AWS_CONFIG_FILE`, else `~/.aws/config`)
+- `AwsSso.with_sign_in`: Runs a block; on an expired SSO session (`InvalidSSOToken`, `InvalidSSOCredentials`, SSO `UnauthorizedException`) it runs `aws sso login --profile <profile>` once and retries when stdin is a terminal, else raises `AwsSso::SessionExpired` naming that command
+- `AwsSso.login_command`: The `aws sso login` command for a profile
+
+**Internal Dependencies:** None
+
+**External Dependencies:** aws-sdk-core, shellwords
+
 ### Dockerfile
 
 **Purpose:** Builds the container image that ships the toolkit and its runtime prerequisites.
@@ -439,7 +458,7 @@ Single-quoted spans, escaped `\$`, and comments are ignored; a `# shellcheck dis
 **Key Components:**
 
 - `spec/spec_helper.rb`: Loads every Ruby script, configures SimpleCov with an 80% line and branch coverage minimum, and provides `capture_stdout`
-- `spec/*_spec.rb`: Unit specs for `brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`, and `lib/cli_main.rb`
+- `spec/*_spec.rb`: Unit specs for `brew-resources.rb`, `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`, `lib/aws_sso.rb`, and `lib/cli_main.rb`
 - `tests/*.bats`: Bats suites for `Dockerfile`, `generate-codeowners`, `linters`, `README.md`, `ssm-jump`, `ssm-jump.install.bat`, and `sync-jira-release`
 - `tests/readme.bats`: Guards the publicly published README against real email addresses, EC2 instance ids, and hostnames, which would leak personal data and client infrastructure
 
@@ -574,6 +593,7 @@ All SOUP data is managed in [.soup.json](../.soup.json). The `soup.md` file is a
 |-----------------------|----------------------------------------------------|-------------------------------------------------------------|
 | AWS Profile Selection | AWS-facing scripts require an explicit `--profile` | `cycle-keys.rb`, `deploy.rb`, `encrypt-logs.rb`, `ssm-jump` |
 | Credential Isolation  | AWS SDK profile-based auth via `Aws.config.update` | `deploy.rb`, `encrypt-logs.rb`                              |
+| AWS SSO Sessions      | Expired SSO sessions renewed with `aws sso login`  | `lib/aws_sso.rb`, `ssm-jump`                                |
 | Username Validation   | Key rotation validates username matches expected   | `cycle-keys.rb` in username check                           |
 | Environment Variables | Sensitive tokens passed via environment            | `sync-jira-release` in env var check                        |
 

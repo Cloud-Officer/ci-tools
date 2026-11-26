@@ -97,6 +97,13 @@ if [ -n "${forward}" ]; then
   fi
 fi
 
+# an SSO profile signs in again when its session has expired; access-key profiles are left alone
+if [ -n "$(aws configure get sso_session --profile "${profile}" 2>/dev/null || true)" ] || [ -n "$(aws configure get sso_start_url --profile "${profile}" 2>/dev/null || true)" ]; then
+  if ! aws sts get-caller-identity --profile "${profile}" >/dev/null 2>&1; then
+    aws sso login --profile "${profile}" >&2 || fatal "AWS SSO sign-in failed for profile '${profile}' !"
+  fi
+fi
+
 # perform target lookup (AWS SSM target *must* be an EC2 instance ID)
 if echo "${target}" | grep -qE '^i-.*'; then
   instances="${target} NONE NONE"

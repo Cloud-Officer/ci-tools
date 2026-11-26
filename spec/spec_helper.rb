@@ -14,6 +14,7 @@ require_relative '../deploy'
 require_relative '../encrypt-logs'
 require_relative '../lib/ami_job'
 require_relative '../lib/ami_status_table'
+require_relative '../lib/aws_sso'
 require_relative '../lib/cli_main'
 require_relative '../lib/deploy_permissions'
 require_relative '../lib/plugin'
@@ -54,6 +55,7 @@ RSpec.configure do |config|
   config.disable_monkey_patching!
   config.expect_with(:rspec) { |e| e.syntax = :expect }
   config.mock_with(:rspec) { |m| m.verify_partial_doubles = true }
+  config.before { allow(AwsSso).to(receive(:config_file).and_return(File.join(__dir__, 'no-aws-config'))) }
   config.order = :random
   Kernel.srand(config.seed)
 end

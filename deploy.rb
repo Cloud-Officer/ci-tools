@@ -27,6 +27,7 @@ require 'uri'
 require 'yaml'
 require_relative 'lib/ami_job'
 require_relative 'lib/ami_status_table'
+require_relative 'lib/aws_sso'
 require_relative 'lib/cli_main'
 require_relative 'lib/deploy_permissions'
 require_relative 'lib/plugin_manager'
@@ -924,7 +925,9 @@ def credentials_problem(error)
 end
 
 def check_credentials(options)
-  Aws::STS::Client.new.get_caller_identity.arn
+  AwsSso.with_sign_in(options[:profile]) { Aws::STS::Client.new.get_caller_identity.arn }
+rescue AwsSso::SessionExpired => e
+  raise(PreflightError, "Cannot use profile '#{options[:profile]}': #{e.message}.", cause: nil)
 rescue *PROFILE_ERRORS, Aws::Errors::ServiceError => e
   problem = credentials_problem(e)
   raise if problem.nil?

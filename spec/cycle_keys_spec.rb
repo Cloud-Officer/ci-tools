@@ -381,6 +381,28 @@ RSpec.describe(CycleKeys) do
       allow(credentials).to(receive(:each).and_yield(section))
     end
 
+    context 'with an SSO profile' do
+      before { allow(AwsSso).to(receive(:profile?).with('dev').and_return(true)) }
+
+      it 'has nothing to rotate when the profile is not in the credentials file', :aggregate_failures do
+        allow(credentials).to(receive(:each).and_yield(instance_double(IniParse::Lines::Section, key: 'other')))
+        allow(self).to(receive(:process_credential_profile))
+        expect(capture_stdout { run_cycle_keys({ profile: 'dev', username: 'alice' }) }).to(include("Profile 'dev' signs in with AWS SSO"))
+        expect(self).not_to(have_received(:process_credential_profile))
+      end
+
+      it 'has nothing to rotate without a credentials file' do
+        allow(File).to(receive(:exist?).with(credentials_path).and_return(false))
+        expect(capture_stdout { run_cycle_keys({ profile: 'dev', username: 'alice' }) }).to(include('no access key to rotate'))
+      end
+
+      it 'still rotates a key that is in the credentials file' do
+        allow(self).to(receive(:process_credential_profile).and_return(:rotated))
+        run_cycle_keys({ profile: 'dev', username: 'alice' })
+        expect(self).to(have_received(:process_credential_profile))
+      end
+    end
+
     it 'takes the exclusive lock before reading the credentials file', :aggregate_failures do
       allow(self).to(receive(:process_credential_profile).and_return(:rotated))
       run_cycle_keys({ profile: 'dev', username: 'alice' })
