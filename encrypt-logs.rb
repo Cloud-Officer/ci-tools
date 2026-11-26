@@ -7,6 +7,7 @@
 require 'aws-sdk-cloudwatchlogs'
 require 'aws-sdk-core'
 require 'aws-sdk-kms'
+require_relative 'lib/aws_sso'
 require_relative 'lib/cli_main'
 
 KMS_ENVIRONMENTS = %i[beta rc prod].freeze
@@ -80,12 +81,19 @@ def parse_encrypt_logs_options(argv = ARGV)
   end
 end
 
+def check_encrypt_logs_credentials(profile)
+  AwsSso.with_sign_in(profile) { Aws::STS::Client.new.get_caller_identity }
+rescue AwsSso::SessionExpired => e
+  abort("Cannot use profile '#{profile}': #{e.message}.")
+end
+
 def run_encrypt_logs(options)
   if options[:profile]
     puts('Setting profile...')
     Aws.config.update({ profile: options[:profile] })
   end
 
+  check_encrypt_logs_credentials(options[:profile])
   kms = Aws::KMS::Client.new
   keys = build_kms_key_map(kms)
   logs = Aws::CloudWatchLogs::Client.new

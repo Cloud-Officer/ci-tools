@@ -163,3 +163,56 @@ AWS
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage: ssm-jump"* ]]
 }
+
+# Stubs an AWS CLI whose profile is an SSO profile: sts succeeds only once the
+# marker file exists, and `sso login` creates it (or fails when told to).
+stub_sso_aws() {
+  local bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${bin}"
+
+  cat > "${bin}/aws" <<'AWS'
+#!/usr/bin/env bash
+echo "$*" >> "${BATS_TEST_TMPDIR}/calls"
+case "$*" in
+  "configure get sso_session --profile sso") echo "company" ;;
+  configure*) exit 1 ;;
+  sts*) [ -f "${BATS_TEST_TMPDIR}/signed-in" ] ;;
+  "sso login"*) [ -z "${SSO_LOGIN_FAILS:-}" ] && touch "${BATS_TEST_TMPDIR}/signed-in" ;;
+  *ssm*) echo "aws stub invoked: $*" ;;
+esac
+AWS
+
+  chmod +x "${bin}/aws"
+  export PATH="${bin}:${PATH}"
+}
+
+@test "signs in to AWS SSO when the session of an SSO profile has expired" {
+  stub_sso_aws
+  run ssm-jump -p sso i-1234567890abcdef
+  [ "$status" -eq 0 ]
+  grep -qxF "sso login --profile sso" "${BATS_TEST_TMPDIR}/calls"
+  [[ "$output" == *"aws stub invoked: --profile sso ssm start-session"* ]]
+}
+
+@test "does not sign in when the SSO session is still valid" {
+  stub_sso_aws
+  touch "${BATS_TEST_TMPDIR}/signed-in"
+  run ssm-jump -p sso i-1234567890abcdef
+  [ "$status" -eq 0 ]
+  ! grep -q "sso login" "${BATS_TEST_TMPDIR}/calls"
+}
+
+@test "stops when the AWS SSO sign-in fails" {
+  stub_sso_aws
+  SSO_LOGIN_FAILS=1 run ssm-jump -p sso i-1234567890abcdef
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AWS SSO sign-in failed for profile 'sso'"* ]]
+  ! grep -q "ssm start-session" "${BATS_TEST_TMPDIR}/calls"
+}
+
+@test "never signs in for an access-key profile" {
+  stub_sso_aws
+  run ssm-jump -p keys i-1234567890abcdef
+  [ "$status" -eq 0 ]
+  ! grep -qE "^(sts|sso)" "${BATS_TEST_TMPDIR}/calls"
+}

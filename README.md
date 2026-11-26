@@ -100,7 +100,8 @@ generate-codeowners '@build_owner_GitHub_id' '@default_owner_GitHub_id'
 ### cycle-keys
 
 This script reads your `~/.aws/credentials` file, creates a new key if the current one is too old, saves it in
-your `credentials` file, and disables and deletes the other one.
+your `credentials` file, and disables and deletes the other one. A profile that signs in with AWS SSO has no access key, so
+the script says so and exits successfully.
 
 #### Usage cycle-keys
 
@@ -186,6 +187,8 @@ deploy.rb --profile dev --environment rc --reset-instances
 deploy.rb --profile dev --environment rc --instance api,grpc --reset-instances --redeploy-latest
 ```
 
+Profiles can sign in with access keys or with AWS SSO. When an SSO session has expired, the run signs in again with `aws sso login --profile <profile>` if it has a terminal, and otherwise stops with that command.
+
 Before changing anything, a run checks the profile's credentials and simulates the IAM permissions it needs, takes a lock per profile and environment under `~/.deploy/locks`, and looks for another deploy in progress. For each running standalone instance it waits for the `UserDataCompleted` tag and checks the last lines of the CodeDeploy log over SSM. A stopped standalone instance skips those two checks. Without a terminal, a question that needs an answer stops the run, except the wait for the tag, which waits.
 
 `--dry-run` changes no AWS resource, AMI, SSM parameter, stack or auto scaling group. It still sends the read-only CodeDeploy log check to running standalone instances through SSM Run Command, so it needs `ssm:SendCommand` and leaves an entry in the SSM command history.
@@ -244,7 +247,7 @@ With several instances, every lookup runs before any AMI is created, an AMI fail
 
 ### encrypt-logs
 
-Encrypt CloudWatch log groups with KMS keys and set retention policies. The script maps KMS keys to environments (beta, rc, prod) based on key descriptions and log group names.
+Encrypt CloudWatch log groups with KMS keys and set retention policies. The script maps KMS keys to environments (beta, rc, prod) based on key descriptions and log group names. An expired AWS SSO session is renewed with `aws sso login` when the script runs in a terminal.
 
 #### Usage encrypt-logs
 
@@ -299,7 +302,7 @@ Open an SSM connection to an EC2 instance, which can be specified by either:
 * an EC2 instance ID
 * an EC2 instance name (defined by the `Name` tag) (if multiple instances matches that name, the first one in the list will be chosen if `--autoselect-first` is set)
 
-A VPN connection is not required. You need to have a matching AWS CLI profile with your access keys to retrieve information from EC2.
+A VPN connection is not required. You need a matching AWS CLI profile, with access keys or AWS SSO, to retrieve information from EC2. When the session of an SSO profile has expired, `ssm-jump` runs `aws sso login` first.
 
 #### Usage ssm-jump
 

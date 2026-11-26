@@ -38,8 +38,11 @@ RSpec.describe(EncryptLogs) do
   describe '#run_encrypt_logs' do
     let(:kms)  { Aws::KMS::Client.new(stub_responses: true)            }
     let(:logs) { Aws::CloudWatchLogs::Client.new(stub_responses: true) }
+    let(:sts)  { Aws::STS::Client.new(stub_responses: true)            }
 
     before do
+      allow(Aws::STS::Client).to(receive(:new).and_return(sts))
+      allow($stdin).to(receive(:tty?).and_return(false))
       allow(Aws::KMS::Client).to(receive(:new).and_return(kms))
       allow(Aws::CloudWatchLogs::Client).to(receive(:new).and_return(logs))
       kms.stub_responses(:list_keys, { keys: [{ key_id: 'key-1' }, { key_id: 'key-2' }, { key_id: 'key-3' }] })
@@ -60,6 +63,13 @@ RSpec.describe(EncryptLogs) do
       run_encrypt_logs({ profile: 'dev', retention_in_days: 30 })
       expect(logs).to(have_received(:put_retention_policy).with(hash_including(log_group_name: '/aws/beta/api', retention_in_days: 30)))
       expect(logs).to(have_received(:associate_kms_key).with(hash_including(log_group_name: '/aws/beta/api', kms_key_id: 'arn:aws:kms:beta')))
+    end
+
+    it 'stops before touching any log group when the SSO session expired', :aggregate_failures do
+      allow(sts).to(receive(:get_caller_identity).and_raise(Aws::Errors::InvalidSSOToken, 'Token is invalid and failed to refresh.'))
+      expect { run_encrypt_logs({ profile: 'dev', retention_in_days: 30 }) }
+        .to(raise_error(SystemExit).and(output(/Cannot use profile 'dev': its SSO session has expired, sign in with: aws sso login --profile dev/).to_stderr))
+      expect(logs).not_to(have_received(:put_retention_policy))
     end
   end
 

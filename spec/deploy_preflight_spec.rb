@@ -67,6 +67,20 @@ RSpec.describe(DeployPreflight) do
         .to(raise_error(PreflightError, /Cannot use profile 'dev'.*no profile/))
     end
 
+    it 'stops with the sign-in command when the SSO session expired without a terminal' do
+      allow(sts).to(receive(:get_caller_identity).and_raise(Aws::Errors::InvalidSSOToken, 'Token is invalid and failed to refresh.'))
+      expect { check_credentials(options) }
+        .to(raise_error(PreflightError, /Cannot use profile 'dev': its SSO session has expired, sign in with: aws sso login --profile dev/))
+    end
+
+    it 'signs in and continues when the SSO session expired with a terminal', :aggregate_failures do
+      allow($stdin).to(receive(:tty?).and_return(true))
+      allow(AwsSso).to(receive(:system).with('aws', 'sso', 'login', '--profile', 'dev').and_return(true))
+      allow(sts).to(receive(:get_caller_identity).and_invoke(->(*) { raise(Aws::Errors::InvalidSSOToken, 'expired') }, ->(*) { Struct.new(:arn).new('arn:aws:sts::1:assumed-role/AWSReservedSSO_Admin_1/me') }))
+      expect(quietly { expect(check_credentials(options)).to(eq('arn:aws:sts::1:assumed-role/AWSReservedSSO_Admin_1/me')) }).to(include('signing in'))
+      expect(AwsSso).to(have_received(:system).once)
+    end
+
     it 'does not hide unrelated AWS errors' do
       sts.stub_responses(:get_caller_identity, 'InternalFailure')
       expect { check_credentials(options) }
