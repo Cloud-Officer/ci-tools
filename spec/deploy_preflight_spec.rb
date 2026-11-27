@@ -198,15 +198,79 @@ RSpec.describe(DeployPreflight) do
   end
 
   describe '#with_deploy_lock' do
+    let(:ssm)   { Aws::SSM::Client.new(stub_responses: true, retry_limit: 0) }
+    let(:store) { {} }
+
+    before do
+      allow(Aws::SSM::Client).to(receive(:new).and_return(ssm))
+      ssm.stub_responses(:put_parameter, ->(context) { put_lock(context.params) })
+      ssm.stub_responses(:get_parameter, ->(context) { store.key?(context.params[:name]) ? { parameter: { name: context.params[:name], value: store[context.params[:name]] } } : 'ParameterNotFound' })
+      ssm.stub_responses(:delete_parameter, ->(context) { store.delete(context.params[:name]) ? {} : 'ParameterNotFound' })
+    end
+
+    def put_lock(params)
+      return 'ParameterAlreadyExists' if store.key?(params[:name]) && !params[:overwrite]
+
+      store[params[:name]] = params[:value]
+      { version: 1 }
+    end
+
+    def lock_requests(operation)
+      ssm.api_requests.select { |request| request[:operation_name] == operation }
+    end
+
     it 'runs the block and returns its value' do
       expect(with_deploy_lock(options) { :done }).to(eq(:done))
     end
 
-    it 'refuses a second run for the same profile and environment' do
-      with_deploy_lock(options) do
-        expect { with_deploy_lock(options) { :second } }
-          .to(raise_error(PreflightError, %r{already running for dev/beta1 \(pid #{Process.pid}}))
-      end
+    it 'holds an SSM parameter named after the profile and environment while the block runs' do
+      with_deploy_lock(options) { expect(store.keys).to(eq(['/deploy-rb/locks/dev/beta1'])) }
+    end
+
+    it 'records who holds the lock' do
+      with_deploy_lock(options) { expect(store.values.first).to(match(/\Apid #{Process.pid} on .+, started /)) }
+    end
+
+    it 'never overwrites a held lock' do
+      with_deploy_lock(options) { :done }
+      expect(lock_requests(:put_parameter).map { |request| request[:params][:overwrite] }).to(eq([false]))
+    end
+
+    it 'releases the lock once the block is done' do
+      with_deploy_lock(options) { :done }
+      expect(store).to(be_empty)
+    end
+
+    it 'releases the lock when the block fails', :aggregate_failures do
+      expect { with_deploy_lock(options) { raise('boom') } }
+        .to(raise_error('boom'))
+      expect(store).to(be_empty)
+    end
+
+    it 'refuses a run while another one holds the lock' do
+      store['/deploy-rb/locks/dev/beta1'] = 'pid 1 on ci, started earlier'
+      expect { with_deploy_lock(options) { :second } }
+        .to(raise_error(PreflightError, %r{already running for dev/beta1 \(pid 1 on ci, started earlier\).*delete the SSM parameter /deploy-rb/locks/dev/beta1}))
+    end
+
+    it 'leaves the lock of the other run in place', :aggregate_failures do
+      store['/deploy-rb/locks/dev/beta1'] = 'pid 1 on ci, started earlier'
+      expect { with_deploy_lock(options) { :second } }
+        .to(raise_error(PreflightError))
+      expect(store['/deploy-rb/locks/dev/beta1']).to(eq('pid 1 on ci, started earlier'))
+    end
+
+    it 'names an unreadable holder as unknown' do
+      store['/deploy-rb/locks/dev/beta1'] = 'held'
+      ssm.stub_responses(:get_parameter, 'AccessDeniedException')
+      expect { with_deploy_lock(options) { :second } }
+        .to(raise_error(PreflightError, /\(unknown\)/))
+    end
+
+    it 'keeps its own lock when a retried put finds it already there' do
+      allow(self).to(receive(:log_timestamp).and_return('now'))
+      store['/deploy-rb/locks/dev/beta1'] = "pid #{Process.pid} on #{Socket.gethostname}, started now"
+      expect(with_deploy_lock(options) { :mine }).to(eq(:mine))
     end
 
     it 'allows another environment at the same time' do
@@ -220,26 +284,31 @@ RSpec.describe(DeployPreflight) do
       expect(with_deploy_lock(options) { :second }).to(eq(:second))
     end
 
-    it 'keeps the lock file private to its owner' do
-      with_deploy_lock(options) { :done }
-      expect(File.stat(deploy_lock_path(options)).mode & 0o777).to(eq(0o600))
+    it 'leaves a lock that is no longer its own' do
+      quietly { with_deploy_lock(options) { store['/deploy-rb/locks/dev/beta1'] = 'someone else' } }
+      expect(store['/deploy-rb/locks/dev/beta1']).to(eq('someone else'))
     end
 
-    it 'keeps slashes out of the lock file name' do
-      expect(File.basename(deploy_lock_path(options.merge(profile: 'a/b')))).to(eq('a_b-beta1.lock'))
+    it 'says how to clear the lock when it cannot release it' do
+      ssm.stub_responses(:delete_parameter, 'AccessDeniedException')
+      expect { capture_stdout { with_deploy_lock(options) { :done } } }
+        .to(output(%r{Could not release the deploy lock.*delete the SSM parameter /deploy-rb/locks/dev/beta1}).to_stderr)
+    end
+
+    it 'keeps unexpected characters out of the parameter name' do
+      expect(deploy_lock_name(options.merge(profile: 'a b', environment: 'beta:1'))).to(eq('/deploy-rb/locks/a_b/beta_1'))
     end
 
     it 'runs alongside a held lock with --skip-lock' do
-      with_deploy_lock(options) do
-        result = nil
-        capture_stdout { result = with_deploy_lock(options.merge('skip-lock': true)) { :alongside } }
-        expect(result).to(eq(:alongside))
-      end
+      store['/deploy-rb/locks/dev/beta1'] = 'held'
+      result = nil
+      capture_stdout { result = with_deploy_lock(options.merge('skip-lock': true)) { :alongside } }
+      expect(result).to(eq(:alongside))
     end
 
     it 'takes no lock on a dry run' do
       with_deploy_lock(dry_options) { :planned }
-      expect(File.exist?(deploy_lock_path(options))).to(be(false))
+      expect(ssm.api_requests).to(be_empty)
     end
   end
 

@@ -124,12 +124,18 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - `deploy_each`: Runs one step for every instance named in `--instance` (comma-separated), in parallel threads with a `[name]` log tag when there are several, and raises after all finish if any failed
 - `publish_lambda_and_update_cloudfront`: Publishes a Lambda version and repoints the matching CloudFront distribution's associations
 - `check_credentials` / `check_permissions`: Stop on unusable credentials (an expired AWS SSO session is renewed through `AwsSso.with_sign_in` first), then simulate the IAM actions listed by `DeployPermissions.required` for the selected options
-- `with_deploy_lock`: Holds an advisory `flock` per profile and environment under `~/.deploy/locks` for the whole run
+- `with_deploy_lock`: Holds the SSM parameter `/deploy-rb/locks/<profile>/<environment>` for the whole run. `put_parameter` without `overwrite` creates it only when no other run holds it, so local and cloud runs exclude each other; it is deleted at the end only while it still names this run, and a crashed run leaves it for a human to delete
 - `check_for_other_deploys`: Stops when CodeDeploy is deploying to a standalone instance about to be imaged, and asks about other active deployments, pending AMIs and stacks in progress
 - `check_standalones`: For running standalone instances, waits for the `UserDataCompleted` tag and verifies the CodeDeploy log marker through SSM Run Command
 - `plan_instance_rollout` / `stale_instance_ids`: Compare each ASG instance's AMI with the new one, so only groups still on an old AMI are scaled
-- `scale_up_for_rollout` / `print_scale_down_commands`: Scale up from the recorded baseline, and on failure leave the group scaled up with manual commands
-- `run_healthchecks`: Retries the configured URLs with `curl` for a limited time and only warns on failure
+- `scale_up_for_rollout` / `print_scale_down_commands`: Scale up from the recorded baseline; with `--skip-rollback`, a failure leaves the group scaled up with manual commands
+- `check_new_instances` / `run_instance_healthcheck`: After the warm-up, run the profile's `instance_healthchecks` command with SSM Run Command on the in-service instances on the new AMI, retried until it exits 0 or `healthcheck_retries.give_up_after`
+- `with_rollout_rollback` / `roll_back_after` / `roll_back_deploy`: On any failure after the stack update, restore the SSM snapshot (failing on error), update the stack again, and roll every group back; the outcome raises `DeployErrors::RolledBack` or, when the rollback fails, `DeployErrors::NeedsHuman` (`lib/deploy_errors.rb`)
+- `roll_back_instance` / `replace_failed_instances` / `wait_for_replacements`: Add one replacement per instance on the failed AMI, wait for the earlier number of in-service (and, behind a load balancer, healthy) instances not on it, terminate the failed ones with `should_decrement_desired_capacity`, then restore the baseline capacity, on-demand setting and rollout tag. Lowering the capacity first would let the `OldestLaunchTemplate` termination policy end the healthy old instances
+- `update_stack_or_escalate`: Turns a stack update whose outcome a network failure left unknown into `DeployErrors::NeedsHuman`
+- `run_healthchecks`: Retries the configured URLs with `curl` for a limited time; a URL that keeps failing raises (and rolls back) unless `--skip-rollback`, which only warns
+- `interactive?`: False without a terminal or with `--non-interactive`, so every question fails closed
+- `deploy_from_cli`: Exits 1 when a run stops before the stack update, 2 after a clean rollback and 3 when a human must look
 - `Plugin` / `PluginManager` (`lib/plugin.rb`, `lib/plugin_manager.rb`, `plugins/`): Load the plugins enabled in `~/.deploy/plugins.yaml` and deliver events on one thread per plugin, so a failing plugin only warns
 - `RunLog` / `TeeOutput`: Copy the run's output to an owner-only file under `~/.deploy/logs`
 - `print_dry_run_plan`: Prints the AMIs and SSM changes a `--dry-run` would make
@@ -149,15 +155,15 @@ CI-Tools is a collection of DevOps automation tools designed to run locally or w
 - Streams CloudFormation stack events to the log while waiting for the stack update, so a failing resource and its reason are visible without opening the console
 - Captures SSM parameter snapshots and restores them if the CloudFormation update fails. When a network failure leaves the outcome unknown, it keeps the new values and prints the restore commands
 - Preserves existing values for secret CloudFormation parameters instead of transmitting them
-- Restores the auto scaling group's original desired capacity when a rolling deploy fails after the scale-up, so a failed run does not leave the group running at the inflated size
+- Rolls a failed rollout back to the previous AMIs on its own, replacing the failed instances before removing any, and reports the outcome through the exit code and the `rollback_*` plugin events. With `--skip-rollback`, restores the original desired capacity when a rolling deploy fails after the scale-up
 - Manages ASG desired capacity with blue/green deployment pattern
 - Restores ASG mixed-instances policy via an `ensure` block even if scaling fails
 - Publishes Lambda versions and updates CloudFront distributions
 - Supports spot instance deployments with mixed instance policies
 
-**Internal Dependencies:** lib/ami_job.rb (AmiJob), lib/ami_status_table.rb (AmiStatusTable), lib/aws_sso.rb (AwsSso), lib/cli_main.rb (CliMain), lib/deploy_permissions.rb (DeployPermissions)
+**Internal Dependencies:** lib/ami_job.rb (AmiJob), lib/ami_status_table.rb (AmiStatusTable), lib/aws_sso.rb (AwsSso), lib/cli_main.rb (CliMain), lib/deploy_errors.rb (DeployErrors), lib/deploy_permissions.rb (DeployPermissions)
 
-**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-codedeploy, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-iam, aws-sdk-lambda, aws-sdk-ssm
+**External Dependencies:** aws-sdk-autoscaling, aws-sdk-cloudformation, aws-sdk-cloudfront, aws-sdk-codedeploy, aws-sdk-core, aws-sdk-ec2, aws-sdk-elasticloadbalancingv2, aws-sdk-iam, aws-sdk-lambda, aws-sdk-sns (the `sns` plugin), aws-sdk-ssm
 
 ### cycle-keys.rb
 

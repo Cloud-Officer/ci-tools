@@ -184,8 +184,8 @@ RSpec.describe(DeployRollout) do
 
     before { allow(self).to(receive_messages(wait_for_asg_instance_count: nil, warm_up_after_scale_up: nil)) }
 
-    def attempt_failed_scale_up
-      capture_stdout { scale_up_for_rollout(rollout, plan) }
+    def attempt_failed_scale_up(attempt_rollout = rollout)
+      capture_stdout { scale_up_for_rollout(attempt_rollout, plan) }
     rescue RuntimeError
       nil
     end
@@ -232,11 +232,18 @@ RSpec.describe(DeployRollout) do
       end
     end
 
-    it 'prints the commands and the cost when it fails' do
+    it 'prints the commands and the cost when it fails with --skip-rollback' do
+      allow(self).to(receive(:wait_for_asg_instance_count).and_raise('timed out'))
+      allow(self).to(receive(:print_scale_down_commands))
+      attempt_failed_scale_up(rollout('skip-rollback': true))
+      expect(self).to(have_received(:print_scale_down_commands))
+    end
+
+    it 'leaves the group to the rollback when it fails' do
       allow(self).to(receive(:wait_for_asg_instance_count).and_raise('timed out'))
       allow(self).to(receive(:print_scale_down_commands))
       attempt_failed_scale_up
-      expect(self).to(have_received(:print_scale_down_commands))
+      expect(self).not_to(have_received(:print_scale_down_commands))
     end
   end
 
@@ -335,20 +342,25 @@ RSpec.describe(DeployRollout) do
   describe '#run_rolling_deploy_with_capacity_rollback after the scale-up' do
     before { allow(self).to(receive(:scale_down_after_deploy).and_raise('scale-down failed')) }
 
-    def attempt
-      quietly { run_rolling_deploy_with_capacity_rollback(rollout, { new_capacity: 5, new_max: nil }) }
+    def attempt(attempt_rollout = rollout('skip-rollback': true))
+      quietly { run_rolling_deploy_with_capacity_rollback(attempt_rollout, { new_capacity: 5, new_max: nil }) }
     rescue RuntimeError
       nil
     end
 
-    it 'restores the baseline capacity' do
+    it 'restores the baseline capacity with --skip-rollback' do
       attempt
       expect(capacity_updates).to(include(hash_including(desired_capacity: 2, max_size: 4)))
     end
 
-    it 'clears the recorded capacity once restored' do
+    it 'clears the recorded capacity once restored with --skip-rollback' do
       attempt
       expect(requests(asg_client, :delete_tags).size).to(eq(1))
+    end
+
+    it 'leaves the capacity to the rollback, which must not end the old instances first' do
+      attempt(rollout)
+      expect(capacity_updates).not_to(include(hash_including(desired_capacity: 2)))
     end
   end
 
