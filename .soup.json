@@ -179,6 +179,18 @@
     "requirements": "Access AWS services",
     "verification_reasoning": "Official AWS Ruby SDK"
   },
+  "Ruby:aws-sdk-sns": {
+    "language": "Ruby",
+    "package": "aws-sdk-sns",
+    "version": "1.133.0",
+    "license": "Apache-2.0",
+    "description": "Official AWS Ruby gem for Amazon Simple Notification Service (Amazon SNS)",
+    "website": "https://github.com/aws/aws-sdk-ruby",
+    "last_verified_at": "2026-11-27",
+    "risk_level": "Low",
+    "requirements": "Access AWS services",
+    "verification_reasoning": "Official AWS Ruby SDK"
+  },
   "Ruby:aws-sdk-ssm": {
     "language": "Ruby",
     "package": "aws-sdk-ssm",

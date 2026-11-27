@@ -10,18 +10,22 @@ module DeployPermissions
   LOAD_BALANCER = %w[elasticloadbalancing:DescribeTargetGroups elasticloadbalancing:DescribeTargetHealth].freeze
   REDEPLOY = %w[cloudformation:ListStacks codedeploy:BatchGetDeployments codedeploy:CreateDeployment codedeploy:GetApplicationRevision codedeploy:GetDeployment codedeploy:GetDeploymentConfig codedeploy:GetDeploymentGroup codedeploy:ListDeployments codedeploy:RegisterApplicationRevision].freeze
   RESIZE = %w[ec2:DescribeInstanceTypes ec2:ModifyInstanceAttribute ec2:StartInstances ec2:StopInstances ssm:DescribeInstanceInformation].freeze
+  LOCK = %w[ssm:PutParameter ssm:GetParameter ssm:DeleteParameter].freeze
+  ROLLBACK = %w[autoscaling:TerminateInstanceInAutoScalingGroup].freeze
+  INSTANCE_HEALTH = %w[ssm:SendCommand ssm:GetCommandInvocation].freeze
 
   USER_ARN = %r{\Aarn:[^:]+:iam::\d+:user/}
   ASSUMED_ROLE_ARN = %r{\Aarn:(?<partition>[^:]+):sts::(?<account>\d+):assumed-role/(?<role>[^/]+)/}
   SIMULATION_BATCH_SIZE = 50
-  private_constant :LAMBDA, :AMI, :OTHER_DEPLOYS, :STACK, :ROLLOUT, :LOAD_BALANCER, :REDEPLOY, :RESIZE, :USER_ARN, :ASSUMED_ROLE_ARN, :SIMULATION_BATCH_SIZE
+  private_constant :LAMBDA, :AMI, :OTHER_DEPLOYS, :STACK, :ROLLOUT, :LOAD_BALANCER, :REDEPLOY, :RESIZE, :LOCK, :ROLLBACK, :INSTANCE_HEALTH, :USER_ARN, :ASSUMED_ROLE_ARN, :SIMULATION_BATCH_SIZE
 
   module_function
 
-  def required(options, load_balanced:, building:)
+  def required(options, load_balanced:, building:, instance_checks: false)
     return { 'publishing the lambda': LAMBDA } if options[:lambda_publish_version]
 
     needs = {}
+    needs[:'holding the deploy lock'] = LOCK unless options[:'skip-lock']
     needs[:'recreating the standalone instances'] = STACK if options[:'reset-instances']
     return needs if options[:'reset-instances'] && options[:instance].nil?
 
@@ -31,6 +35,8 @@ module DeployPermissions
 
     needs[:'updating the stack'] = STACK
     needs[:'rolling out the auto scaling groups'] = ROLLOUT
+    needs[:'rolling back a failed rollout'] = ROLLBACK unless options[:'skip-rollback']
+    needs[:'checking the new instances'] = INSTANCE_HEALTH if instance_checks
     needs[:'checking the load balancers'] = LOAD_BALANCER if load_balanced
     needs
   end

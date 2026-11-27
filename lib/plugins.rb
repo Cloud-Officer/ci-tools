@@ -15,6 +15,9 @@ module Plugins
     healthcheck_recovered
     healthcheck_gave_up
     healthchecks_done
+    rollback_started
+    rollback_done
+    rollback_failed
     deploy_succeeded
     deploy_failed
     deploy_aborted

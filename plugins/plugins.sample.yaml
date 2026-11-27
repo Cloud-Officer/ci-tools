@@ -21,6 +21,11 @@ sms:
   from: "+15555550100"
   to: "+15555550101"
 
+# Publishes failures to an SNS topic, e.g. the environment notifications topic.
+sns:
+  enabled: false
+  topic_arn: arn:aws:sns:us-east-1:123456789012:dev-beta1-notifications
+
 # Posts events as json, or as a slack message.
 webhook:
   enabled: false

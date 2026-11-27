@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'tmpdir'
+require_relative '../plugins/sns'
 
 module DeployPlugins; end
 
@@ -325,8 +326,8 @@ RSpec.describe(DeployPlugins) do
   end
 
   describe Plugins do
-    it 'offers the four plugins' do
-      expect(described_class.available).to(eq(%w[macos_notification sms voice webhook]))
+    it 'offers the five plugins' do
+      expect(described_class.available).to(eq(%w[macos_notification sms sns voice webhook]))
     end
   end
 
@@ -359,6 +360,59 @@ RSpec.describe(DeployPlugins) do
       it "words #{event}" do
         expect(sms.message(event.to_s, payload)).to(include(text))
       end
+    end
+  end
+
+  describe 'the sns plugin' do
+    let(:topic)    { 'arn:aws:sns:ca-central-1:123456789012:in-prod4-notifications'                                          }
+    let(:client)   { Aws::SNS::Client.new(stub_responses: true)                                                              }
+    let(:plugin)   { Plugins::Sns.new(yaml_settings({ topic_arn: topic }), {})                                               }
+    let(:payload)  { { profile: 'in', environment: 'prod4', instances: %w[api], error: 'unhealthy', outcome: 'rolled_back' } }
+
+    before { allow(Aws::SNS::Client).to(receive(:new).and_return(client)) }
+
+    def published
+      client.api_requests.find { |request| request[:operation_name] == :publish }[:params]
+    end
+
+    it 'accepts an SNS topic ARN' do
+      expect(Plugins::Sns.settings_errors(yaml_settings({ topic_arn: topic }))).to(be_empty)
+    end
+
+    ['', 'arn:aws:sqs:us-east-1:123456789012:queue', 'arn:aws:sns:us-east-1:123:topic'].each do |arn|
+      it "refuses #{arn.inspect}" do
+        expect(Plugins::Sns.settings_errors(yaml_settings({ topic_arn: arn }))).to(eq(['topic_arn must be an SNS topic ARN']))
+      end
+    end
+
+    it 'publishes to the topic in its own region', :aggregate_failures do
+      plugin.handle('deploy_failed', payload)
+      expect(published[:topic_arn]).to(eq(topic))
+      expect(Aws::SNS::Client).to(have_received(:new).with(region: 'ca-central-1'))
+    end
+
+    it 'says what happened in the subject' do
+      plugin.handle('deploy_failed', payload)
+      expect(published[:subject]).to(eq('deploy.rb deploy_failed in/prod4'))
+    end
+
+    it 'sends the summary and the event details', :aggregate_failures do
+      plugin.handle('deploy_failed', payload)
+      message = JSON.parse(published[:message])
+      expect(message['summary']).to(eq('Deploying api to in/prod4 failed and was rolled back: unhealthy'))
+      expect(message).to(include(yaml_settings({ event: 'deploy_failed', outcome: 'rolled_back' })))
+    end
+
+    it 'keeps the subject within the SNS limit and printable' do
+      expect(plugin.subject('rollback_failed', { profile: 'é' * 200, environment: 'x' })).to(match(/\A[ -~]{100}\z/))
+    end
+
+    it 'defaults to the failures only' do
+      expect(Plugins::Sns::DEFAULT_EVENTS).to(eq(%w[deploy_failed deploy_aborted deploy_interrupted healthcheck_gave_up rollback_failed]))
+    end
+
+    it 'summarises a failed rollback' do
+      expect(plugin.summary('rollback_failed', { profile: 'in', environment: 'prod4', rollback_error: 'stack failed' })).to(eq('Rollback of in/prod4 failed, needs a human: stack failed'))
     end
   end
 

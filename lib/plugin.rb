@@ -29,7 +29,10 @@ class Plugin
     healthcheck_gave_up: ->(payload, _where, _instances) { "Health check still failing for #{payload[:url]} (#{payload[:reason]}), giving up" },
     healthchecks_done: ->(payload, where, _instances) { healthchecks_summary(payload, where) },
     deploy_succeeded: ->(_payload, where, instances) { "Deployed #{instances} to #{where}" },
-    deploy_failed: ->(payload, where, instances) { "Deploying #{instances} to #{where} failed: #{payload[:error]}" },
+    rollback_started: ->(payload, where, _instances) { "Rolling #{where} back to the previous AMIs: #{payload[:error]}" },
+    rollback_done: ->(_payload, where, _instances) { "#{where} rolled back to the previous AMIs" },
+    rollback_failed: ->(payload, where, _instances) { "Rollback of #{where} failed, needs a human: #{payload[:rollback_error]}" },
+    deploy_failed: ->(payload, where, instances) { "Deploying #{instances} to #{where} failed#{OUTCOME_NOTES[payload[:outcome]&.to_sym]}: #{payload[:error]}" },
     deploy_aborted: ->(payload, where, _instances) { "Deploy to #{where} stopped: #{payload[:reason]}" },
     deploy_interrupted: ->(_payload, where, instances) { "Deploy of #{instances} to #{where} interrupted" },
     lambda_published: ->(payload, where, _instances) { "Lambda #{payload[:function]} published for #{where}" },
@@ -38,8 +41,9 @@ class Plugin
     reset_enabling: ->(_payload, where, _instances) { "Recreating the standalone instances of #{where}" },
     reset_done: ->(_payload, where, _instances) { "Standalone instances of #{where} recreated" }
   }.freeze
+  OUTCOME_NOTES = { rolled_back: ' and was rolled back', needs_human: ', needs a human' }.freeze
   public_constant :DEFAULT_EVENTS, :SETTINGS
-  private_constant :HTTP_ATTEMPTS, :HTTP_OPEN_TIMEOUT, :HTTP_READ_TIMEOUT, :HTTP_RETRY_DELAY, :NETWORK_ERRORS, :SUMMARIES
+  private_constant :OUTCOME_NOTES, :HTTP_ATTEMPTS, :HTTP_OPEN_TIMEOUT, :HTTP_READ_TIMEOUT, :HTTP_RETRY_DELAY, :NETWORK_ERRORS, :SUMMARIES
 
   def self.settings_errors(_settings)
     []

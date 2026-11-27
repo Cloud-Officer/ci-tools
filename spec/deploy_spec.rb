@@ -1310,7 +1310,7 @@ RSpec.describe(Deploy) do
       before { allow(self).to(receive(:update_asg_capacity)) }
 
       it 'reports the capacity restore on stderr and re-raises' do
-        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker', 'skip-rollback': true }), plan) }
           .to(raise_error(RuntimeError, 'deploy boom').and(output(/Rolling deploy failed, restoring desired capacity to 2/).to_stderr))
       end
     end
@@ -1341,16 +1341,26 @@ RSpec.describe(Deploy) do
       end
     end
 
+    context 'without --skip-rollback' do
+      before { allow(self).to(receive(:update_asg_capacity)) }
+
+      it 're-raises without touching the capacity, which the rollback restores', :aggregate_failures do
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
+          .to(raise_error(RuntimeError, 'deploy boom'))
+        expect(self).not_to(have_received(:update_asg_capacity))
+      end
+    end
+
     context 'when the capacity restore fails' do
       before { allow(self).to(receive(:update_asg_capacity).and_raise(RuntimeError, 'restore boom')) }
 
       it 'warns on stderr with the full restore error message and re-raises the deploy error' do
-        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker', 'skip-rollback': true }), plan) }
           .to(raise_error(RuntimeError, 'deploy boom').and(output(/WARNING: failed to restore auto scaling group capacity - beta1-api-asg.*restore boom \(RuntimeError\)/m).to_stderr))
       end
 
       it 'writes nothing about the failed restore to stdout' do
-        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker' }), plan) }
+        expect { run_rolling_deploy_with_capacity_rollback(build_rollout(asg_client, asg, mixed_params, { instance: 'worker', 'skip-rollback': true }), plan) }
           .to(raise_error(RuntimeError, 'deploy boom').and(output('').to_stdout))
       end
     end
@@ -1432,6 +1442,11 @@ RSpec.describe(Deploy) do
       def fail_rollout(instance, message)
         allow(self).to(receive(:run_rolling_deploy)) { |rollout, _capacity| raise(message) if instance.nil? || rollout.options[:instance] == instance }
       end
+
+      def fail_rollout_with_rollback(instance, message)
+        fail_rollout(instance, message)
+        allow(self).to(receive(:roll_back_deploy))
+      end
     end
 
     context 'with the standard ASG/CFN deploy path' do
@@ -1463,24 +1478,41 @@ RSpec.describe(Deploy) do
         expect(deploy_quietly(instance: 'api')).not_to(include('[api]'))
       end
 
-      it 're-raises a rolling-deploy failure rather than swallowing it' do
+      it 'rolls a failed rollout back and reports it' do
         fail_rollout(nil, 'deploy blew up')
+        allow(self).to(receive(:roll_back_deploy))
         expect { deploy_quietly(instance: 'api') }
-          .to(raise_error(RuntimeError, 'deploy blew up').and(output.to_stderr))
+          .to(raise_error(DeployErrors::RolledBack, /rolled back to the previous AMIs: deploy blew up/).and(output.to_stderr))
       end
 
-      it 'restores the original desired capacity instead of leaving the group scaled up', :aggregate_failures do
+      it 'rolls back with the SSM snapshot and the mixed-instances policy', :aggregate_failures do
         fail_rollout(nil, 'deploy blew up')
+        allow(self).to(receive(:roll_back_deploy))
         expect { deploy_quietly(instance: 'api') }
-          .to(raise_error(RuntimeError).and(output.to_stderr))
+          .to(raise_error(DeployErrors::RolledBack).and(output.to_stderr))
+        expect(self).to(have_received(:roll_back_deploy).with(anything, anything, instance_map('/beta/1/APIImageId': 'ami-old'), { base_capacity: 0, percent_above: 100 }))
+      end
+
+      it 'needs a human when the rollback fails too' do
+        fail_rollout(nil, 'deploy blew up')
+        allow(self).to(receive(:roll_back_deploy).and_raise('stack update failed'))
+        expect { deploy_quietly(instance: 'api') }
+          .to(raise_error(DeployErrors::NeedsHuman, /deploy blew up.*stack update failed/).and(output.to_stderr))
+      end
+
+      it 'restores the original desired capacity with --skip-rollback and needs a human', :aggregate_failures do
+        fail_rollout_with_rollback(nil, 'deploy blew up')
+        expect { deploy_quietly(instance: 'api', 'skip-rollback': true) }
+          .to(raise_error(DeployErrors::NeedsHuman, /deploy blew up \(--skip-rollback/).and(output.to_stderr))
         expect(self).to(have_received(:update_asg_capacity).with(asg_client, 'asg-api', hash_including(desired_capacity: 2, max_size: 4)))
+        expect(self).not_to(have_received(:roll_back_deploy))
       end
 
       it 'reports the deploy failure, not the restore failure, when the restore also fails' do
         fail_rollout(nil, 'deploy blew up')
         allow(self).to(receive(:update_asg_capacity)) { |_client, _name, **kwargs| raise(StandardError, 'restore failed') if kwargs[:desired_capacity] == 2 }
-        expect { deploy_quietly(instance: 'api') }
-          .to(raise_error(RuntimeError, 'deploy blew up').and(output.to_stderr))
+        expect { deploy_quietly(instance: 'api', 'skip-rollback': true) }
+          .to(raise_error(DeployErrors::NeedsHuman, /deploy blew up/).and(output.to_stderr))
       end
 
       it 'still checks the rollouts when the stack has no updates' do
@@ -1531,17 +1563,18 @@ RSpec.describe(Deploy) do
         expect(self).not_to(have_received(:update_stack_with_ssm_rollback))
       end
 
-      it 'finishes the other rollouts when one fails and reports it', :aggregate_failures do
-        fail_rollout('grpc', 'grpc unhealthy')
+      it 'finishes the other rollouts when one fails, then rolls them all back', :aggregate_failures do
+        fail_rollout_with_rollback('grpc', 'grpc unhealthy')
         expect { deploy_quietly(instance: 'api,grpc') }
-          .to(raise_error(RuntimeError, 'Deployment failed for: grpc').and(output(/Deployment for grpc: FAILED - grpc unhealthy/).to_stderr))
+          .to(raise_error(DeployErrors::RolledBack, /Deployment failed for: grpc/).and(output(/Deployment for grpc: FAILED - grpc unhealthy/).to_stderr))
         expect(self).to(have_received(:run_rolling_deploy).twice)
+        expect(self).to(have_received(:roll_back_deploy).with(anything, hash_including('api', 'grpc'), anything, anything))
       end
 
-      it 'restores the capacity of the ASG whose rollout failed', :aggregate_failures do
+      it 'restores the capacity of the ASG whose rollout failed with --skip-rollback', :aggregate_failures do
         fail_rollout('grpc', 'grpc unhealthy')
-        expect { deploy_quietly(instance: 'api,grpc') }
-          .to(raise_error(RuntimeError).and(output.to_stderr))
+        expect { deploy_quietly(instance: 'api,grpc', 'skip-rollback': true) }
+          .to(raise_error(DeployErrors::NeedsHuman).and(output.to_stderr))
         expect(self).to(have_received(:update_asg_capacity).with(asg_client, 'asg-grpc', hash_including(desired_capacity: 2, max_size: 4)))
       end
     end

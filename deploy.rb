@@ -18,17 +18,18 @@ require 'aws-sdk-elasticloadbalancingv2'
 require 'aws-sdk-iam'
 require 'aws-sdk-lambda'
 require 'aws-sdk-ssm'
-require 'fileutils'
 require 'json'
 require 'open3'
 require 'securerandom'
 require 'shellwords'
+require 'socket'
 require 'uri'
 require 'yaml'
 require_relative 'lib/ami_job'
 require_relative 'lib/ami_status_table'
 require_relative 'lib/aws_sso'
 require_relative 'lib/cli_main'
+require_relative 'lib/deploy_errors'
 require_relative 'lib/deploy_permissions'
 require_relative 'lib/plugin_manager'
 require_relative 'lib/plugins'
@@ -106,6 +107,11 @@ PLUGINS_FILE = 'plugins.yaml'
 CURL_STATUS_FORMAT = ['%', '{http_code}'].join
 
 class PreflightError < StandardError; end
+
+EXIT_FAILED = 1
+EXIT_ROLLED_BACK = 2
+EXIT_NEEDS_HUMAN = 3
+LOCK_PARAMETER_PREFIX = '/deploy-rb/locks'
 
 def log_timestamp
   Time.now.strftime('%Y-%m-%d %H:%M:%S')
@@ -513,7 +519,7 @@ DeployContext =
     end
   end
 
-RollingDeploy = Struct.new(:asg_client, :asg, :mixed_params, :elb, :target_group_arn, :options)
+RollingDeploy = Struct.new(:asg_client, :asg, :mixed_params, :elb, :target_group_arn, :options, :ami_id)
 
 def resolve_parameter_value(key, deploy)
   case key
@@ -588,7 +594,7 @@ def print_ssm_restore_commands(ssm_snapshot)
   ssm_snapshot.each { |name, value| log_warn("  #{Shellwords.join(['aws', 'ssm', 'put-parameter', *profile, '--overwrite', '--type', 'String', '--name', name, '--value', value])}") }
 end
 
-def restore_ssm_parameters(ssm_snapshot)
+def restore_ssm_parameters!(ssm_snapshot)
   return if ssm_snapshot.empty?
 
   ssm = Aws::SSM::Client.new
@@ -598,6 +604,10 @@ def restore_ssm_parameters(ssm_snapshot)
     log("Restoring SSM parameter '#{name}' to '#{value}'...")
     with_network_retries("restoring #{name}", deadline: deadline) { ssm.put_parameter({ name: name, value: value, type: 'String', overwrite: true }) }
   end
+end
+
+def restore_ssm_parameters(ssm_snapshot)
+  restore_ssm_parameters!(ssm_snapshot)
 rescue StandardError => e
   log_warn("Could not restore the SSM parameters (#{e.message}). Restore them by hand:")
   print_ssm_restore_commands(ssm_snapshot)
@@ -794,6 +804,7 @@ def warm_up_after_scale_up(rollout)
 
   log('Waiting for cache/instances to warm up...')
   sleep(WARMUP)
+  check_new_instances(rollout)
 end
 
 def scale_down_after_deploy(rollout, new_capacity)
@@ -855,8 +866,8 @@ def scale_up_for_rollout(rollout, plan)
   log('Waiting for auto scaling group to start the instances...')
   wait_for_asg_instance_count(rollout.asg_client, asg[:name], new_capacity, direction: :up)
   warm_up_after_scale_up(rollout)
-rescue StandardError, SignalException
-  print_scale_down_commands(rollout)
+rescue StandardError, SignalException => e
+  print_scale_down_commands(rollout) if rollout.options[:'skip-rollback'] || e.is_a?(SignalException)
   raise
 end
 
@@ -869,7 +880,9 @@ end
 
 def run_rolling_deploy_with_capacity_rollback(rollout, plan)
   run_rolling_deploy(rollout, plan[:new_capacity])
-rescue StandardError, SignalException
+rescue StandardError, SignalException => e
+  raise unless rollout.options[:'skip-rollback'] || e.is_a?(SignalException)
+
   asg = rollout.asg
   log_warn("Rolling deploy failed, restoring desired capacity to #{asg[:desired_capacity]}...")
   begin
@@ -898,6 +911,10 @@ def stop_or_report(options, message)
   raise(PreflightError, message) unless dry_run?(options)
 
   log_warn("DRY RUN: a real run would stop here: #{message}")
+end
+
+def interactive?
+  !@non_interactive && $stdin.tty?
 end
 
 def read_answer
@@ -939,7 +956,7 @@ def confirm_unchecked_permissions(options, reason)
   log_warn("Could not check your permissions: #{reason}")
   return log_warn('DRY RUN: a real run would ask whether to continue, and stop without a terminal.') if dry_run?(options)
 
-  raise(PreflightError, "Could not check your permissions (#{reason}): rerun with --skip-permission-check to go without.", cause: nil) unless $stdin.tty?
+  raise(PreflightError, "Could not check your permissions (#{reason}): rerun with --skip-permission-check to go without.", cause: nil) unless interactive?
 
   notify(:question, kind: 'permissions_unchecked')
   confirm_or_abort('Continue without the permission check? [y/N] ', 'Permissions could not be checked, aborted.')
@@ -959,7 +976,8 @@ def check_permissions(options, caller_arn)
   return log('Not checking permissions (--skip-permission-check).') if options[:'skip-permission-check']
 
   names = instance_names(options)
-  needs = DeployPermissions.required(options, load_balanced: names.any? { |name| load_balanced_instance?(name) }, building: requested_amis(options, names).value?(nil))
+  instance_checks = names.any? { |name| instance_healthcheck_command(instance_options(options, name)) }
+  needs = DeployPermissions.required(options, load_balanced: names.any? { |name| load_balanced_instance?(name) }, building: requested_amis(options, names).value?(nil), instance_checks: instance_checks)
   log('Checking permissions...')
   iam = Aws::IAM::Client.new
   arn = DeployPermissions.simulation_arn(iam, caller_arn)
@@ -974,21 +992,43 @@ def deploy_directory
   File.join(Dir.home, '.deploy')
 end
 
-def deploy_lock_path(options)
-  File.join(deploy_directory, 'locks', "#{options[:profile]}-#{options[:environment]}.lock".tr('/', '_'))
+def deploy_lock_name(options)
+  "#{LOCK_PARAMETER_PREFIX}/#{options[:profile]}/#{options[:environment]}".gsub(%r{[^\w./-]}, '_')
+end
+
+def deploy_lock_holder(ssm, name)
+  ssm.get_parameter({ name: name }).parameter.value
+rescue Aws::SSM::Errors::ServiceError
+  'unknown'
+end
+
+def acquire_deploy_lock(ssm, name, owner)
+  with_network_retries("taking the deploy lock #{name}") { ssm.put_parameter({ name: name, value: owner, type: 'String', overwrite: false }) }
+rescue Aws::SSM::Errors::ParameterAlreadyExists
+  holder = deploy_lock_holder(ssm, name)
+  return if holder == owner
+
+  raise(PreflightError, "Another deploy is already running for #{name.delete_prefix("#{LOCK_PARAMETER_PREFIX}/")} (#{holder}): --skip-lock runs alongside it. If no deploy is running, delete the SSM parameter #{name}.")
+end
+
+def release_deploy_lock(ssm, name, owner)
+  return log_warn("The deploy lock #{name} is no longer ours, leaving it.") unless deploy_lock_holder(ssm, name) == owner
+
+  with_network_retries("releasing the deploy lock #{name}") { ssm.delete_parameter({ name: name }) }
+rescue StandardError => e
+  log_warn("Could not release the deploy lock (#{e.message}): delete the SSM parameter #{name} once no deploy is running.")
 end
 
 def hold_deploy_lock(options)
-  path = deploy_lock_path(options)
-  FileUtils.mkdir_p(File.dirname(path))
+  ssm = Aws::SSM::Client.new
+  name = deploy_lock_name(options)
+  owner = "pid #{Process.pid} on #{Socket.gethostname}, started #{log_timestamp}"
+  acquire_deploy_lock(ssm, name, owner)
 
-  File.open(path, File::RDWR | File::CREAT, 0o600) do |file|
-    raise(PreflightError, "Another deploy is already running for #{options[:profile]}/#{options[:environment]} (#{file.read.strip}): --skip-lock runs alongside it.") unless file.flock(File::LOCK_EX | File::LOCK_NB)
-
-    file.truncate(0)
-    file.write("pid #{Process.pid}, started #{log_timestamp}")
-    file.flush
+  begin
     yield
+  ensure
+    release_deploy_lock(ssm, name, owner)
   end
 end
 
@@ -1055,7 +1095,7 @@ def confirm_other_deploys(hints, options)
   hints.each { |hint| log_warn("WARNING: #{hint}") }
   return log_warn('DRY RUN: a real run would ask whether to continue, and stop without a terminal.') if dry_run?(options)
 
-  raise(PreflightError, "Someone else may be deploying: #{hints.join('; ')}. Rerun with --skip-other-deploy-check to deploy anyway.") unless $stdin.tty?
+  raise(PreflightError, "Someone else may be deploying: #{hints.join('; ')}. Rerun with --skip-other-deploy-check to deploy anyway.") unless interactive?
 
   notify(:question, kind: 'other_deploy')
   confirm_or_abort('Someone else may be deploying. Continue anyway? [y/N] ', 'Someone else may be deploying, aborted.')
@@ -1100,7 +1140,7 @@ def unready_standalones(client, standalones)
 end
 
 def wait_for_unready?(names)
-  return true unless $stdin.tty?
+  return true unless interactive?
 
   notify(:question, kind: 'standalones_not_ready', names: names)
   print("Wait for #{names.join(', ')}? [Y/n] ")
@@ -1262,7 +1302,7 @@ def confirm_extra_targets(problem, extras, options)
     return :continue
   end
 
-  raise(PreflightError, problem) unless $stdin.tty?
+  raise(PreflightError, problem) unless interactive?
 
   notify(:question, kind: 'extra_codedeploy_targets', group: problem[/\A\S+/])
   names = describe_extra_targets(extras).join(', ')
@@ -1746,6 +1786,7 @@ def deploy_instances(options)
   check_standalones(standalones, options)
   chores = plan_standalone_chores(standalones, options)
   healthchecks = healthcheck_plan(options) unless ami_only
+  names.each { |name| instance_healthcheck_command(instance_options(options, name)) } unless ami_only
 
   if dry_run?(options)
     print_dry_run_plan(names, standalones, targets, options, chores)
@@ -1761,8 +1802,7 @@ def deploy_instances(options)
       next log('Exiting now as --create_ami_only was supplied.')
     end
 
-    deploy_to_targets(targets, ami_ids, options)
-    run_healthchecks(healthchecks)
+    deploy_to_targets(targets, ami_ids, options, healthchecks)
     notify(:deploy_succeeded)
   end
 end
@@ -1856,7 +1896,7 @@ def confirm_partial_ami_failure(outcomes, supplied, options)
 
   message = "AMI creation failed for: #{failed.join(', ')}"
   usable = supplied.keys + built.keys
-  raise(message) if usable.empty? || options[:create_ami_only] || !$stdin.tty?
+  raise(message) if usable.empty? || options[:create_ami_only] || !interactive?
 
   notify(:question, kind: 'partial_ami_failure', failed: failed)
   print("Continue deploying #{usable.join(', ')} only? [y/N] ")
@@ -1902,26 +1942,173 @@ def discover_deploy_targets(names, options)
   { cfn: cfn, ctx: ctx, asg_resources: asg_resources, instances: instances }
 end
 
-def deploy_to_targets(targets, ami_ids, options)
+def deploy_to_targets(targets, ami_ids, options, healthchecks = nil)
   ctx = targets[:ctx]
   targets = targets.merge(instances: targets[:instances].slice(*ami_ids.keys))
   deploys = build_deploys(targets, ami_ids, options)
+  mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
 
   ssm_snapshot = deploys.values.map { |deploy| capture_ssm_snapshot(deploy) }
                         .reduce({}, :merge)
   update_ssm_parameters_with_rollback(deploys.values, ssm_snapshot)
   mark_cfn_secrets_for_previous_value!(ctx[:parameters], ctx[:secret_parameter_keys])
-  notify(:stack_updated) if update_stack_with_ssm_rollback(targets[:cfn], deploys.values, ssm_snapshot) == :updated
+  notify(:stack_updated) if update_stack_or_escalate(targets[:cfn], deploys.values, ssm_snapshot) == :updated
 
-  mixed_params = fetch_asg_mixed_parameters(ctx[:environment], ctx[:subnet])
+  with_rollout_rollback(targets, deploys, ssm_snapshot, mixed_params, options) do
+    roll_out_deploys(targets, deploys, mixed_params, options)
+    run_healthchecks(healthchecks, strict: !options[:'skip-rollback'])
+  end
+
+  log('Deployment completed successfully.')
+end
+
+def update_stack_or_escalate(cfn, deploys, ssm_snapshot)
+  update_stack_with_ssm_rollback(cfn, deploys, ssm_snapshot)
+rescue StandardError => e
+  raise unless transient_error?(e)
+
+  raise(DeployErrors::NeedsHuman, "The update of #{deploys.first.stack_name} may still be running in AWS: #{e.message}")
+end
+
+def roll_out_deploys(targets, deploys, mixed_params, options)
   factors = resolve_capacity_factors(options)
   asg_client = targets[:asg_resources].client
 
   deploy_each(deploys.keys, parallel: !options[:sequential_rollout], label: 'Deployment') do |name|
     roll_out_instance(asg_client, deploys[name], targets[:instances][name], mixed_params, factors)
   end
+end
 
-  log('Deployment completed successfully.')
+def with_rollout_rollback(targets, deploys, ssm_snapshot, mixed_params, options)
+  yield
+rescue StandardError => e
+  raise(DeployErrors::NeedsHuman, "#{e.message} (--skip-rollback: nothing was rolled back)") if options[:'skip-rollback']
+
+  roll_back_after(e, targets, deploys, ssm_snapshot, mixed_params)
+end
+
+def roll_back_after(error, targets, deploys, ssm_snapshot, mixed_params)
+  log_warn("Deploy failed: #{error.message}")
+  notify(:rollback_started, error: error.message)
+
+  begin
+    roll_back_deploy(targets, deploys, ssm_snapshot, mixed_params)
+  rescue StandardError => e
+    notify(:rollback_failed, error: error.message, rollback_error: e.message)
+    raise(DeployErrors::NeedsHuman, "Deploy failed (#{error.message}) and so did its rollback (#{e.message}): check the stack and its auto scaling groups.")
+  end
+
+  notify(:rollback_done, error: error.message)
+  raise(DeployErrors::RolledBack, "Deploy failed and was rolled back to the previous AMIs: #{error.message}")
+end
+
+def roll_back_deploy(targets, deploys, ssm_snapshot, mixed_params)
+  stack_name = deploys.values.first.stack_name
+  log_warn("Rolling #{stack_name} back to the previous AMIs...")
+  restore_ssm_parameters!(ssm_snapshot)
+  apply_stack_update(targets[:cfn], stack_name, targets[:ctx][:parameters])
+  asg_client = targets[:asg_resources].client
+
+  deploy_each(deploys.keys, parallel: true, label: 'Rollback') do |name|
+    roll_back_instance(asg_client, deploys[name], targets[:instances][name], mixed_params)
+  end
+end
+
+def roll_back_instance(asg_client, deploy, target, mixed_params)
+  asg = deploy.asg
+  name = asg[:name]
+  rollout = RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: target[:elb], target_group_arn: target[:target_group_arn], options: deploy.options, ami_id: deploy.ami_id)
+  group = describe_asg(asg_client, name)
+  failed = instance_ids_on(group, deploy.ami_id)
+  replace_failed_instances(rollout, group, failed) unless failed.empty?
+
+  log("Setting #{name} back to #{asg[:desired_capacity]} instance(s)...")
+  update_asg_capacity(asg_client, name, base_capacity: mixed_params[:base_capacity], percent_above: mixed_params[:percent_above], desired_capacity: asg[:desired_capacity], max_size: asg[:max_size])
+  wait_for_asg_instance_count(asg_client, name, asg[:desired_capacity], direction: :down)
+  wait_for_healthy_instances(target[:elb], target[:target_group_arn]) if load_balanced_instance?(deploy.options[:instance])
+  clear_asg_baseline(asg_client, name)
+  log("Rolled back auto scaling group #{name}.")
+end
+
+def replace_failed_instances(rollout, group, failed)
+  name = rollout.asg[:name]
+  capacity = group.desired_capacity + failed.size
+  log_warn("Replacing the #{failed.size} instance(s) of #{name} on #{rollout.ami_id}: #{failed.join(', ')}...")
+  update_asg_capacity(rollout.asg_client, name, base_capacity: rollout.mixed_params[:base_capacity], percent_above: 100, desired_capacity: capacity, max_size: [group.max_size, capacity].max)
+  wait_for_replacements(rollout, failed, [rollout.asg[:desired_capacity], group.desired_capacity].min)
+  failed.each { |instance_id| terminate_failed_instance(rollout.asg_client, instance_id) }
+end
+
+def healthy_target_ids(elb, target_group_arn)
+  descriptions = with_network_retries('reading target health') { elb.describe_target_health({ target_group_arn: target_group_arn }).target_health_descriptions }
+  descriptions.filter_map { |description| description.target.id if description.target_health.state == 'healthy' }
+end
+
+def wait_for_replacements(rollout, failed, wanted)
+  name = rollout.asg[:name]
+
+  poll_until(description: "waiting for #{wanted} healthy instance(s) of #{name} on the previous AMI") do
+    group = describe_asg(rollout.asg_client, name)
+    ready = in_service_ids(group) - failed
+    ready &= healthy_target_ids(rollout.elb, rollout.target_group_arn) if load_balanced_instance?(rollout.options[:instance])
+    log("Waiting on replacement instances #{ready.size}/#{wanted}...")
+    ready.size >= wanted
+  end
+end
+
+def terminate_failed_instance(asg_client, instance_id)
+  log("Terminating #{instance_id}...")
+  with_network_retries("terminating #{instance_id}") { asg_client.terminate_instance_in_auto_scaling_group({ instance_id: instance_id, should_decrement_desired_capacity: true }) }
+rescue Aws::AutoScaling::Errors::ValidationError => e
+  log_warn("Could not terminate #{instance_id}: #{e.message}")
+end
+
+def instance_healthcheck_command(options)
+  command = deploy_config.dig('profiles', options[:profile], 'instance_healthchecks', options[:instance])
+  return if command.nil?
+  return command if command.is_a?(String) && !command.strip.empty?
+
+  raise(PreflightError, "The instance health check of #{options[:profile]}/#{options[:instance]} must be a shell command.")
+rescue TypeError
+  raise(PreflightError, 'The profiles section of the deploy config is malformed.')
+end
+
+def instance_healthcheck_failures(ssm, instance_ids, command)
+  sent = with_network_retries('sending the instance health check') { ssm.send_command({ instance_ids: instance_ids, document_name: 'AWS-RunShellScript', comment: 'deploy.rb: health check of the new instances', parameters: { commands: [command] } }) }
+
+  instance_ids.filter_map do |instance_id|
+    invocation = wait_for_command_invocation(ssm, sent.command.command_id, instance_id)
+    "#{instance_id}: #{invocation.status} (#{invocation.response_code}) #{invocation.standard_error_content.to_s.strip}".strip unless invocation.status == 'Success'
+  end
+rescue Aws::SSM::Errors::InvalidInstanceId => e
+  instance_ids.map { |instance_id| "#{instance_id}: SSM cannot reach it (#{e.message})" }
+end
+
+def check_new_instances(rollout)
+  command = instance_healthcheck_command(rollout.options)
+  return if command.nil?
+
+  name = rollout.asg[:name]
+  group = describe_asg(rollout.asg_client, name)
+  instance_ids = instance_ids_on(group, rollout.ami_id) & in_service_ids(group)
+  raise("No instance of #{name} runs #{rollout.ami_id} to health check.") if instance_ids.empty?
+
+  plan = healthcheck_plan(rollout.options)
+  run_instance_healthcheck(Aws::SSM::Client.new, name, instance_ids, command, plan)
+end
+
+def run_instance_healthcheck(ssm, name, instance_ids, command, plan)
+  deadline = Time.now + plan[:give_up_after]
+  log("Running the instance health check on #{instance_ids.join(', ')}...")
+
+  loop do
+    failures = instance_healthcheck_failures(ssm, instance_ids, command)
+    return log("Instance health check OK on #{name}.") if failures.empty?
+    raise("Instance health check failed on #{name}: #{failures.join('; ')}") if Time.now >= deadline
+
+    log_warn("Instance health check failing on #{name}: #{failures.join('; ')}, retrying in #{plan[:interval]} s...")
+    sleep(plan[:interval])
+  end
 end
 
 def describe_asg(asg_client, name)
@@ -1931,15 +2118,28 @@ def describe_asg(asg_client, name)
   groups.first
 end
 
-def stale_instance_ids(group, ami_id)
+def instance_images(group)
   client = Aws::EC2::Client.new
   active = group.instances.reject { |instance| TERMINATING_STATES.include?(instance.lifecycle_state) }
   instances =
     active.map(&:instance_id).each_slice(EC2_FILTER_VALUE_LIMIT).flat_map do |ids|
       with_network_retries("reading the AMIs of #{group.auto_scaling_group_name}") { client.describe_instances({ filters: [{ name: 'instance-id', values: ids }] }).flat_map(&:reservations).flat_map(&:instances) }
     end
-  stale = instances.reject { |instance| instance.image_id == ami_id }
-  stale.map(&:instance_id)
+  instances.to_h { |instance| [instance.instance_id, instance.image_id] }
+end
+
+def stale_instance_ids(group, ami_id)
+  instance_images(group).reject { |_id, image| image == ami_id }
+                        .keys
+end
+
+def in_service_ids(group)
+  group.instances.filter_map { |instance| instance.instance_id if instance.lifecycle_state == 'InService' }
+end
+
+def instance_ids_on(group, ami_id)
+  instance_images(group).select { |_id, image| image == ami_id }
+                        .keys
 end
 
 def rollout_capacity_plan(asg, group, stale, factors)
@@ -1977,7 +2177,7 @@ def roll_out_instance(asg_client, deploy, target, mixed_params, factors)
   plan = plan_instance_rollout(asg_client, deploy, factors)
   return if plan.nil?
 
-  rollout = RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: target[:elb], target_group_arn: target[:target_group_arn], options: deploy.options)
+  rollout = RollingDeploy.new(asg_client: asg_client, asg: asg, mixed_params: mixed_params, elb: target[:elb], target_group_arn: target[:target_group_arn], options: deploy.options, ami_id: deploy.ami_id)
   groups = [{ name: asg[:name], from: asg[:desired_capacity], to: plan[:new_capacity] }]
   notify(:rollout_started, groups: groups)
   scale_up_for_rollout(rollout, plan)
@@ -2054,7 +2254,7 @@ def retry_healthchecks(healthchecks, failures, started)
   failures
 end
 
-def run_healthchecks(healthchecks)
+def run_healthchecks(healthchecks, strict: false)
   return if healthchecks.nil? || healthchecks[:urls].empty?
 
   log('Running health checks...')
@@ -2070,6 +2270,10 @@ def run_healthchecks(healthchecks)
   end
 
   notify(:healthchecks_done, passed: (urls - failures.keys).map { |url| redacted_url(url) }, failed: failures.map { |url, reason| { url: redacted_url(url), reason: reason } })
+  return unless strict && !failures.empty?
+
+  failed_urls = failures.keys.map { |url| redacted_url(url) }
+  raise("Health checks failed: #{failed_urls.join(', ')}")
 end
 
 def reset_option_error(options, names)
@@ -2123,9 +2327,11 @@ def parse_deploy_options(argv = ARGV)
       opts.on('--reset-instances', 'Recreate the standalone instances first; --instance is then optional')
       opts.on('--resize instance_type', String, 'Resize the standalone instances for the redeploy and AMI, then put them back')
       opts.on('--sequential_rollout')
+      opts.on('--non-interactive', 'Never prompt: every question is answered no and the run stops')
       opts.on('--skip-lock', 'Run alongside another deploy of the same profile and environment')
       opts.on('--skip-other-deploy-check', 'Do not look for signs of another deploy')
       opts.on('--skip-permission-check', 'Do not check the IAM permissions this run needs')
+      opts.on('--skip-rollback', 'Leave a failed rollout as it is instead of rolling back to the previous AMIs')
       opts.on('--skip_scale_down')
       opts.on('--sms', 'Send texts through the sms plugin for this run')
       opts.on('--spot_target_capacity spot_target_capacity', Integer)
@@ -2183,6 +2389,7 @@ def stop_plugins
 end
 
 def deploy_from_cli(options)
+  @non_interactive = options[:'non-interactive'] == true
   start_run_log(options)
   start_plugins(options)
   log('Starting deployment...')
@@ -2191,7 +2398,15 @@ def deploy_from_cli(options)
 rescue PreflightError => e
   log_warn(e.message)
   notify(:deploy_aborted, reason: e.message)
-  exit(1)
+  exit(EXIT_FAILED)
+rescue DeployErrors::RolledBack => e
+  log_warn(e.message)
+  notify(:deploy_failed, error: e.message, outcome: 'rolled_back')
+  exit(EXIT_ROLLED_BACK)
+rescue DeployErrors::NeedsHuman => e
+  log_warn(e.full_message)
+  notify(:deploy_failed, error: e.message, outcome: 'needs_human')
+  exit(EXIT_NEEDS_HUMAN)
 rescue StandardError => e
   notify(:deploy_failed, error: e.message)
   raise

@@ -147,9 +147,11 @@ options
         --reset-instances            Recreate the standalone instances first; --instance is then optional
         --resize instance_type       Resize the standalone instances for the redeploy and AMI, then put them back
         --sequential_rollout
+        --non-interactive            Never prompt: every question is answered no and the run stops
         --skip-lock                  Run alongside another deploy of the same profile and environment
         --skip-other-deploy-check    Do not look for signs of another deploy
         --skip-permission-check      Do not check the IAM permissions this run needs
+        --skip-rollback              Leave a failed rollout as it is instead of rolling back to the previous AMIs
         --skip_scale_down
         --sms                        Send texts through the sms plugin for this run
         --spot_target_capacity spot_target_capacity
@@ -189,7 +191,7 @@ deploy.rb --profile dev --environment rc --instance api,grpc --reset-instances -
 
 Profiles can sign in with access keys or with AWS SSO. When an SSO session has expired, the run signs in again with `aws sso login --profile <profile>` if it has a terminal, and otherwise stops with that command.
 
-Before changing anything, a run checks the profile's credentials and simulates the IAM permissions it needs, takes a lock per profile and environment under `~/.deploy/locks`, and looks for another deploy in progress. For each running standalone instance it waits for the `UserDataCompleted` tag and checks the last lines of the CodeDeploy log over SSM. A stopped standalone instance skips those two checks. Without a terminal, a question that needs an answer stops the run, except the wait for the tag, which waits.
+Before changing anything, a run checks the profile's credentials and simulates the IAM permissions it needs, takes a lock per profile and environment, and looks for another deploy in progress. The lock is the SSM parameter `/deploy-rb/locks/<profile>/<environment>`, created only when it does not exist and deleted at the end, so local runs and runs in AWS (CodeBuild, CI) exclude each other; it holds who took it and when. A run that crashed leaves it behind: delete the parameter once no deploy is running. The deploy role needs `ssm:PutParameter`, `ssm:GetParameter` and `ssm:DeleteParameter` on it. For each running standalone instance it waits for the `UserDataCompleted` tag and checks the last lines of the CodeDeploy log over SSM. A stopped standalone instance skips those two checks. Without a terminal, or with `--non-interactive`, a question that needs an answer stops the run, except the wait for the tag, which waits.
 
 `--dry-run` changes no AWS resource, AMI, SSM parameter, stack or auto scaling group. It still sends the read-only CodeDeploy log check to running standalone instances through SSM Run Command, so it needs `ssm:SendCommand` and leaves an entry in the SSM command history.
 
@@ -213,9 +215,17 @@ profiles:
         log_marker: Application start end.
 ```
 
-After the stack update, only auto scaling groups with instances still on a previous AMI are scaled up and back down. If a scale-up fails or is interrupted, the group stays scaled up, which costs more until someone acts, and the run prints the commands to scale it down by hand. Scaling down automatically could end healthy old instances and keep unproven new ones. The group's earlier capacity is kept in its `deploy-rb:rollout-baseline` tag, so rerunning the deploy finishes the rollout from that capacity, and the on-demand setting comes from the SSM parameters. A failure after the scale-up restores the capacity. A warning lists any instance still on a previous AMI after the scale-down. The deploy role needs `autoscaling:CreateOrUpdateTags` and `autoscaling:DeleteTags`.
+After the stack update, only auto scaling groups with instances still on a previous AMI are scaled up and back down. The group's earlier capacity is kept in its `deploy-rb:rollout-baseline` tag, so rerunning the deploy finishes the rollout from that capacity, and the on-demand setting comes from the SSM parameters. A warning lists any instance still on a previous AMI after the scale-down. The deploy role needs `autoscaling:CreateOrUpdateTags` and `autoscaling:DeleteTags`.
 
-After a deploy, the URLs in `~/.deploy/config.yaml` are checked with `curl`, which must be installed, so HTTP/2 endpoints work. A URL that does not answer 2xx is retried, and a URL that keeps failing gives a warning without failing the deploy. An exact environment key wins over its family (`rc2`, then `rc`):
+When the rollout fails after the stack update (new instances that never become healthy, a timeout, a failing instance health check or health-check URL), the run rolls back on its own:
+
+1. It puts the previous SSM values back and updates the stack, so the launch templates use the previous AMIs again
+2. In each group, it adds one replacement per instance on the failed AMI, waits until the group has its earlier number of in-service instances (healthy targets behind a load balancer) that are not on the failed AMI, then terminates the failed instances one by one, lowering the capacity with each. It never lowers the capacity first: the `OldestLaunchTemplate` termination policy would end the healthy old instances and keep the failed ones
+3. It puts the earlier capacity and on-demand setting back and clears the rollout tag
+
+The rollback needs `autoscaling:TerminateInstanceInAutoScalingGroup`. Ctrl-C or SIGTERM does not roll back. `--skip-rollback` keeps the earlier behaviour: a failed scale-up leaves the group scaled up and prints the commands to scale it down by hand, and a failure after the scale-up restores the capacity.
+
+After a deploy, the URLs in `~/.deploy/config.yaml` are checked with `curl`, which must be installed, so HTTP/2 endpoints work. A URL that does not answer 2xx is retried; a URL that keeps failing rolls the deploy back, or only gives a warning with `--skip-rollback`. An exact environment key wins over its family (`rc2`, then `rc`). Groups without a load balancer, such as the workers, are only `InService` without an instance health check: a shell command run with SSM Run Command on each new instance after the warm-up, retried with the same `healthcheck_retries` until it exits 0 (it needs `ssm:SendCommand` and `ssm:GetCommandInvocation`):
 
 ```yaml
 healthcheck_retries:
@@ -226,7 +236,18 @@ profiles:
     healthchecks:
       rc:
         - https://rc.example.com/health
+    instance_healthchecks:
+      worker: systemctl is-active --quiet my-worker
 ```
+
+A run exits with:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Deployed |
+| `1` | Stopped or failed before the stack update: production is unchanged |
+| `2` | The rollout failed and was rolled back to the previous AMIs |
+| `3` | Needs a human: the rollback failed, the stack update outcome is unknown, or `--skip-rollback` left a failed rollout as it is |
 
 ##### Notifications and run log
 
@@ -240,10 +261,11 @@ Copy `plugins/plugins.sample.yaml` (under `libexec` in a Homebrew install) to `~
 | `macos_notification` | Alerts and notifications | macOS |
 | `sms` | Outcomes and pending questions through Twilio | Twilio account, plus `--sms` or `always: true` |
 | `webhook` | Events as JSON or a Slack message | An HTTP(S) URL |
+| `sns` | Failures (`deploy_failed`, `deploy_aborted`, `deploy_interrupted`, `healthcheck_gave_up`, `rollback_failed`) to an SNS topic, such as the environment's notifications topic | `topic_arn`, and `sns:Publish` on it |
 
 A plugin that fails to load or send only prints a warning. Each plugin accepts an `events` list. Health-check URLs are sent without their credentials or query string.
 
-With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others but makes the run exit 1. `--type` only applies to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
+With several instances, every lookup runs before any AMI is created, an AMI failure stops the run before SSM or the stack is touched, and a failed rollout does not interrupt the others; once they finish, every group of the stack is rolled back. `--type` only applies to a single instance. Log lines are tagged with the instance name, e.g. `[grpc]`.
 
 ### encrypt-logs
 
